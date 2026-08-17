@@ -7,7 +7,7 @@ import time
 import uuid
 from queue import Queue
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
 from yt_dlp import YoutubeDL
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -73,7 +73,14 @@ def normalize_channel_url(url, tab):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    # The page carries no cache validators, so a browser is free to keep serving the
+    # copy it already has — which reads as "the fix didn't work" when the edit is
+    # sitting on disk. The build id is the template's mtime: the console prints it,
+    # so a page can be checked against `ls -l templates/index.html`.
+    tpl = os.path.join(app.root_path, "templates", "index.html")
+    resp = make_response(render_template("index.html", build=int(os.path.getmtime(tpl))))
+    resp.headers["Cache-Control"] = "no-store, must-revalidate"
+    return resp
 
 
 @app.post("/api/scrape")

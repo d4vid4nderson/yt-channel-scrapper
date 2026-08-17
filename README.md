@@ -61,10 +61,10 @@ cd yt-channel-scrapper
 
 <img src="docs/03-downloads.jpg" alt="Downloads modal" width="820">
 
-<img src="docs/04-tabs.jpg" alt="The type drawer mid-slide, caught between closed and open" width="820">
+<img src="docs/04-tabs.jpg" alt="The type drawer open over the results, listing Videos, Shorts, Live and Music" width="820">
 
-<sub>The type drawer caught mid-slide — it fades and glides down from under the search bar rather than
-appearing all at once.</sub>
+<sub>The type drawer, open. It fades and glides down from under the search bar rather than appearing
+all at once, and closes the same way with the pill relabelled.</sub>
 
 ## How it works
 

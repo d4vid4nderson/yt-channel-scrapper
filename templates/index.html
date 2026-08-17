@@ -260,29 +260,16 @@
   .dd-btn .dd-label { display: inline-block; min-width: 50px; text-align: left; }
   .dd-btn .chev { transition: transform .18s ease; }
   .dd.open .dd-btn .chev { transform: rotate(180deg); }
-  /* The panel spans from the separator to the search bar's right edge and unrolls
-     downward, so it reads as sliding out from under the bar. Everything after .dd is
-     fixed width (10px gap + 122px Scrape + 5px padding + 1px border = 138), so the
-     offsets hold at any viewport width. */
-  /* Custom dropdown: native selects can't carry per-option icons or a tick. */
-  .dd { position: relative; }
-  .dd-btn {
-    display: flex; align-items: center; gap: 8px; background: #f2f2f2; color: var(--fg);
-    border: 1px solid transparent; border-radius: 999px; padding: 8px 12px 8px 13px;
-    font-size: 14px; font-weight: 400; cursor: pointer;
-  }
-  .dd-btn:hover { background: #e9e9e9; }
-  .dd.open .dd-btn { background: #fff; border-color: #d0d0d0; }
-  /* Fixed label width: the pill must not resize as the selection changes. */
-  .dd-btn .dd-label { display: inline-block; min-width: 50px; text-align: left; }
-  .dd-btn .chev { transition: transform .18s ease; }
-  .dd.open .dd-btn .chev { transform: rotate(180deg); }
+  /* The panel unrolls downward from under the pill, so it reads as sliding out from
+     under the bar. Its surface is opaque: the search bar's translucency works because
+     what sits behind it is a photographic backdrop, but the menu opens over the
+     toolbar, and a backdrop-filter cannot blur it — the hero's transform makes a
+     backdrop root, which limits the filter to content inside the bar. Left
+     translucent, the Download button read straight through the menu. */
   .dd-menu {
     position: absolute; top: calc(100% + 8px); left: 0; min-width: 186px; z-index: 30;
     margin: 0; padding: 6px; list-style: none;
-    /* Same translucent surface as the search bar rather than a flat white card. */
-    background: rgba(246,246,246,.88);
-    backdrop-filter: blur(16px) saturate(150%); -webkit-backdrop-filter: blur(16px) saturate(150%);
+    background: #f6f6f6;
     border: 1px solid rgba(15,15,15,.08);
     border-radius: 14px; box-shadow: 0 10px 28px rgba(15,15,15,.22);
     opacity: 0; transform: translateY(-6px) scale(.98); pointer-events: none;
@@ -471,6 +458,7 @@
   .job .top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
   .job {
     display: flex; gap: 16px; align-items: center; padding: 14px 16px; margin-bottom: 12px;
+    touch-action: pan-y;
     background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08);
     border-radius: 14px;
   }
@@ -671,6 +659,12 @@
 </div>
 
 <script>
+// Which build this page is running, so a tab left open across an edit can be told
+// apart from a fix that did not work: compare it with templates/index.html's mtime.
+window.BUILD = {{ build|default(0) }};
+console.log('YT Channel Scraper build', window.BUILD,
+            new Date(window.BUILD * 1000).toLocaleString());
+
 const $ = s => document.querySelector(s);
 /* One place decides whether the error card is in the layout at all. */
 const showErr = msg => {
@@ -680,6 +674,7 @@ const showErr = msg => {
 let videos = [], selected = new Set(), polling = null, scraping = null;
 const animated = new Set();   // job ids whose completion animation has already played
 const savedAt  = new Map();   // job id -> timestamp of the save that turned the arrow back into a tick
+const swiped   = new Set();   // job ids swiped open to show their clear button
 const SAVE_MS  = 520;         // total length of the arrow -> tick swap
 
 const esc = s => s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
@@ -905,7 +900,7 @@ async function poll() {
   if (!jobs.length) {
     $('#activity').classList.remove('on');
     $('#jobsList').innerHTML = '';
-    savedAt.clear();
+    savedAt.clear(); swiped.clear();
     closeJobs(); stopPolling();
     return;
   }
@@ -946,7 +941,8 @@ async function poll() {
     const save  = since === null ? ''
                 : since >= SAVE_MS ? 'saved filed' : 'saved';
     return `
-      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''} ${save}"
+      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''} ${save}
+                  ${swiped.has(j.id) ? 'clearing' : ''}"
            ${since !== null && since < SAVE_MS ? `style="--save-t:${-Math.round(since)}ms"` : ''}
            data-job="${j.id}">
         <img class="jthumb" loading="lazy" alt=""
@@ -971,32 +967,67 @@ async function poll() {
   if (!active) stopPolling();
 }
 
-/* Drag the ring left (>32px) to swap it for the clear button; drag right to put it
-   back. The drag must also swallow the click, or a completed row's <a download>
-   would fire when the pointer is released. */
+/* Swipe a row left (>32px) to swap its ring for the clear button; swipe right to put
+   it back. The gesture takes the whole row, not just the ring — aiming a drag at a
+   34px circle is a hard target — and it answers a trackpad's two-finger swipe, which
+   arrives as horizontal wheel deltas rather than as a pointer drag.
+
+   Pointer moves are tracked on the document so the gesture survives the cursor
+   leaving the list, and the drag must swallow the click, or a completed row's
+   <a download> would fire when the pointer is released. Pointer capture is
+   deliberately not used: it would retarget the click to the capture element and the
+   save link would never fire its download. */
 (() => {
   const list = $('#jobsList');
-  let startX = null, row = null, moved = false;
+  const THRESHOLD = 32;
+  let startX = null, startY = null, row = null, moved = false;
+
+  // Recorded as well as applied: while other jobs are still running the list
+  // re-renders every second, which would otherwise snap a swiped row shut.
+  const swipe = (r, dx) => {
+    const open = dx < 0;
+    r.classList.toggle('clearing', open);
+    open ? swiped.add(r.dataset.job) : swiped.delete(r.dataset.job);
+  };
 
   list.addEventListener('pointerdown', e => {
-    const ring = e.target.closest('.ring');
-    if (!ring) return;
-    startX = e.clientX; row = ring.closest('.job'); moved = false;
-    ring.setPointerCapture?.(e.pointerId);
+    if (e.target.closest('.clear-btn')) return;
+    const r = e.target.closest('.job');
+    if (!r) return;
+    startX = e.clientX; startY = e.clientY; row = r; moved = false;
   });
 
-  list.addEventListener('pointermove', e => {
+  document.addEventListener('pointermove', e => {
     if (startX === null) return;
-    const dx = e.clientX - startX;
+    const dx = e.clientX - startX, dy = e.clientY - startY;
+    if (Math.abs(dy) > Math.abs(dx)) return;   // a vertical drag is a scroll, not a swipe
     if (Math.abs(dx) > 6) moved = true;
-    if (dx < -32) { row.classList.add('clearing'); startX = null; }
-    else if (dx > 32) { row.classList.remove('clearing'); startX = null; }
+    if (Math.abs(dx) > THRESHOLD) { swipe(row, dx); startX = null; }
   });
 
-  list.addEventListener('pointerup', () => { startX = null; });
+  document.addEventListener('pointerup', () => { startX = null; });
+  document.addEventListener('pointercancel', () => { startX = null; });
   list.addEventListener('click', e => {
-    if (moved && e.target.closest('.ring')) { e.preventDefault(); moved = false; }
+    if (moved && e.target.closest('.job')) { e.preventDefault(); moved = false; }
   }, true);
+
+  /* Trackpad swipe. Deltas arrive in small increments, so they accumulate per row
+     and lapse once the fingers stop — otherwise a slow nudge would eventually add up
+     to a swipe the user never made. A left swipe reads as positive deltaX. */
+  let wheelRow = null, wheelDX = 0, lapse = null;
+  list.addEventListener('wheel', e => {
+    const r = e.target.closest('.job');
+    if (!r || Math.abs(e.deltaX) <= Math.abs(e.deltaY)) return;
+    e.preventDefault();
+    if (r !== wheelRow) { wheelRow = r; wheelDX = 0; }
+    wheelDX += e.deltaX;
+    clearTimeout(lapse);
+    lapse = setTimeout(() => { wheelRow = null; wheelDX = 0; }, 300);
+    if (Math.abs(wheelDX) > THRESHOLD) {
+      swipe(r, -wheelDX);
+      wheelRow = null; wheelDX = 0;
+    }
+  }, {passive: false});
 
   // Saving a finished file turns its arrow back into the tick it briefly showed on
   // completion, so the row records that it has been filed away.
@@ -1025,6 +1056,7 @@ async function poll() {
     await fetch(`/api/jobs/${id}`, {method: 'DELETE'});
     animated.delete(id);
     savedAt.delete(id);
+    swiped.delete(id);
     poll();
   });
 })();
