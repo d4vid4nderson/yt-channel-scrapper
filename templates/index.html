@@ -378,20 +378,31 @@
     border-radius: 9px; display: grid; place-items: center; font-size: 15px; line-height: 1;
   }
   .icon-btn:hover { background: rgba(255,255,255,.15); }
-  /* Launcher floats near the bottom of the window, centred and translucent, so it stays
-     reachable from anywhere in a long list without taking layout space. */
+  /* Launcher floats near the bottom of the window: dark glass, so it reads the same
+     over the white results page and the dark landing hero. A glowing ring around it
+     replaces the old pulsing dot while downloads are running. */
   #activity {
     display: none; position: fixed; left: 50%; bottom: 26px; z-index: 20;
     transform: translateX(-50%);
-    background: rgba(255,255,255,.8); border: 1px solid rgba(15,15,15,.06);
-    backdrop-filter: blur(12px) saturate(150%); -webkit-backdrop-filter: blur(12px) saturate(150%);
-    box-shadow: 0 6px 22px rgba(15,15,15,.10);
+    font-family: Roboto, -apple-system, "Segoe UI", Arial, sans-serif;
+    font-size: 13.5px; font-weight: 500; letter-spacing: .2px;
+    padding: 11px 22px; color: #fff;
+    background: rgba(18,18,18,.55); border: 1px solid rgba(255,255,255,.14);
+    backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
+    box-shadow: 0 8px 26px rgba(0,0,0,.28);
     transition: background-color .15s ease, transform .15s ease;
   }
-  #activity.on { display: inline-flex; align-items: center; gap: 8px; }
-  #activity { color: #0f0f0f; font-weight: 500; }
-  #activity #actcount { color: #6b6b6b; }
-  #activity:hover { background: rgba(255,255,255,.96); transform: translateX(-50%) translateY(-1px); }
+  #activity.on { display: inline-flex; align-items: center; gap: 9px; }
+  #activity #actcount { color: rgba(255,255,255,.6); font-size: 13px; }
+  #activity:hover { background: rgba(30,30,30,.78); transform: translateX(-50%) translateY(-1px); }
+  #activity.active { animation: activity-glow 1.9s ease-in-out infinite; }
+  @keyframes activity-glow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(255,40,50,.35), 0 0 14px rgba(255,0,0,.28); }
+    50%      { box-shadow: 0 0 0 2px rgba(255,40,50,.6),  0 0 26px rgba(255,0,0,.55); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    #activity.active { animation: none; box-shadow: 0 0 0 1px rgba(255,40,50,.5); }
+  }
   #activity .dot { margin: 0; }
   @keyframes fade { from { opacity: 0; } }
   @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
@@ -812,7 +823,8 @@ async function poll() {
 
   // Launcher doubles as the progress indicator while the modal is closed.
   $('#activity').classList.add('on');
-  $('#actcount').innerHTML = `${active ? '<span class="dot"></span>' : ''}${done}/${jobs.length}`;
+  $('#activity').classList.toggle('active', active);
+  $('#actcount').textContent = `${done}/${jobs.length}`;
   $('#jobsSummary').textContent = `${done}/${jobs.length} complete${failed ? ` · ${failed} failed` : ''}`;
 
   const RING_C = 97.39;   // 2πr for r=15.5
