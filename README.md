@@ -52,7 +52,8 @@ cd yt-channel-scrapper
 ## Use it
 
 1. Paste a channel URL — `https://www.youtube.com/@channelname`, a bare `@handle`, or a playlist URL.
-2. Pick the type: **Videos**, **Shorts**, **Live** or **Music**.
+2. Pick the type: **Videos**, **Shorts**, **Live** or **Music**. Click the type pill and the menu
+   slides out from under the search bar; click an option and it slides back with the pill relabelled.
 3. **Scrape.** Results stream in; **Load 25 more** pulls the next page.
 4. Tick what you want (filter by title, or **Select all**), choose a quality, **Download selected**.
 5. Progress appears in the Downloads panel. Finished files land in `downloads/`, named
@@ -60,7 +61,10 @@ cd yt-channel-scrapper
 
 <img src="docs/03-downloads.jpg" alt="Downloads modal" width="820">
 
-<img src="docs/04-tabs.jpg" alt="Channel type dropdown" width="820">
+<img src="docs/04-tabs.jpg" alt="The type drawer mid-slide, caught between closed and open" width="820">
+
+<sub>The type drawer caught mid-slide — it fades and glides down from under the search bar rather than
+appearing all at once.</sub>
 
 ## How it works
 
@@ -75,6 +79,9 @@ cd yt-channel-scrapper
   each reporting 0–100% of its own file, which would fill the bar twice. Each job probes once to
   read `requested_formats`, then reports bytes against the combined total, so it fills once.
 - **Retries**: every job re-extracts and retries up to 3 times with a backoff.
+- **The type drawer** is a custom control, not a `<select>`, so it can animate: clicking the pill
+  slides the menu down from under the search bar over ~0.16s while it fades in, and the chevron
+  flips. The label sits in a fixed-width slot so the pill doesn't resize as you change the selection.
 - **Downloads panel** shows as a centred modal over the results list, and as a bottom
   drawer on the landing page where there's no list behind it to sit over.
 - **Remove one job** by dragging its ring to the left, which swaps it for a clear button.
