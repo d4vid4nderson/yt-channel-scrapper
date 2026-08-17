@@ -75,6 +75,8 @@ cd yt-channel-scrapper
   each reporting 0–100% of its own file, which would fill the bar twice. Each job probes once to
   read `requested_formats`, then reports bytes against the combined total, so it fills once.
 - **Retries**: every job re-extracts and retries up to 3 times with a backoff.
+- **Downloads panel** shows as a centred modal over the results list, and as a bottom
+  drawer on the landing page where there's no list behind it to sit over.
 
 Quality presets are yt-dlp format strings in `FORMATS` (`app.py`) if you want to change them.
 
