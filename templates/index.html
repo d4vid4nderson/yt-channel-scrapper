@@ -222,29 +222,38 @@
   .dd-btn .dd-label { display: inline-block; min-width: 50px; text-align: left; }
   .dd-btn .chev { transition: transform .18s ease; }
   .dd.open .dd-btn .chev { transform: rotate(180deg); }
+  /* The panel spans from the separator to the search bar's right edge and unrolls
+     downward, so it reads as sliding out from under the bar. Everything after .dd is
+     fixed width (10px gap + 122px Scrape + 5px padding + 1px border = 138), so the
+     offsets hold at any viewport width. */
+  /* Sibling of the search row, not a child of the bar — a descendant can never paint
+     behind its ancestor's background. The bar stacks above it, so the panel slides out
+     from underneath. Left/right/top are measured in JS since the URL field flexes. */
   .dd-menu {
-    position: absolute; top: calc(100% + 10px); left: 0; min-width: 208px; z-index: 30;
-    margin: 0; padding: 7px; list-style: none;
-    background: rgba(22,22,22,.94); border: 1px solid rgba(255,255,255,.1);
-    backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
-    border-radius: 16px; box-shadow: 0 20px 44px rgba(0,0,0,.5);
-    opacity: 0; transform: translateY(-8px) scale(.97); pointer-events: none;
-    transition: opacity .16s ease, transform .16s cubic-bezier(.3,1,.4,1);
+    position: absolute; z-index: 1; margin: 0; list-style: none;
+    padding: 24px 7px 7px;
+    /* Same surface as the search bar, a touch more opaque so the labels stay crisp. */
+    background: rgba(255,255,255,.94); color: var(--fg);
+    backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border: 1px solid var(--line); border-top: 0;
+    border-radius: 0 0 20px 20px; box-shadow: 0 14px 30px rgba(15,15,15,.16);
+    clip-path: inset(0px 0px 100% 0px); transform: translateY(-8px); pointer-events: none;
+    transition: clip-path .3s cubic-bezier(.32,.9,.28,1), transform .3s cubic-bezier(.32,.9,.28,1);
   }
-  .dd.open .dd-menu { opacity: 1; transform: none; pointer-events: auto; }
+  .searchwrap .row { position: relative; z-index: 2; }
+  .searchwrap.menu-open .dd-menu {
+    clip-path: inset(0px 0px 0px 0px); transform: translateY(0); pointer-events: auto;
+  }
   .dd-menu li {
-    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px;
-    font-size: 14px; color: #e6e6e6; cursor: pointer;
+    display: flex; align-items: center; padding: 11px 14px; border-radius: 11px;
+    font-size: 14px; color: var(--fg); cursor: pointer;
     transition: background-color .12s ease, color .12s ease;
   }
-  .dd-menu li:hover { background: rgba(255,255,255,.08); color: #fff; }
-  .dd-menu li[aria-selected="true"] {
-    background: linear-gradient(100deg, rgba(255,0,0,.18), rgba(255,0,0,.06));
-    color: #fff; font-weight: 500;
-  }
-  .dd-menu li .tick { margin-left: auto; opacity: 0; color: #ff3040; }
+  .dd-menu li:hover { background: rgba(15,15,15,.06); }
+  /* Selection is shown by the tick alone — no highlight behind it. */
+  .dd-menu li .tick { margin-left: auto; opacity: 0; color: var(--accent); }
+  .dd-menu li[aria-selected="true"] { font-weight: 500; }
   .dd-menu li[aria-selected="true"] .tick { opacity: 1; }
-
 
   #filter {
     width: 220px; padding-left: 40px; background-repeat: no-repeat;
@@ -540,16 +549,16 @@
             <span class="dd-label">Videos</span>
             <svg class="chev" width="12" height="8" viewBox="0 0 12 8" aria-hidden="true"><path d="M1 1.8 6 6.4l5-4.6" stroke="#606060" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
           </button>
-          <ul class="dd-menu" role="listbox">
-          <li role="option" data-value="videos" aria-selected="true">Videos<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
-          <li role="option" data-value="shorts" aria-selected="false">Shorts<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
-          <li role="option" data-value="live" aria-selected="false">Live<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
-          <li role="option" data-value="music" aria-selected="false">Music<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
-          </ul>
         </div>
         <button id="scrape">Scrape</button>
       </div>
     </div>
+    <ul class="dd-menu" role="listbox">
+      <li role="option" data-value="videos" aria-selected="true">Videos<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
+      <li role="option" data-value="shorts" aria-selected="false">Shorts<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
+      <li role="option" data-value="live" aria-selected="false">Live<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
+      <li role="option" data-value="music" aria-selected="false">Music<svg class="tick" width="13" height="13" viewBox="0 0 14 14" aria-hidden="true"><path d="M2 7.4 5.4 10.7 12 3.6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></li>
+      </ul>
     <div class="loader" id="loader"></div>
     <div class="errrow"><div id="err" class="err">
       <span id="errtext"></span>
@@ -662,11 +671,35 @@ $('#url').addEventListener('keydown', e => { if (e.key === 'Enter') $('#scrape')
 /* Custom dropdown. #tab stays a hidden input so the rest of the code reads it
    exactly as it read the old <select>. */
 const dd = $('#tabdd');
+const ddMenu = $('.dd-menu'), ddWrap = $('.searchwrap');
+
+/* The panel spans from the separator to the bar's right edge and tucks 16px behind
+   the bar; the URL field flexes, so those edges are measured rather than hardcoded. */
+function placeMenu() {
+  const wrap = ddWrap.getBoundingClientRect();
+  const bar = $('.searchbar').getBoundingClientRect();
+  const sep = $('.searchbar .sep').getBoundingClientRect();
+  ddMenu.style.left = `${sep.left - wrap.left}px`;
+  ddMenu.style.right = `${wrap.right - bar.right}px`;
+  // The bar is a pill: below its widest point the right edge curves inward, so a
+  // straight-edged panel starting at the bar's bottom leaves a wedge of background
+  // showing. Tucking past the widest point puts the panel behind that curve instead.
+  const tuck = bar.height / 2 + 6;
+  ddMenu.style.top = `${bar.bottom - wrap.top - tuck}px`;
+  ddMenu.style.paddingTop = `${tuck + 10}px`;
+  const r = `${(bar.height / 2).toFixed(1)}px`;   // match the bar's corner radius
+  ddMenu.style.borderBottomLeftRadius = r;
+  ddMenu.style.borderBottomRightRadius = r;
+}
+
 dd.querySelector('.dd-btn').onclick = e => {
   e.stopPropagation();
+  placeMenu();
   const open = dd.classList.toggle('open');
+  ddWrap.classList.toggle('menu-open', open);
   dd.querySelector('.dd-btn').setAttribute('aria-expanded', open);
 };
+addEventListener('resize', () => { if (dd.classList.contains('open')) placeMenu(); });
 dd.querySelectorAll('.dd-menu li').forEach(li => {
   li.onclick = () => {
     $('#tab').value = li.dataset.value;
@@ -674,10 +707,11 @@ dd.querySelectorAll('.dd-menu li').forEach(li => {
     dd.querySelectorAll('.dd-menu li').forEach(o =>
       o.setAttribute('aria-selected', o === li));
     dd.classList.remove('open');
+    ddWrap.classList.remove('menu-open');
   };
 });
-document.addEventListener('click', () => dd.classList.remove('open'));
-document.addEventListener('keydown', e => { if (e.key === 'Escape') dd.classList.remove('open'); });
+document.addEventListener('click', () => { dd.classList.remove('open'); ddWrap.classList.remove('menu-open'); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { dd.classList.remove('open'); ddWrap.classList.remove('menu-open'); } });
 
 $('#more').onclick = async () => {
   $('#more').disabled = true;
