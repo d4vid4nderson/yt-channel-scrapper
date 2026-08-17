@@ -1,20 +1,106 @@
 """YT Channel Scraper — list a channel's videos, pick some, download them."""
 
+import importlib.machinery
+import json
 import os
 import re
+import shutil
+import socket
+import sys
 import threading
 import time
+import urllib.request
 import uuid
+import webbrowser
+import zipfile
 from queue import Queue
 
-from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
-from yt_dlp import YoutubeDL
-
+APP_NAME = "YT Channel Scraper"
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+
+# Frozen by PyInstaller, the code and templates sit in a read-only bundle that macOS may
+# also relocate on first launch, so nothing writable can be anchored to BASE_DIR.
+FROZEN = getattr(sys, "frozen", False)
+BUNDLE_DIR = getattr(sys, "_MEIPASS", BASE_DIR)
+SUPPORT_DIR = os.path.expanduser(f"~/Library/Application Support/{APP_NAME}")
+
+# Where an in-app yt-dlp upgrade unpacks to. YouTube breaks yt-dlp every few weeks, so a
+# version fixed at build time quietly ages out of working and has to be replaceable.
+LIB_DIR = os.path.join(SUPPORT_DIR, "lib")
+
+
+class _OverlayFinder:
+    """Load yt-dlp from LIB_DIR in preference to the copy frozen into the bundle.
+
+    Putting LIB_DIR on sys.path is not enough: PyInstaller's importer lives in
+    sys.meta_path, which is consulted before any sys.path entry, so the frozen copy would
+    always win and an upgrade would appear to work while changing nothing. A finder ahead
+    of it in sys.meta_path is what actually takes precedence.
+
+    It has to claim every yt_dlp.* name, not just the top-level package — otherwise the
+    frozen importer keeps answering for submodules and the process ends up running an
+    upgraded __init__ against build-time internals.
+    """
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] != "yt_dlp":
+            return None
+        return importlib.machinery.PathFinder.find_spec(
+            fullname, path if path is not None else [LIB_DIR], target
+        )
+
+
+_overlay = None
+if FROZEN:
+    os.makedirs(LIB_DIR, exist_ok=True)
+    if os.path.isdir(os.path.join(LIB_DIR, "yt_dlp")):
+        _overlay = _OverlayFinder()
+        sys.meta_path.insert(0, _overlay)
+
+from flask import Flask, jsonify, make_response, render_template, request, send_from_directory
+
+try:
+    from yt_dlp import YoutubeDL
+    from yt_dlp.version import __version__ as YTDLP_VERSION
+except Exception:
+    # A half-written or incompatible upgrade would otherwise brick the app on launch with
+    # no way back in to fix it. Drop the overlay and fall back to the shipped copy.
+    if _overlay is None:
+        raise
+    sys.meta_path.remove(_overlay)
+    _overlay = None
+    for _mod in [m for m in sys.modules if m.split(".")[0] == "yt_dlp"]:
+        del sys.modules[_mod]
+    from yt_dlp import YoutubeDL
+    from yt_dlp.version import __version__ as YTDLP_VERSION
+
+# A source checkout keeps its downloads beside the code; the bundle cannot write there.
+DOWNLOAD_DIR = os.environ.get("YTCS_DOWNLOAD_DIR") or (
+    os.path.expanduser(f"~/Downloads/{APP_NAME}") if FROZEN
+    else os.path.join(BASE_DIR, "downloads")
+)
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
-app = Flask(__name__)
+
+def _vendored_ffmpeg():
+    """The bundled static ffmpeg, or None to fall through to whatever is on PATH.
+
+    ffmpeg both merges the separate video and audio streams and does the mp3 conversion,
+    so a missing binary fails every download at the very last step.
+    """
+    vendor = os.path.join(BUNDLE_DIR, "vendor")
+    if not os.path.isfile(os.path.join(vendor, "ffmpeg")):
+        return None
+    for name in ("ffmpeg", "ffprobe"):
+        path = os.path.join(vendor, name)
+        if os.path.isfile(path) and not os.access(path, os.X_OK):
+            os.chmod(path, 0o755)  # PyInstaller drops the exec bit on data files
+    return vendor
+
+
+FFMPEG_DIR = _vendored_ffmpeg()
+
+app = Flask(__name__, template_folder=os.path.join(BUNDLE_DIR, "templates"))
 # Debug is off, which would otherwise let Jinja serve a template it compiled at boot —
 # so an edit to index.html only showed up after a restart.
 app.config["TEMPLATES_AUTO_RELOAD"] = True
@@ -77,7 +163,7 @@ def index():
     # copy it already has — which reads as "the fix didn't work" when the edit is
     # sitting on disk. The build id is the template's mtime: the console prints it,
     # so a page can be checked against `ls -l templates/index.html`.
-    tpl = os.path.join(app.root_path, "templates", "index.html")
+    tpl = os.path.join(app.template_folder, "index.html")
     resp = make_response(render_template("index.html", build=int(os.path.getmtime(tpl))))
     resp.headers["Cache-Control"] = "no-store, must-revalidate"
     return resp
@@ -340,6 +426,128 @@ def serve_download(name):
     return send_from_directory(DOWNLOAD_DIR, name, as_attachment=True)
 
 
+@app.get("/api/health")
+def health():
+    """Lets a second launch recognise a server of ours that is already up."""
+    return jsonify({"app": APP_NAME, "ytdlp": YTDLP_VERSION})
+
+
+@app.post("/api/quit")
+def quit_app():
+    """The bundled app has no window of its own, so the page is what shuts it down."""
+    def bye():
+        time.sleep(0.4)  # let this response reach the browser first
+        os._exit(0)
+
+    threading.Thread(target=bye, daemon=True).start()
+    return jsonify({"ok": True})
+
+
+# --- keeping yt-dlp current ----------------------------------------------------------
+# yt-dlp is pure Python, so an upgrade is just its PyPI wheel unzipped into LIB_DIR —
+# no pip, no compiler, and the bundled copy stays in place as a fallback. The running
+# process imported the old module at boot, so a swap only takes effect on next launch.
+PYPI_URL = "https://pypi.org/pypi/yt-dlp/json"
+PENDING_FILE = os.path.join(SUPPORT_DIR, "pending.json")
+UPGRADE_LOCK = threading.Lock()
+
+
+def _version_tuple(v):
+    """yt-dlp versions are dates (2026.7.4), so a plain numeric compare orders them."""
+    return tuple(int(c) if c.isdigit() else 0 for c in re.split(r"[.\-+]", v))
+
+
+def _pending_version():
+    """A version the updater unpacked that this process is not running yet.
+
+    Compared numerically, not as strings: PyPI publishes 2026.7.4 while the package's own
+    __version__ zero-pads it to 2026.07.04, so a string compare reads the version we are
+    already running as still pending and the UI asks for a restart forever.
+    """
+    try:
+        with open(PENDING_FILE) as fh:
+            version = json.load(fh).get("version")
+        if version and _version_tuple(version) > _version_tuple(YTDLP_VERSION):
+            return version
+    except Exception:
+        pass
+    return None
+
+
+def _latest_version():
+    with urllib.request.urlopen(PYPI_URL, timeout=20) as resp:
+        return json.load(resp)
+
+
+@app.get("/api/ytdlp")
+def ytdlp_info():
+    """What we are running, and — with ?check=1 — what PyPI has."""
+    info = {
+        "current": YTDLP_VERSION,
+        "pending": _pending_version(),
+        "can_upgrade": FROZEN,
+    }
+    if not request.args.get("check"):
+        return jsonify(info)
+    try:
+        info["latest"] = _latest_version()["info"]["version"]
+    except Exception as exc:
+        return jsonify({**info, "error": f"Could not reach PyPI: {exc}"[:200]}), 502
+    # An already-unpacked upgrade counts as installed, so checking twice does not offer
+    # the same version again while the restart is still pending.
+    info["outdated"] = _version_tuple(info["latest"]) > _version_tuple(
+        info["pending"] or info["current"]
+    )
+    return jsonify(info)
+
+
+@app.post("/api/ytdlp/upgrade")
+def ytdlp_upgrade():
+    if not FROZEN:
+        return jsonify({"error": "Running from source — use pip install -U yt-dlp"}), 400
+    if not UPGRADE_LOCK.acquire(blocking=False):
+        return jsonify({"error": "An upgrade is already running"}), 409
+    staging = os.path.join(SUPPORT_DIR, "lib.incoming")
+    try:
+        data = _latest_version()
+        version = data["info"]["version"]
+        wheel = next((u for u in data["urls"] if u["filename"].endswith(".whl")), None)
+        if not wheel:
+            return jsonify({"error": f"yt-dlp {version} has no wheel on PyPI"}), 502
+
+        shutil.rmtree(staging, ignore_errors=True)
+        os.makedirs(staging, exist_ok=True)
+        archive = os.path.join(staging, wheel["filename"])
+        urllib.request.urlretrieve(wheel["url"], archive)
+        with zipfile.ZipFile(archive) as zf:
+            zf.extractall(staging)
+        os.remove(archive)
+        if not os.path.isdir(os.path.join(staging, "yt_dlp")):
+            return jsonify({"error": "Downloaded wheel contained no yt_dlp package"}), 502
+
+        # Only swap once the unpack has fully succeeded, so a failed download can never
+        # leave LIB_DIR holding a partial package that then fails to import.
+        retired = os.path.join(SUPPORT_DIR, "lib.old")
+        shutil.rmtree(retired, ignore_errors=True)
+        if os.path.isdir(LIB_DIR):
+            os.rename(LIB_DIR, retired)
+        os.rename(staging, LIB_DIR)
+        shutil.rmtree(retired, ignore_errors=True)
+
+        with open(PENDING_FILE, "w") as fh:
+            json.dump({"version": version}, fh)
+        return jsonify({
+            "ok": True,
+            "version": version,
+            "restart_required": _version_tuple(version) != _version_tuple(YTDLP_VERSION),
+        })
+    except Exception as exc:
+        shutil.rmtree(staging, ignore_errors=True)
+        return jsonify({"error": str(exc)[:300]}), 500
+    finally:
+        UPGRADE_LOCK.release()
+
+
 def _update(job_id, **fields):
     with JOBS_LOCK:
         if job_id in JOBS:
@@ -392,6 +600,8 @@ def _worker():
             "fragment_retries": 5,
             "extractor_retries": 3,
         }
+        if FFMPEG_DIR:
+            opts["ffmpeg_location"] = FFMPEG_DIR
         if audio_only:
             opts["postprocessors"] = [
                 {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
@@ -453,7 +663,47 @@ for _ in range(int(os.environ.get("WORKERS", "3"))):
     threading.Thread(target=_worker, daemon=True).start()
 
 
+PORT_FILE = os.path.join(SUPPORT_DIR, "port")
+
+
+def _free_port():
+    """A hardcoded port collides with a leftover copy of ourselves or an unrelated app."""
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        return sock.getsockname()[1]
+
+
+def _already_serving():
+    """The port of a copy of this app that is already running, if there is one."""
+    try:
+        with open(PORT_FILE) as fh:
+            port = int(fh.read().strip())
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/health", timeout=1) as resp:
+            if json.load(resp).get("app") == APP_NAME:
+                return port
+    except Exception:
+        pass
+    return None
+
+
 if __name__ == "__main__":
-    print(f"\n  YT Channel Scraper -> http://127.0.0.1:5005")
-    print(f"  Saving to {DOWNLOAD_DIR}\n")
-    app.run(host="127.0.0.1", port=5005, debug=False, threaded=True)
+    # Opening the app from Finder a second time should surface the tab it already has,
+    # not stand up a rival server with its own separate job list.
+    if FROZEN and (running := _already_serving()):
+        webbrowser.open(f"http://127.0.0.1:{running}/")
+        sys.exit(0)
+
+    port = int(os.environ.get("PORT", 0)) or (_free_port() if FROZEN else 5005)
+    os.makedirs(SUPPORT_DIR, exist_ok=True)
+    with open(PORT_FILE, "w") as fh:
+        fh.write(str(port))
+
+    pending = _pending_version()
+    print(f"\n  {APP_NAME} -> http://127.0.0.1:{port}")
+    print(f"  Saving to {DOWNLOAD_DIR}")
+    print(f"  yt-dlp {YTDLP_VERSION}" + (f" (restart to load {pending})" if pending else ""))
+    print()
+    if FROZEN:
+        # There is no terminal to read the URL from, so the browser has to be handed it.
+        threading.Timer(0.7, webbrowser.open, args=(f"http://127.0.0.1:{port}/",)).start()
+    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)

@@ -49,6 +49,34 @@ cd yt-channel-scrapper
 `run.sh` creates a virtualenv and installs Flask + yt-dlp on first run, then starts the app at
 **http://127.0.0.1:5005**.
 
+## Or build it as a Mac app
+
+```bash
+./build-app.sh
+```
+
+Produces `dist/YT Channel Scraper.app` and a `dist/YT Channel Scraper.dmg` (~58 MB). Drag it to
+Applications and double-click — no terminal, no Python, no Homebrew. It starts the server on a free
+port, opens your browser at it, and keeps no Dock icon; **Quit** in the bottom-left of the page is
+what stops it. Downloads go to `~/Downloads/YT Channel Scraper`.
+
+The build stages a **static** ffmpeg into `vendor/` rather than reusing Homebrew's, which links ~18
+Homebrew dylibs and so would only run on a Mac that already had it installed. First run downloads
+those binaries (~91 MB, cached); rebuilds are offline.
+
+**Keeping yt-dlp current matters.** YouTube breaks yt-dlp every few weeks, so the version frozen at
+build time will eventually stop working. **Check for updates** in the page footer fetches the current
+release from PyPI and unpacks it to `~/Library/Application Support/YT Channel Scraper/lib`, which
+loads ahead of the bundled copy on next launch.
+
+<img src="docs/04-updater.jpg" alt="Footer showing an available yt-dlp update" width="500">
+
+A bad update falls back to the bundled version rather than failing to start, so a broken download
+can't leave you with an app that won't launch. Rebuilding always picks up the latest release.
+
+The bundle is ad-hoc signed, which is enough for a Mac that built it. Handing the DMG to someone else
+means either a Developer ID plus notarisation, or they right-click → **Open** the first time.
+
 ## Use it
 
 1. Paste a channel URL — `https://www.youtube.com/@channelname`, a bare `@handle`, or a playlist URL.
@@ -99,11 +127,18 @@ Quality presets are yt-dlp format strings in `FORMATS` (`app.py`) if you want to
 ## Layout
 
 ```
-app.py                 Flask app: scrape/pagination endpoints, download queue, worker threads
-templates/index.html   Whole front end — markup, CSS and JS in one file, no build step
-run.sh                 Creates the venv on first run, then starts the app
-downloads/             Where finished files land (gitignored)
+app.py                    Flask app: scrape/pagination endpoints, download queue, worker threads
+templates/index.html      Whole front end — markup, CSS and JS in one file, no build step
+run.sh                    Creates the venv on first run, then starts the app
+build-app.sh              Builds the .app and DMG: stages ffmpeg, freezes, signs, packages
+YT Channel Scraper.spec   PyInstaller bundle definition
+vendor/                   Static ffmpeg + ffprobe, fetched by build-app.sh (gitignored)
+downloads/                Where finished files land when run from source (gitignored)
 ```
+
+Running from source and running as a bundle differ in three places, all in `app.py`: where downloads
+go, whether ffmpeg comes from `vendor/` or `PATH`, and whether the port is fixed at 5005 or picked
+free with the browser opened for you. `sys.frozen` is the switch.
 
 ## Built with
 

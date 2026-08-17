@@ -4,3 +4,10 @@ __pycache__/
 .claude/
 .DS_Store
 YT_download@300x.png
+
+# Bundled static ffmpeg/ffprobe — ~91MB, fetched by scripts/fetch-ffmpeg.sh
+vendor/
+# PyInstaller output
+build/
+dist/
+*.icns

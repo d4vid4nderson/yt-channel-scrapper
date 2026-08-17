@@ -424,6 +424,27 @@
   /* Launcher floats near the bottom of the window: dark glass, so it reads the same
      over the white results page and the dark landing hero. A glowing ring around it
      replaces the old pulsing dot while downloads are running. */
+  /* Bundled-app footer: which yt-dlp is loaded, and the only way to stop the server
+     when there is no terminal behind the page. Sits bottom-left, clear of #activity. */
+  #appbar {
+    display: none; position: fixed; left: 18px; bottom: 16px; z-index: 20;
+    align-items: center; gap: 10px; font-size: 12px; color: #6f6f6f;
+    letter-spacing: -.05px;
+  }
+  #appbar.on { display: flex; }
+  #appbar .dot { width: 3px; height: 3px; border-radius: 50%; background: #4a4a4a; }
+  #appbar button {
+    font: inherit; color: #9a9a9a; background: none; border: 0; padding: 0;
+    cursor: pointer; transition: color .15s ease;
+  }
+  #appbar button:hover { color: #fff; }
+  #appbar button:disabled { color: #5a5a5a; cursor: default; }
+  /* An available update is the one thing here worth the eye finding on its own. */
+  #appbar button.hot { color: #ff5a5a; font-weight: 500; }
+  #appbar button.hot:hover { color: #ff8080; }
+  #appbar .note { color: #6f6f6f; }
+  #appbar .note.bad { color: #e0736f; }
+
   #activity {
     display: none; position: fixed; left: 50%; bottom: 26px; z-index: 20;
     transform: translateX(-50%);
@@ -645,6 +666,15 @@
 </main>
 
 <button id="activity" class="ghost">Downloads<span id="actcount" class="muted"></span></button>
+
+<div id="appbar">
+  <span id="ytdlpver"></span>
+  <span class="dot"></span>
+  <button id="ytdlpbtn">Check for updates</button>
+  <span id="ytdlpnote" class="note"></span>
+  <span class="dot"></span>
+  <button id="quitbtn">Quit</button>
+</div>
 
 <div class="modal" id="jobsModal" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-label="Downloads">
@@ -1064,6 +1094,103 @@ async function poll() {
 
 async function clearDone() { await fetch('/api/clear', {method:'POST'}); poll(); }
 poll();
+
+// --- yt-dlp version + quit -----------------------------------------------------------
+// YouTube breaks yt-dlp every few weeks, so the version that shipped inside the app goes
+// stale on its own. The check pulls the current release from PyPI; upgrading unpacks it
+// beside the app, which the next launch picks up ahead of the bundled copy.
+(() => {
+  const bar  = $('#appbar'), btn = $('#ytdlpbtn');
+  const ver  = $('#ytdlpver'), note = $('#ytdlpnote');
+  let running = null;   // what this process actually imported, until it is relaunched
+  let pending = null;   // unpacked, waiting on a relaunch
+  let latest  = null;   // the version an upgrade would install
+
+  const say = (text, bad) => {
+    note.textContent = text ? '— ' + text : '';
+    note.classList.toggle('bad', !!bad);
+  };
+
+  function show(info) {
+    // Stays on the version actually loaded — an upgrade only takes effect on relaunch,
+    // so showing the new number here would claim a change that has not happened.
+    running = info.current || running;
+    ver.textContent = 'yt-dlp ' + running;
+    pending = info.pending;
+    if (pending) {
+      btn.textContent = 'Quit and reopen to load ' + pending;
+      btn.disabled = true;
+      btn.classList.remove('hot');
+      return;
+    }
+    btn.disabled = false;
+    btn.textContent = latest ? 'Update to ' + latest : 'Check for updates';
+    btn.classList.toggle('hot', !!latest);
+  }
+
+  async function boot() {
+    try {
+      const info = await (await fetch('/api/ytdlp')).json();
+      // Only the packaged app can swap yt-dlp out; from source that is pip's job.
+      if (!info.can_upgrade) return;
+      show(info);
+      bar.classList.add('on');
+    } catch {}
+  }
+
+  btn.addEventListener('click', async () => {
+    btn.disabled = true;
+    if (!latest) {
+      btn.textContent = 'Checking…';
+      say('');
+      try {
+        const info = await (await fetch('/api/ytdlp?check=1')).json();
+        if (info.error) { show(info); say(info.error, true); return; }
+        latest = info.outdated ? info.latest : null;
+        show(info);
+        if (!latest) say('up to date');
+      } catch (e) {
+        btn.disabled = false;
+        btn.textContent = 'Check for updates';
+        say('check failed', true);
+      }
+      return;
+    }
+    btn.textContent = 'Downloading ' + latest + '…';
+    say('');
+    try {
+      const r = await fetch('/api/ytdlp/upgrade', {method: 'POST'});
+      const d = await r.json();
+      if (!r.ok || d.error) throw new Error(d.error || 'Upgrade failed');
+      latest = null;
+      show({current: running, pending: d.restart_required ? d.version : null});
+      say(d.restart_required ? 'update ready' : 'up to date');
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Update to ' + latest;
+      say(String(e.message).slice(0, 90), true);
+    }
+  });
+
+  $('#quitbtn').addEventListener('click', async () => {
+    let busy = 0;
+    try {
+      const d = await (await fetch('/api/status')).json();
+      busy = d.jobs.filter(j => !['done', 'error'].includes(j.status)).length;
+    } catch {}
+    if (busy && !confirm(`${busy} download${busy > 1 ? 's' : ''} still running. Quit anyway?`))
+      return;
+    await fetch('/api/quit', {method: 'POST'}).catch(() => {});
+    // The dark surface belongs to .hero, which is about to go, so this paints its own.
+    document.body.style.background = '#0f0f0f';
+    document.body.innerHTML =
+      '<div style="display:flex;height:100vh;align-items:center;justify-content:center;' +
+      'color:#7a7a7a;font:15px Roboto,-apple-system,sans-serif;letter-spacing:-.1px">' +
+      'YT Channel Scraper has stopped — you can close this tab.</div>';
+  });
+
+  boot();
+})();
 </script>
 </body>
 </html>
