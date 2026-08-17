@@ -1,83 +1,103 @@
+<div align="center">
+
+<img src="YT_download@300x.png" alt="YT Channel Scraper" width="110">
+
 # YT Channel Scraper
 
-Paste a YouTube channel URL, get a list of its videos, tick the ones you want, download them.
+**Browse any YouTube channel's back catalogue in one list, tick the videos you want, and download them in a batch.**
 
-## Run
+A small local web app — Flask + [yt-dlp](https://github.com/yt-dlp/yt-dlp) — that runs on your own machine.
+No account, no API key, no cloud.
+
+<img src="docs/01-landing.jpg" alt="Landing page" width="820">
+
+</div>
+
+---
+
+## Why
+
+`yt-dlp` is excellent, but grabbing *a few specific videos* from a channel means either downloading
+everything or copying URLs one at a time. This puts the channel in front of you as a browsable list —
+thumbnails, durations, view counts — so you can pick.
+
+## What you get
+
+| | |
+|---|---|
+| **Whole channel, one list** | Videos, Shorts, Live streams or Music, with thumbnails, durations and view counts |
+| **Results while you wait** | Videos stream into the page as they're found, not after the whole channel is walked |
+| **Paged** | 25 at a time, so the first page lands in seconds even on a 5,000-video channel |
+| **Batch download** | Tick as many as you like; 3 download at a time with live per-video progress |
+| **Quality choice** | Best available, 1080p, 720p, 480p, or audio-only as 192 kbps mp3 |
+| **Resilient** | Automatically retries YouTube's intermittent `403`s, which are common and usually transient |
+
+<img src="docs/02-results.jpg" alt="Scraped channel with videos selected" width="900">
+
+## Install
+
+Needs **Python 3.9+** and **ffmpeg** (to merge video + audio and to make mp3s):
 
 ```bash
+brew install ffmpeg          # macOS — or apt install ffmpeg, etc.
+
+git clone https://github.com/d4vid4nderson/yt-channel-scrapper.git
+cd yt-channel-scrapper
 ./run.sh
 ```
 
-Then open http://127.0.0.1:5005
+`run.sh` creates a virtualenv and installs Flask + yt-dlp on first run, then starts the app at
+**http://127.0.0.1:5005**.
 
-First run creates a `.venv` and installs Flask + yt-dlp. `ffmpeg` must be on your PATH
-(`brew install ffmpeg`) — it's needed to merge video+audio and to make mp3s.
+## Use it
+
+1. Paste a channel URL — `https://www.youtube.com/@channelname`, a bare `@handle`, or a playlist URL.
+2. Pick the type: **Videos**, **Shorts**, **Live** or **Music**.
+3. **Scrape.** Results stream in; **Load 25 more** pulls the next page.
+4. Tick what you want (filter by title, or **Select all**), choose a quality, **Download selected**.
+5. Progress appears in the Downloads panel. Finished files land in `downloads/`, named
+   `Title [videoid].mp4`, and each row's progress ring turns into a save button.
+
+<img src="docs/03-downloads.jpg" alt="Downloads modal" width="820">
+
+<img src="docs/04-tabs.jpg" alt="Channel type dropdown" width="820">
 
 ## How it works
 
-- **Landing → app** — the page opens as a full-screen dark hero with the logo and search
-  bar centred; hitting Scrape collapses the hero into the top bar and drops the results in.
-  It's one CSS class swap (`body.landing` → `body.app`); everything that moves is a
-  transform, so it animates as one motion instead of re-laying out.
-- **Scrape** — `yt-dlp` flat extraction on the chosen channel tab, run in a background
-  thread with `process=False` so the entry list stays a lazy generator. Videos stream into
-  the page as pages load (~30 per 0.6s) instead of the UI blocking until the whole channel
-  is walked — TED's ~5,000 videos would otherwise sit on "Scraping…" for minutes.
-  An indeterminate bar under the search field runs while it works (the channel's total
-  isn't known until the end, so a percentage would be fiction). The close button in the
-  header stops the scrape and resets to a blank landing page — queued downloads are left
-  running on purpose.
-- **Pagination** — the worker pauses every `PAGE_SIZE` (25) videos and parks on the
-  generator, holding its position, until **Load more** asks for the next page. So the
-  first page lands in seconds on any channel instead of grinding through thousands of
-  entries. Resuming continues where it stopped rather than re-walking the channel.
-- **Tabs** — Videos, Shorts and Live map to `/videos`, `/shorts` and `/streams`. Music
-  tries `/releases` first (artist channels) and falls back to `/playlists`, since most
-  channels have no releases tab at all. Either way those entries are *albums/playlists*
-  rather than videos, so entries with `ie_key == "YoutubeTab"` get expanded one level to
-  reach the actual tracks. A tab the channel doesn't have yields a plain-English message
-  rather than yt-dlp's None.
-- **Select** — filter by title, select-all applies to whatever the filter is showing.
-- **Download** — 3 worker threads pull from a queue; progress appears in a modal, and the
-  Downloads button in the top row keeps a live count while the modal is closed. Each row
-  shows a progress ring (SVG `stroke-dashoffset`) that closes as the file arrives, then
-  spins, fills, and becomes the save button — it's a real `<a download>` pointing at the
-  finished file. Files land in `downloads/`, named `Title [videoid].mp4`.
-- **Combined progress** — a merged download is two passes (video stream, then audio),
-  each reporting 0-100% of its own file, which made the ring fill twice. Each job probes
-  once with `download=False` to read `requested_formats`, then reports downloaded bytes
-  against the combined expected size, so it fills exactly once.
-- **Retries** — YouTube hands out intermittent `HTTP 403`s on media URLs. Each job
-  re-extracts and retries up to 3 times with a backoff; the row shows "hit an error,
-  retrying…" while that happens. Most 403s clear on the second attempt.
+- **Scraping** uses yt-dlp flat extraction with `process=False`, so the entry list stays a lazy
+  generator and videos can be pushed to the page as pages load (~30 per 0.6s) rather than after the
+  entire channel has been walked.
+- **Pagination** pauses the worker every 25 videos *while holding its place in that generator*, so
+  **Load more** continues where it stopped instead of re-walking the channel.
+- **Music** tries `/releases` (artist channels) and falls back to `/playlists`. Both list albums
+  rather than videos, so those entries get expanded one level to reach the actual tracks.
+- **Progress** is combined across streams. A merged download is two passes — video, then audio —
+  each reporting 0–100% of its own file, which would fill the bar twice. Each job probes once to
+  read `requested_formats`, then reports bytes against the combined total, so it fills once.
+- **Retries**: every job re-extracts and retries up to 3 times with a backoff.
 
-Quality options map to yt-dlp format strings (`app.py: FORMATS`). "Audio only" produces
-192kbps mp3.
+Quality presets are yt-dlp format strings in `FORMATS` (`app.py`) if you want to change them.
 
-## Look
+## Notes and limits
 
-Light theme on white, using YouTube's palette (`#ff0000` red, `#0f0f0f` text, `#606060`
-secondary, `#e3e3e3` lines) and Roboto throughout — the same font youtube.com uses for its
-interface. The badge is inline SVG, also used as the favicon; swap the paths in
-`templates/index.html` to change it. On load it plays the same beat as a finished
-download — the ring fills in bursts like a real transfer, then the arrow springs in —
-and clicking the badge replays it.
+- **Local only.** It binds to `127.0.0.1` and has no authentication — don't expose it to a network.
+- Job state is in memory: restarting the server clears the download list. The files stay.
+- If a file of the same name already exists in `downloads/`, yt-dlp skips it and the row completes
+  instantly. Delete it first to re-fetch at a different quality.
+- Age-restricted and members-only videos will fail on their row. The usual fix is passing browser
+  cookies — add `"cookiesfrombrowser": ("chrome",)` to the `opts` dict in `_worker`.
+- Only download content you have the rights to. Respect YouTube's Terms of Service and copyright.
 
-The landing layout centres by transform, which depends on text width, so a webfont
-swapping in mid-paint would shift the whole page. First paint is held until
-`document.fonts.ready` (with a 1.2s failsafe), and the page canvas is dark so a reload
-doesn't flash white. Measured CLS on load: 0.
+## Layout
 
-The Google Fonts `<link>` needs a network connection; offline it falls back to the system
-sans and everything still works.
+```
+app.py                 Flask app: scrape/pagination endpoints, download queue, worker threads
+templates/index.html   Whole front end — markup, CSS and JS in one file, no build step
+run.sh                 Creates the venv on first run, then starts the app
+downloads/             Where finished files land (gitignored)
+```
 
-## Notes
+## Built with
 
-- Runs on localhost only, no auth — it's a local tool, don't expose it to a network.
-- If a file with the same name is already in `downloads/`, yt-dlp skips the download and
-  the row completes instantly — delete the file first to re-fetch at a different quality.
-- Job state lives in memory; restarting the server clears the download list (files stay).
-- Age-restricted or members-only videos will fail with an error on their row. Passing
-  cookies (`"cookiesfrombrowser": ("chrome",)` in the `opts` dict in `_worker`) is the
-  usual fix.
-- Only download content you have the rights to.
+[Flask](https://flask.palletsprojects.com/) · [yt-dlp](https://github.com/yt-dlp/yt-dlp) ·
+[ffmpeg](https://ffmpeg.org/) · vanilla JS and CSS, no framework
