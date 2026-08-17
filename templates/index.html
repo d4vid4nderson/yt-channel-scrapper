@@ -224,21 +224,34 @@
   .dd-btn .chev { transition: transform .18s ease; }
   .dd.open .dd-btn .chev { transform: rotate(180deg); }
   .dd-menu {
-    position: absolute; top: calc(100% + 8px); left: 0; min-width: 186px; z-index: 30;
-    margin: 0; padding: 6px; list-style: none; background: #fff; border: 1px solid var(--line);
-    border-radius: 14px; box-shadow: 0 12px 34px rgba(15,15,15,.16);
-    opacity: 0; transform: translateY(-6px) scale(.98); pointer-events: none;
-    transition: opacity .16s ease, transform .16s ease;
+    position: absolute; top: calc(100% + 10px); left: 0; min-width: 208px; z-index: 30;
+    margin: 0; padding: 7px; list-style: none;
+    background: rgba(22,22,22,.94); border: 1px solid rgba(255,255,255,.1);
+    backdrop-filter: blur(18px) saturate(160%); -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-radius: 16px; box-shadow: 0 20px 44px rgba(0,0,0,.5);
+    opacity: 0; transform: translateY(-8px) scale(.97); pointer-events: none;
+    transition: opacity .16s ease, transform .16s cubic-bezier(.3,1,.4,1);
   }
   .dd.open .dd-menu { opacity: 1; transform: none; pointer-events: auto; }
   .dd-menu li {
-    display: flex; align-items: center; gap: 10px; padding: 9px 10px; border-radius: 9px;
-    font-size: 14px; cursor: pointer;
+    display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 11px;
+    font-size: 14px; color: #e6e6e6; cursor: pointer;
+    transition: background-color .12s ease, color .12s ease;
   }
-  .dd-menu li:hover { background: #f4f4f4; }
-  .dd-menu li .tick { margin-left: auto; opacity: 0; color: var(--accent); }
+  .dd-menu li svg { color: rgba(255,255,255,.72); flex: none; }
+  .dd-menu li:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .dd-menu li:hover svg { color: #fff; }
+  .dd-menu li[aria-selected="true"] {
+    background: linear-gradient(100deg, rgba(255,0,0,.18), rgba(255,0,0,.06));
+    color: #fff; font-weight: 500;
+  }
+  .dd-menu li[aria-selected="true"] svg { color: #fff; }
+  .dd-menu li .tick { margin-left: auto; opacity: 0; color: #ff3040; }
   .dd-menu li[aria-selected="true"] .tick { opacity: 1; }
-  .dd-menu li[aria-selected="true"] { font-weight: 500; }
+  /* The live mark keeps its red in every state. */
+  .dd-menu li .ico-live, .dd-menu li:hover .ico-live,
+  .dd-menu li[aria-selected="true"] .ico-live { color: #ff2d3a; }
+
   /* Live: the whole broadcast mark is red — dot and both pairs of arcs. */
   .ico-live { color: #ff0000; }
 
@@ -340,7 +353,7 @@
   }
   .modal[hidden] { display: none; }
   .sheet {
-    width: min(660px, 100%); max-height: 78vh; display: flex; flex-direction: column;
+    width: min(820px, 100%); max-height: 80vh; display: flex; flex-direction: column;
     color: #fff; border: 1px solid #2a2a2a; border-radius: 20px; overflow: hidden;
     background:
       radial-gradient(48% 78% at 104% 106%, rgba(255,45,60,.34) 0%, rgba(190,20,35,.12) 45%, transparent 76%),
@@ -360,15 +373,15 @@
   @keyframes drawer-up { from { transform: translateY(100%); } }
 
   .sheet-head {
-    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-    padding: 16px 18px; border-bottom: 1px solid rgba(255,255,255,.09);
+    display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    padding: 20px 24px; border-bottom: 1px solid rgba(255,255,255,.09);
   }
-  .sheet-head h2 { margin: 0; font-size: 16px; font-weight: 500; letter-spacing: -.2px; }
+  .sheet-head h2 { margin: 0; font-size: 17px; font-weight: 500; letter-spacing: -.2px; }
   .count-pill {
     background: rgba(255,255,255,.09); color: #c8c8c8; font-size: 12px;
     padding: 3px 10px; border-radius: 999px;
   }
-  .sheet-body { padding: 14px 18px 18px; overflow-y: auto; }
+  .sheet-body { padding: 18px 24px 24px; overflow-y: auto; }
   /* Matches the generic button.ghost:hover:not(:disabled) rule's specificity, which
      otherwise repaints these light and leaves white text on a white pill. */
   .sheet button.ghost { background: rgba(255,255,255,.1); color: #fff; }
@@ -414,16 +427,16 @@
          padding: 11px 14px; margin-bottom: 8px; }
   .job .top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
   .job {
-    display: flex; gap: 13px; align-items: center; padding: 11px 12px; margin-bottom: 9px;
+    display: flex; gap: 16px; align-items: center; padding: 14px 16px; margin-bottom: 12px;
     background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08);
     border-radius: 14px;
   }
   .job:last-child { margin-bottom: 0; }
-  .jthumb { width: 76px; aspect-ratio: 16/9; object-fit: cover; border-radius: 8px;
+  .jthumb { width: 96px; aspect-ratio: 16/9; object-fit: cover; border-radius: 9px;
             flex: none; background: #262626; }
   .jbody { flex: 1; min-width: 0; }
-  .jtitle { font-size: 13.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .jsub { color: #a3a3a3; font-size: 12px; margin-top: 3px; }
+  .jtitle { font-size: 14.5px; line-height: 1.4; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .jsub { color: #a3a3a3; font-size: 12.5px; margin-top: 5px; }
   .job.error .jsub { color: #ff8f8f; }
 
   /* Progress is a ring on the right of the row, so the title can sit centred against
