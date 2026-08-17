@@ -19,6 +19,7 @@ app = Flask(__name__)
 # job_id -> {"video_id", "title", "status", "percent", "speed", "eta", "file", "error"}
 JOBS = {}
 JOBS_LOCK = threading.Lock()
+CANCELLED = set()   # job ids the user removed; the worker aborts them mid-download
 QUEUE = Queue()
 
 # One scrape at a time; a new one supersedes whatever was running.
@@ -302,6 +303,19 @@ def status():
         return jsonify({"jobs": list(JOBS.values())})
 
 
+@app.delete("/api/jobs/<job_id>")
+def delete_job(job_id):
+    """Remove a single job. If it's still running, the worker aborts it."""
+    with JOBS_LOCK:
+        if job_id not in JOBS:
+            return jsonify({"error": "No such job"}), 404
+        unfinished = JOBS[job_id]["status"] not in ("done", "error")
+        del JOBS[job_id]
+        if unfinished:
+            CANCELLED.add(job_id)
+    return jsonify({"ok": True})
+
+
 @app.post("/api/clear")
 def clear():
     """Drop finished/failed jobs from the list (running ones stay)."""
@@ -333,6 +347,9 @@ def _worker():
         got = {}
 
         def hook(d, job_id=job_id):
+            with JOBS_LOCK:
+                if job_id in CANCELLED:
+                    raise RuntimeError("cancelled")
             name = d.get("filename") or ""
             if d["status"] == "downloading":
                 got[name] = d.get("downloaded_bytes", 0)
@@ -407,6 +424,11 @@ def _worker():
                 last_error = None
                 break
             except Exception as exc:
+                with JOBS_LOCK:
+                    if job_id in CANCELLED:
+                        CANCELLED.discard(job_id)
+                        last_error = None
+                        break
                 last_error = str(exc)[:300]
                 if attempt < 3:
                     _update(job_id, status="retrying", percent=0, error=last_error)

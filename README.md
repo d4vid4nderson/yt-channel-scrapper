@@ -77,6 +77,9 @@ cd yt-channel-scrapper
 - **Retries**: every job re-extracts and retries up to 3 times with a backoff.
 - **Downloads panel** shows as a centred modal over the results list, and as a bottom
   drawer on the landing page where there's no list behind it to sit over.
+- **Remove one job** by dragging its ring to the left, which swaps it for a clear button.
+  Removing a job that's still downloading actually aborts it — the progress hook raises
+  when it sees the id in `CANCELLED` — rather than letting it finish out of sight.
 
 Quality presets are yt-dlp format strings in `FORMATS` (`app.py`) if you want to change them.
 

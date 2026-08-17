@@ -443,6 +443,18 @@
                 transform: scale(0); }
   .ring .ico { position: absolute; opacity: 0; }
   a.ring { cursor: pointer; }
+  /* Drag the ring left to reveal a clear button that removes just that row. */
+  .jobact { position: relative; flex: none; width: 34px; height: 34px; touch-action: pan-y; }
+  .jobact .ring { position: absolute; inset: 0; transition: transform .2s ease, opacity .2s ease; }
+  .job.clearing .ring { transform: translateX(-40px); opacity: 0; pointer-events: none; }
+  .clear-btn {
+    position: absolute; inset: 0; display: grid; place-items: center; border: 0; padding: 0;
+    border-radius: 50%; background: #3a3a3a; color: #fff; cursor: pointer; opacity: 0;
+    transform: translateX(22px); pointer-events: none;
+    transition: opacity .2s ease, transform .2s ease, background-color .15s ease;
+  }
+  .job.clearing .clear-btn { opacity: 1; transform: none; pointer-events: auto; }
+  .clear-btn:hover { background: var(--accent); }
 
   /* On completion the ring closes, spins once, fills in, and swaps the tick for the
      download arrow — after which it is the save button. */
@@ -855,22 +867,69 @@ async function poll() {
               : j.status === 'done' ? ''
               : fmtSpeed(j.speed);
     return `
-      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''}">
+      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''}" data-job="${j.id}">
         <img class="jthumb" loading="lazy" alt=""
              src="https://i.ytimg.com/vi/${j.video_id}/mqdefault.jpg">
         <div class="jbody">
           <div class="jtitle">${esc(j.title)}</div>
           ${sub ? `<div class="jsub">${sub}</div>` : ''}
         </div>
-        ${j.status === 'done' && j.file
-            ? `<a class="ring" href="/downloads/${encodeURIComponent(j.file)}" download
-                  title="Save ${esc(j.title)}" aria-label="Save file">${ring}</a>`
-            : `<span class="ring" aria-hidden="true">${ring}</span>`}
+        <span class="jobact">
+          ${j.status === 'done' && j.file
+              ? `<a class="ring" href="/downloads/${encodeURIComponent(j.file)}" download draggable="false"
+                    title="Save ${esc(j.title)}" aria-label="Save file">${ring}</a>`
+              : `<span class="ring" aria-hidden="true">${ring}</span>`}
+          <button type="button" class="clear-btn" title="Remove from list" aria-label="Remove from list">
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><path d="M2 2 10 10M10 2 2 10"
+              stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+          </button>
+        </span>
       </div>`;
   }).join('');
   jobs.forEach(j => { if (j.status === 'done') animated.add(j.id); });
   if (!active) stopPolling();
 }
+
+/* Drag the ring left (>32px) to swap it for the clear button; drag right to put it
+   back. The drag must also swallow the click, or a completed row's <a download>
+   would fire when the pointer is released. */
+(() => {
+  const list = $('#jobsList');
+  let startX = null, row = null, moved = false;
+
+  list.addEventListener('pointerdown', e => {
+    const ring = e.target.closest('.ring');
+    if (!ring) return;
+    startX = e.clientX; row = ring.closest('.job'); moved = false;
+    ring.setPointerCapture?.(e.pointerId);
+  });
+
+  list.addEventListener('pointermove', e => {
+    if (startX === null) return;
+    const dx = e.clientX - startX;
+    if (Math.abs(dx) > 6) moved = true;
+    if (dx < -32) { row.classList.add('clearing'); startX = null; }
+    else if (dx > 32) { row.classList.remove('clearing'); startX = null; }
+  });
+
+  list.addEventListener('pointerup', () => { startX = null; });
+  list.addEventListener('click', e => {
+    if (moved && e.target.closest('.ring')) { e.preventDefault(); moved = false; }
+  }, true);
+
+  list.addEventListener('click', async e => {
+    const btn = e.target.closest('.clear-btn');
+    if (!btn) return;
+    e.preventDefault();
+    const job = btn.closest('.job');
+    const id = job.dataset.job;
+    job.style.transition = 'opacity .18s ease';
+    job.style.opacity = '0';
+    await fetch(`/api/jobs/${id}`, {method: 'DELETE'});
+    animated.delete(id);
+    poll();
+  });
+})();
 
 async function clearDone() { await fetch('/api/clear', {method:'POST'}); poll(); }
 poll();
