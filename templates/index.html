@@ -33,42 +33,54 @@
   }
   body.app .hero { height: 66px; }
 
-  /* Aurora: a few oversized, heavily blurred blobs drifting behind everything and
-     pooled at the bottom-right — cheaper and far more alive than animating gradient
-     stops, since only transforms change. */
+  /* Aurora: blurred blobs blended additively behind everything. Each blob's centre —
+     its brightest point — is parked on the bottom-right corner, so the hot spot stays
+     pinned there and only the falloff breathes and drifts. */
   .aurora { position: absolute; inset: 0; overflow: hidden; pointer-events: none; z-index: 0; }
   .aurora i {
-    position: absolute; display: block; border-radius: 50%; filter: blur(70px);
-    will-change: transform;
+    position: absolute; display: block; border-radius: 50%; filter: blur(55px);
+    mix-blend-mode: screen; will-change: transform;
   }
+  /* Core: centred exactly on the corner, pulses in place and never travels. */
   .aurora i:nth-child(1) {
-    width: 62vw; height: 62vw; right: -14vw; bottom: -24vw; opacity: .9;
-    background: radial-gradient(circle, rgba(255,40,55,.85) 0%, rgba(190,18,34,.35) 45%, transparent 70%);
-    animation: aurora-a 26s ease-in-out infinite;
+    width: 52vw; height: 52vw; right: -26vw; bottom: -26vw;
+    background: radial-gradient(circle, rgba(255,35,50,1) 0%, rgba(205,18,34,.6) 38%, transparent 68%);
+    animation: aurora-core 13s ease-in-out infinite;
   }
   .aurora i:nth-child(2) {
-    width: 46vw; height: 46vw; right: 2vw; bottom: -20vw; opacity: .6;
-    background: radial-gradient(circle, rgba(255,110,80,.6) 0%, rgba(210,30,40,.22) 50%, transparent 72%);
-    animation: aurora-b 34s ease-in-out infinite;
+    width: 70vw; height: 70vw; right: -35vw; bottom: -35vw;
+    background: radial-gradient(circle, rgba(255,110,70,.75) 0%, rgba(225,35,45,.35) 42%, transparent 70%);
+    animation: aurora-b 19s ease-in-out infinite;
   }
   .aurora i:nth-child(3) {
-    width: 74vw; height: 74vw; right: -26vw; bottom: -40vw; opacity: .55;
-    background: radial-gradient(circle, rgba(150,14,26,.6) 0%, rgba(90,10,18,.2) 45%, transparent 75%);
-    animation: aurora-c 44s ease-in-out infinite;
+    width: 96vw; height: 96vw; right: -48vw; bottom: -48vw;
+    background: radial-gradient(circle, rgba(190,16,30,.7) 0%, rgba(110,10,20,.3) 45%, transparent 72%);
+    animation: aurora-c 27s ease-in-out infinite;
   }
-  @keyframes aurora-a {
-    0%, 100% { transform: translate3d(0,0,0) scale(1); }
-    35%      { transform: translate3d(-7vw,-5vh,0) scale(1.15); }
-    70%      { transform: translate3d(4vw,3vh,0) scale(.92); }
+  .aurora i:nth-child(4) {
+    width: 34vw; height: 34vw; right: -17vw; bottom: -17vw;
+    background: radial-gradient(circle, rgba(255,150,110,.55) 0%, rgba(255,60,50,.25) 50%, transparent 74%);
+    animation: aurora-d 17s ease-in-out infinite;
   }
+  @keyframes aurora-core {
+    0%, 100% { transform: scale(1); opacity: .95; }
+    50%      { transform: scale(1.12); opacity: 1; }
+  }
+  /* The drifting layers stay anchored to the corner: they lean inward and back, they
+     never carry their centre out into the page. */
   @keyframes aurora-b {
     0%, 100% { transform: translate3d(0,0,0) scale(1); }
-    40%      { transform: translate3d(-11vw,4vh,0) scale(1.22); }
-    75%      { transform: translate3d(5vw,-6vh,0) scale(.9); }
+    35%      { transform: translate3d(-6vw,-4vh,0) scale(1.16); }
+    70%      { transform: translate3d(2vw,3vh,0) scale(.92); }
   }
   @keyframes aurora-c {
-    0%, 100% { transform: translate3d(0,0,0) scale(1.05); }
-    50%      { transform: translate3d(8vw,-7vh,0) scale(.95); }
+    0%, 100% { transform: translate3d(0,0,0) scale(1.04); }
+    45%      { transform: translate3d(5vw,-6vh,0) scale(.9); }
+    75%      { transform: translate3d(-4vw,2vh,0) scale(1.14); }
+  }
+  @keyframes aurora-d {
+    0%, 100% { transform: translate3d(0,0,0) scale(.95); opacity: .8; }
+    50%      { transform: translate3d(-3vw,-4vh,0) scale(1.25); opacity: 1; }
   }
   @media (prefers-reduced-motion: reduce) { .aurora i { animation: none; } }
 
@@ -543,7 +555,7 @@
 </head>
 <body class="landing">
 <div class="hero">
-  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i></div>
+  <div class="aurora" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
 
   <div class="brand">
     <!-- Plain red YouTube badge -->
