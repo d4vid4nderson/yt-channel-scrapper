@@ -15,6 +15,9 @@ DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
 os.makedirs(DOWNLOAD_DIR, exist_ok=True)
 
 app = Flask(__name__)
+# Debug is off, which would otherwise let Jinja serve a template it compiled at boot —
+# so an edit to index.html only showed up after a restart.
+app.config["TEMPLATES_AUTO_RELOAD"] = True
 
 # job_id -> {"video_id", "title", "status", "percent", "speed", "eta", "file", "error"}
 JOBS = {}

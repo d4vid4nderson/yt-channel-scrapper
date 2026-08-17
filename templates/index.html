@@ -526,15 +526,32 @@
   .job.done.played .ring .ico-check { animation: none; opacity: 0; }
   .job.done.played .ring .ico-dl { animation: none; opacity: 1; }
 
+  /* Saving the file plays the swap in reverse: the arrow drops away and the tick
+     comes back, so a row that has been filed away reads differently from one that
+     is still waiting to be saved. --save-t carries a negative delay so a re-render
+     mid-animation resumes where it was instead of starting over. */
+  .job.done.saved .ring .ico-dl {
+    animation: ico-drop .26s cubic-bezier(.4,0,.6,1) var(--save-t, 0ms) both; }
+  .job.done.saved .ring .ico-check {
+    animation: ico-rise .34s cubic-bezier(.34,1.56,.64,1) calc(180ms + var(--save-t, 0ms)) both; }
+  .job.done.saved.filed .ring .ico-dl { animation: none; opacity: 0; }
+  .job.done.saved.filed .ring .ico-check { animation: none; opacity: 1; transform: none; }
+
   @keyframes ring-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
   @keyframes disc-in { from { transform: scale(0); } to { transform: scale(1); } }
   @keyframes icon-out { to { opacity: 0; } }
   @keyframes icon-in { to { opacity: 1; } }
+  @keyframes ico-drop { from { opacity: 1; transform: none; }
+                        to { opacity: 0; transform: translateY(7px); } }
+  @keyframes ico-rise { from { opacity: 0; transform: translateY(-7px) scale(.6); }
+                        to { opacity: 1; transform: none; } }
   @media (prefers-reduced-motion: reduce) {
     .job.done .ring { animation: none; }
     .job.done .ring .disc { animation: none; transform: scale(1); }
     .job.done .ring .ico-check { animation: none; opacity: 0; }
     .job.done .ring .ico-dl { animation: none; opacity: 1; }
+    .job.done.saved .ring .ico-dl { animation: none; opacity: 0; }
+    .job.done.saved .ring .ico-check { animation: none; opacity: 1; transform: none; }
   }
   .job.error { border-color: rgba(255,90,90,.45); }
   .job.error .top .muted { color: #ff8f8f; }
@@ -662,6 +679,8 @@ const showErr = msg => {
 };
 let videos = [], selected = new Set(), polling = null, scraping = null;
 const animated = new Set();   // job ids whose completion animation has already played
+const savedAt  = new Map();   // job id -> timestamp of the save that turned the arrow back into a tick
+const SAVE_MS  = 520;         // total length of the arrow -> tick swap
 
 const esc = s => s.replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]));
 const fmtDur = s => {
@@ -886,6 +905,7 @@ async function poll() {
   if (!jobs.length) {
     $('#activity').classList.remove('on');
     $('#jobsList').innerHTML = '';
+    savedAt.clear();
     closeJobs(); stopPolling();
     return;
   }
@@ -922,8 +942,13 @@ async function poll() {
               : j.status === 'queued' ? 'queued'
               : j.status === 'done' ? ''
               : fmtSpeed(j.speed);
+    const since = savedAt.has(j.id) ? performance.now() - savedAt.get(j.id) : null;
+    const save  = since === null ? ''
+                : since >= SAVE_MS ? 'saved filed' : 'saved';
     return `
-      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''}" data-job="${j.id}">
+      <div class="job ${j.status} ${j.status === 'done' && animated.has(j.id) ? 'played' : ''} ${save}"
+           ${since !== null && since < SAVE_MS ? `style="--save-t:${-Math.round(since)}ms"` : ''}
+           data-job="${j.id}">
         <img class="jthumb" loading="lazy" alt=""
              src="https://i.ytimg.com/vi/${j.video_id}/mqdefault.jpg">
         <div class="jbody">
@@ -973,6 +998,22 @@ async function poll() {
     if (moved && e.target.closest('.ring')) { e.preventDefault(); moved = false; }
   }, true);
 
+  // Saving a finished file turns its arrow back into the tick it briefly showed on
+  // completion, so the row records that it has been filed away.
+  list.addEventListener('click', e => {
+    const link = e.target.closest('a.ring');
+    if (!link || e.defaultPrevented) return;
+    const job = link.closest('.job');
+    const id = job.dataset.job;
+    if (savedAt.has(id)) return;
+    savedAt.set(id, performance.now());
+    job.style.removeProperty('--save-t');
+    job.classList.add('saved');
+    setTimeout(() => {
+      $(`.job[data-job="${id}"]`)?.classList.add('filed');
+    }, SAVE_MS);
+  });
+
   list.addEventListener('click', async e => {
     const btn = e.target.closest('.clear-btn');
     if (!btn) return;
@@ -983,6 +1024,7 @@ async function poll() {
     job.style.opacity = '0';
     await fetch(`/api/jobs/${id}`, {method: 'DELETE'});
     animated.delete(id);
+    savedAt.delete(id);
     poll();
   });
 })();
