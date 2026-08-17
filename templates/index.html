@@ -232,17 +232,22 @@
   .dd-menu {
     position: absolute; z-index: 1; margin: 0; list-style: none;
     padding: 24px 7px 7px;
-    /* Same surface as the search bar, a touch more opaque so the labels stay crisp. */
-    background: rgba(255,255,255,.94); color: var(--fg);
-    backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
+    /* Same surface as the search bar but glassier; the heavier blur keeps the labels
+       readable at this opacity. */
+    background: rgba(255,255,255,.72); color: var(--fg);
+    backdrop-filter: blur(22px) saturate(170%); -webkit-backdrop-filter: blur(22px) saturate(170%);
     border: 1px solid var(--line); border-top: 0;
     border-radius: 0 0 20px 20px; box-shadow: 0 14px 30px rgba(15,15,15,.16);
-    clip-path: inset(0px 0px 100% 0px); transform: translateY(-8px); pointer-events: none;
+    /* The inset carries its own corner rounding, so the edge that slides out is rounded
+       the whole way down rather than square until the animation lands. */
+    clip-path: inset(0px 0px 100% 0px round 0px 0px var(--r, 16px) var(--r, 16px));
+    transform: translateY(-8px); pointer-events: none;
     transition: clip-path .3s cubic-bezier(.32,.9,.28,1), transform .3s cubic-bezier(.32,.9,.28,1);
   }
   .searchwrap .row { position: relative; z-index: 2; }
   .searchwrap.menu-open .dd-menu {
-    clip-path: inset(0px 0px 0px 0px); transform: translateY(0); pointer-events: auto;
+    clip-path: inset(0px 0px 0px 0px round 0px 0px var(--r, 16px) var(--r, 16px));
+    transform: translateY(0); pointer-events: auto;
   }
   .dd-menu li {
     display: flex; align-items: center; padding: 11px 14px; border-radius: 11px;
@@ -680,14 +685,19 @@ function placeMenu() {
   const bar = $('.searchbar').getBoundingClientRect();
   const sep = $('.searchbar .sep').getBoundingClientRect();
   ddMenu.style.left = `${sep.left - wrap.left}px`;
-  ddMenu.style.right = `${wrap.right - bar.right}px`;
+  // Held a few px inside the bar's right edge; flush with it, the panel's straight
+  // side peeks out past the pill's curve as a thin sliver.
+  ddMenu.style.right = `${wrap.right - bar.right + 4}px`;
   // The bar is a pill: below its widest point the right edge curves inward, so a
   // straight-edged panel starting at the bar's bottom leaves a wedge of background
   // showing. Tucking past the widest point puts the panel behind that curve instead.
   const tuck = bar.height / 2 + 6;
   ddMenu.style.top = `${bar.bottom - wrap.top - tuck}px`;
   ddMenu.style.paddingTop = `${tuck + 10}px`;
-  const r = `${(bar.height / 2).toFixed(1)}px`;   // match the bar's corner radius
+  // A softly rounded square rather than the bar's full pill curve, which read as
+  // circular at this size.
+  const r = '16px';
+  ddMenu.style.setProperty('--r', r);              // used by the clip-path rounding too
   ddMenu.style.borderBottomLeftRadius = r;
   ddMenu.style.borderBottomRightRadius = r;
 }
