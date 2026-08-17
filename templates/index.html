@@ -385,15 +385,19 @@
     display: none; position: fixed; left: 50%; bottom: 26px; z-index: 20;
     transform: translateX(-50%);
     font-family: Roboto, -apple-system, "Segoe UI", Arial, sans-serif;
-    font-size: 13.5px; font-weight: 500; letter-spacing: .2px;
-    padding: 11px 22px; color: #fff;
+    font-size: 16px; font-weight: 500; letter-spacing: -.1px;
+    padding: 12px 16px 12px 22px; color: #fff;
     background: rgba(18,18,18,.55); border: 1px solid rgba(255,255,255,.14);
     backdrop-filter: blur(16px) saturate(160%); -webkit-backdrop-filter: blur(16px) saturate(160%);
     box-shadow: 0 8px 26px rgba(0,0,0,.28);
     transition: background-color .15s ease, transform .15s ease;
   }
-  #activity.on { display: inline-flex; align-items: center; gap: 9px; }
-  #activity #actcount { color: rgba(255,255,255,.6); font-size: 13px; }
+  /* Landing page only — the results view opens the modal from the download actions. */
+  body.landing #activity.on { display: inline-flex; align-items: center; gap: 9px; }
+  #activity #actcount {
+    background: rgba(255,255,255,.09); color: #c8c8c8; font-size: 12px;
+    font-weight: 400; padding: 3px 10px; border-radius: 999px; letter-spacing: 0;
+  }
   #activity:hover { background: rgba(30,30,30,.78); transform: translateX(-50%) translateY(-1px); }
   #activity.active { animation: activity-glow 1.9s ease-in-out infinite; }
   @keyframes activity-glow {
@@ -824,7 +828,7 @@ async function poll() {
   // Launcher doubles as the progress indicator while the modal is closed.
   $('#activity').classList.add('on');
   $('#activity').classList.toggle('active', active);
-  $('#actcount').textContent = `${done}/${jobs.length}`;
+  $('#actcount').textContent = `${done}/${jobs.length} complete`;
   $('#jobsSummary').textContent = `${done}/${jobs.length} complete${failed ? ` · ${failed} failed` : ''}`;
 
   const RING_C = 97.39;   // 2πr for r=15.5
