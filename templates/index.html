@@ -368,11 +368,18 @@
     border-radius: 9px; display: grid; place-items: center; font-size: 15px; line-height: 1;
   }
   .icon-btn:hover { background: rgba(255,255,255,.15); }
-  /* Launcher sits centred under the search bar with a live count, so the modal stays
-     reachable without crowding the bar itself. */
-  .actrow { text-align: center; }
-  #activity { display: none; margin-top: 14px; }
+  /* Launcher floats near the bottom of the window, centred and translucent, so it stays
+     reachable from anywhere in a long list without taking layout space. */
+  #activity {
+    display: none; position: fixed; left: 50%; bottom: 26px; z-index: 20;
+    transform: translateX(-50%);
+    background: rgba(245,245,245,.55); border: 1px solid rgba(15,15,15,.07);
+    backdrop-filter: blur(12px) saturate(150%); -webkit-backdrop-filter: blur(12px) saturate(150%);
+    box-shadow: 0 6px 22px rgba(15,15,15,.10);
+    transition: background-color .15s ease, transform .15s ease;
+  }
   #activity.on { display: inline-flex; align-items: center; gap: 8px; }
+  #activity:hover { background: rgba(255,255,255,.9); transform: translateX(-50%) translateY(-1px); }
   #activity .dot { margin: 0; }
   @keyframes fade { from { opacity: 0; } }
   @keyframes pop { from { opacity: 0; transform: translateY(8px) scale(.98); } }
@@ -501,9 +508,6 @@
         <button id="scrape">Scrape</button>
       </div>
     </div>
-    <div class="actrow">
-      <button id="activity" class="ghost">Downloads<span id="actcount" class="muted"></span></button>
-    </div>
     <div class="loader" id="loader"></div>
     <div class="errrow"><div id="err" class="err">
       <span id="errtext"></span>
@@ -537,6 +541,8 @@
     <div class="morewrap"><button id="more" class="ghost">Load 25 more</button></div>
   </div>
 </main>
+
+<button id="activity" class="ghost">Downloads<span id="actcount" class="muted"></span></button>
 
 <div class="modal" id="jobsModal" hidden>
   <div class="sheet" role="dialog" aria-modal="true" aria-label="Downloads">
