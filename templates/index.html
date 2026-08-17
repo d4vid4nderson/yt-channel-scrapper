@@ -304,6 +304,17 @@
   }
   .item .t { flex: 1; min-width: 0; }
   .item .t b { display: block; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* Per-row download, so a pick deep in a long list doesn't mean scrolling back to the
+     toolbar. Only appears once the row is selected. */
+  .row-dl {
+    flex: none; width: 32px; height: 32px; padding: 0; border: 0; border-radius: 50%;
+    background: var(--accent); color: #fff; display: none; place-items: center;
+    cursor: pointer; transition: transform .15s ease, box-shadow .2s ease, background-color .15s ease;
+  }
+  .item.sel .row-dl { display: grid; }
+  .row-dl:hover { transform: scale(1.1); background: #ff2233; box-shadow: 0 0 14px rgba(255,0,0,.65); }
+  .row-dl:active { transform: scale(1.02); }
+  .row-dl.queued { background: #444; box-shadow: none; }
   input[type=checkbox] { width: 18px; height: 18px; accent-color: var(--accent); cursor: pointer; }
 
   /* Downloads live in a modal so they never push the list around or crowd the page.
@@ -650,6 +661,11 @@ const itemHTML = v => `
     <span class="t"><b>${esc(v.title)}</b>
       <span class="muted">${v.views != null ? fmtNum(v.views) : ''}</span>
     </span>
+    <button type="button" class="row-dl" title="Download this video" aria-label="Download this video">
+      <svg width="15" height="15" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 2.4v6M7 8.4 9.6 5.8M7 8.4 4.4 5.8"
+        stroke="#fff" stroke-width="1.7" fill="none" stroke-linecap="round" stroke-linejoin="round"/><path
+        d="M3.6 11.3h6.8" stroke="#fff" stroke-width="1.7" stroke-linecap="round"/></svg>
+    </button>
   </label>`;
 
 const matches = v => v.title.toLowerCase().includes($('#filter').value.toLowerCase());
@@ -681,15 +697,15 @@ $('#all').onchange = e => {
 
 /* ---------- downloading ---------- */
 
-$('#dl').onclick = async () => {
-  const chosen = videos.filter(v => selected.has(v.id));
-  if (!chosen.length) { showErr('Tick at least one video first.'); return; }
+/* Both the toolbar button and the per-row buttons come through here. */
+async function startDownload(list, btn) {
+  if (!list.length) { showErr('Tick at least one video first.'); return; }
   showErr('');
-  $('#dl').disabled = true;
+  if (btn) btn.disabled = true;
   try {
     const r = await fetch('/api/download', {
       method: 'POST', headers: {'Content-Type':'application/json'},
-      body: JSON.stringify({videos: chosen, quality: $('#quality').value})
+      body: JSON.stringify({videos: list, quality: $('#quality').value})
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.error || 'Could not start the download');
@@ -698,9 +714,25 @@ $('#dl').onclick = async () => {
   } catch (e) {
     showErr(e.message);
   } finally {
-    $('#dl').disabled = false;
+    if (btn) btn.disabled = false;
   }
-};
+}
+
+$('#dl').onclick = () => startDownload(videos.filter(v => selected.has(v.id)), $('#dl'));
+
+// The row is a <label>, so a click inside it would otherwise toggle the checkbox.
+$('#list').addEventListener('click', e => {
+  const btn = e.target.closest('.row-dl');
+  if (!btn) return;
+  e.preventDefault();
+  e.stopPropagation();
+  const video = videos.find(v => v.id === btn.closest('.item').dataset.id);
+  if (video) {
+    btn.classList.add('queued');
+    setTimeout(() => btn.classList.remove('queued'), 900);
+    startDownload([video], btn);
+  }
+});
 
 /* Close button: back to a blank landing page, as if the app had just been opened.
    Downloads already queued are deliberately left alone — they keep running, and the

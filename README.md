@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="YT_download@300x.png" alt="YT Channel Scraper" width="110">
+<img src="docs/logo.svg" alt="YT Channel Scraper" width="104">
 
 # YT Channel Scraper
 
