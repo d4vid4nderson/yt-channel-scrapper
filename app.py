@@ -1,0 +1,427 @@
+"""YT Channel Scraper — list a channel's videos, pick some, download them."""
+
+import os
+import re
+import threading
+import time
+import uuid
+from queue import Queue
+
+from flask import Flask, jsonify, render_template, request, send_from_directory
+from yt_dlp import YoutubeDL
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+DOWNLOAD_DIR = os.path.join(BASE_DIR, "downloads")
+os.makedirs(DOWNLOAD_DIR, exist_ok=True)
+
+app = Flask(__name__)
+
+# job_id -> {"video_id", "title", "status", "percent", "speed", "eta", "file", "error"}
+JOBS = {}
+JOBS_LOCK = threading.Lock()
+QUEUE = Queue()
+
+# One scrape at a time; a new one supersedes whatever was running.
+SCRAPE = {
+    "id": None, "status": "idle", "videos": [], "error": None, "channel": "", "url": "",
+    "target": 0, "resume": threading.Event(),
+}
+SCRAPE_LOCK = threading.Lock()
+
+# Videos per page. The worker pauses at each boundary and keeps its position, so a
+# 5,000-video channel finishes a page in seconds instead of grinding through the lot.
+PAGE_SIZE = 25
+PAUSE_TIMEOUT = 900  # give up holding the thread if nobody asks for more
+
+FORMATS = {
+    "best": "bestvideo[height<=?2160]+bestaudio/best",
+    "1080": "bestvideo[height<=?1080]+bestaudio/best[height<=?1080]",
+    "720": "bestvideo[height<=?720]+bestaudio/best[height<=?720]",
+    "480": "bestvideo[height<=?480]+bestaudio/best[height<=?480]",
+    "audio": "bestaudio/best",
+}
+
+# What the dropdown offers -> the channel tab(s) that hold it, in order of preference.
+# Music lives under /releases on artist channels but under /playlists on many others.
+TABS = {
+    "videos": ["videos"],
+    "shorts": ["shorts"],
+    "live": ["streams"],
+    "music": ["releases", "playlists"],
+}
+TAB_LABELS = {"videos": "Videos", "shorts": "Shorts", "live": "Live", "music": "Music"}
+
+TAB_RE = re.compile(r"/(videos|shorts|streams|releases|playlists|podcasts|featured)/?$")
+
+
+def normalize_channel_url(url, tab):
+    """Point a bare channel URL at the requested tab; leave playlists alone."""
+    url = url.strip()
+    if not url:
+        raise ValueError("No URL provided")
+    if not url.startswith("http"):
+        url = "https://www.youtube.com/" + url.lstrip("/")
+    if "list=" in url or "/playlist" in url:
+        return url
+    url = TAB_RE.sub("", url).rstrip("/")
+    return f"{url}/{tab}"
+
+
+@app.route("/")
+def index():
+    return render_template("index.html")
+
+
+@app.post("/api/scrape")
+def scrape():
+    """Kick off a scrape in the background; results stream out via /api/scrape/status."""
+    data = request.get_json(force=True)
+    tab_key = data.get("tab", "videos")
+    if tab_key not in TABS:
+        tab_key = "videos"
+    try:
+        targets = []
+        for tab in TABS[tab_key]:
+            url = normalize_channel_url(data.get("url", ""), tab)
+            if url not in targets:
+                targets.append(url)
+    except ValueError as exc:
+        return jsonify({"error": str(exc)}), 400
+    target = targets[0]
+
+    limit = int(data.get("limit") or 0)
+    scrape_id = uuid.uuid4().hex[:12]
+    with SCRAPE_LOCK:
+        SCRAPE.update(
+            id=scrape_id, status="running", videos=[], error=None, channel="", url=target,
+            target=(min(limit, PAGE_SIZE) if limit else PAGE_SIZE), resume=threading.Event(),
+        )
+    threading.Thread(
+        target=_scrape_worker, args=(scrape_id, targets, tab_key, limit), daemon=True
+    ).start()
+    return jsonify({"scrape_id": scrape_id, "url": target})
+
+
+@app.get("/api/scrape/status")
+def scrape_status():
+    """Return videos found since index `since`, plus whether the scrape is still going."""
+    since = max(0, int(request.args.get("since", 0)))
+    with SCRAPE_LOCK:
+        return jsonify(
+            {
+                "id": SCRAPE["id"],
+                "status": SCRAPE["status"],
+                "error": SCRAPE["error"],
+                "channel": SCRAPE["channel"],
+                "total": len(SCRAPE["videos"]),
+                "videos": SCRAPE["videos"][since:],
+            }
+        )
+
+
+@app.post("/api/scrape/stop")
+def scrape_stop():
+    with SCRAPE_LOCK:
+        if SCRAPE["status"] in ("running", "paused"):
+            SCRAPE["status"] = "stopping"
+        resume = SCRAPE["resume"]
+    resume.set()  # wake a paused worker so it can exit
+    return jsonify({"ok": True})
+
+
+@app.post("/api/scrape/more")
+def scrape_more():
+    """Let a paused scrape run on for another page, continuing where it left off."""
+    with SCRAPE_LOCK:
+        if SCRAPE["status"] != "paused":
+            return jsonify({"error": "Nothing paused to continue"}), 400
+        SCRAPE["target"] = len(SCRAPE["videos"]) + PAGE_SIZE
+        SCRAPE["status"] = "running"
+        resume = SCRAPE["resume"]
+    resume.set()
+    return jsonify({"ok": True})
+
+
+def _as_video(entry):
+    if not entry or not entry.get("id"):
+        return None
+    vid = entry["id"]
+    return {
+        "id": vid,
+        "title": entry.get("title") or vid,
+        "duration": entry.get("duration"),
+        "views": entry.get("view_count"),
+        "url": entry.get("url") or f"https://www.youtube.com/watch?v={vid}",
+        "thumbnail": f"https://i.ytimg.com/vi/{vid}/mqdefault.jpg",
+    }
+
+
+def _iter_videos(ydl, entries, depth=0):
+    """Flatten a channel tab into video entries.
+
+    Most tabs list videos directly (ie_key "Youtube"), but the Music tab lists albums
+    (ie_key "YoutubeTab") whose tracks only appear once the album itself is opened, so
+    nested playlists get expanded — depth-capped, since these cost a request each.
+    """
+    for entry in entries or []:
+        if not entry:
+            continue
+        if entry.get("ie_key") == "YoutubeTab" or entry.get("_type") == "playlist":
+            if depth >= 2:
+                continue
+            nested = entry.get("entries")
+            if nested is None:
+                try:
+                    sub = ydl.extract_info(
+                        entry.get("url") or entry.get("id"), download=False, process=False
+                    )
+                except Exception:
+                    continue
+                nested = (sub or {}).get("entries")
+            yield from _iter_videos(ydl, nested, depth + 1)
+        else:
+            yield entry
+
+
+def _scrape_worker(scrape_id, targets, tab_key, limit):
+    opts = {
+        "extract_flat": "in_playlist",
+        "skip_download": True,
+        "quiet": True,
+        "no_warnings": True,
+        "ignoreerrors": True,
+    }
+
+    def still_mine():
+        """False once this scrape is superseded or the user hit Stop."""
+        with SCRAPE_LOCK:
+            return SCRAPE["id"] == scrape_id and SCRAPE["status"] == "running"
+
+    try:
+        with YoutubeDL(opts) as ydl:
+            # process=False keeps `entries` a lazy generator: pages arrive as they load
+            # instead of after the whole channel has been walked.
+            # Try each candidate tab in turn; yt-dlp returns None for a tab the
+            # channel doesn't have (ignoreerrors swallows the 404).
+            info = None
+            for candidate in targets:
+                try:
+                    info = ydl.extract_info(candidate, download=False, process=False)
+                except Exception:
+                    info = None
+                if info:
+                    break
+            if not info:
+                label = TAB_LABELS.get(tab_key, tab_key)
+                raise ValueError(
+                    f"No {label} found for that channel — it may not have a {label} tab. "
+                    f"Check the URL, or try a different type."
+                )
+            with SCRAPE_LOCK:
+                if SCRAPE["id"] == scrape_id:
+                    SCRAPE["channel"] = info.get("channel") or info.get("title") or ""
+
+            count = 0
+            for item in _iter_videos(ydl, info.get("entries")):
+                if not still_mine():
+                    break
+                video = _as_video(item)
+                if not video:
+                    continue
+                with SCRAPE_LOCK:
+                    if SCRAPE["id"] != scrape_id:
+                        return
+                    SCRAPE["videos"].append(video)
+                count += 1
+                if limit and count >= limit:
+                    break
+
+                # Page boundary: park here, holding the generator's position, until
+                # someone asks for more.
+                with SCRAPE_LOCK:
+                    at_boundary = SCRAPE["id"] == scrape_id and count >= SCRAPE["target"]
+                    if at_boundary:
+                        SCRAPE["status"] = "paused"
+                        resume = SCRAPE["resume"]
+                        resume.clear()
+                if at_boundary:
+                    if not resume.wait(timeout=PAUSE_TIMEOUT):
+                        return
+                    if not still_mine():
+                        return
+
+    except ValueError as exc:  # our own, already user-facing
+        with SCRAPE_LOCK:
+            if SCRAPE["id"] == scrape_id:
+                SCRAPE.update(status="error", error=str(exc))
+        return
+    except Exception as exc:  # yt-dlp raises a wide range of errors
+        with SCRAPE_LOCK:
+            if SCRAPE["id"] == scrape_id:
+                SCRAPE.update(status="error", error=f"Could not read that channel: {exc}")
+        return
+
+    with SCRAPE_LOCK:
+        if SCRAPE["id"] == scrape_id:
+            SCRAPE["status"] = "stopped" if SCRAPE["status"] == "stopping" else "done"
+
+
+@app.post("/api/download")
+def download():
+    data = request.get_json(force=True)
+    videos = data.get("videos") or []
+    fmt = FORMATS.get(data.get("quality", "1080"), FORMATS["1080"])
+    audio_only = data.get("quality") == "audio"
+    if not videos:
+        return jsonify({"error": "No videos selected"}), 400
+
+    created = []
+    with JOBS_LOCK:
+        for v in videos:
+            job_id = uuid.uuid4().hex[:12]
+            JOBS[job_id] = {
+                "id": job_id,
+                "video_id": v.get("id"),
+                "title": v.get("title") or v.get("id"),
+                "status": "queued",
+                "percent": 0,
+                "speed": None,
+                "eta": None,
+                "file": None,
+                "error": None,
+            }
+            created.append(job_id)
+            QUEUE.put((job_id, v.get("id"), fmt, audio_only))
+
+    return jsonify({"jobs": created})
+
+
+@app.get("/api/status")
+def status():
+    with JOBS_LOCK:
+        return jsonify({"jobs": list(JOBS.values())})
+
+
+@app.post("/api/clear")
+def clear():
+    """Drop finished/failed jobs from the list (running ones stay)."""
+    with JOBS_LOCK:
+        for job_id in [k for k, j in JOBS.items() if j["status"] in ("done", "error")]:
+            del JOBS[job_id]
+    return jsonify({"ok": True})
+
+
+@app.get("/downloads/<path:name>")
+def serve_download(name):
+    return send_from_directory(DOWNLOAD_DIR, name, as_attachment=True)
+
+
+def _update(job_id, **fields):
+    with JOBS_LOCK:
+        if job_id in JOBS:
+            JOBS[job_id].update(fields)
+
+
+def _worker():
+    while True:
+        job_id, video_id, fmt, audio_only = QUEUE.get()
+
+        # A merged download runs two passes (video stream, then audio), each reporting
+        # 0-100% of its own file. Summing bytes against the combined expected size keeps
+        # the ring filling once. `expected` is filled in from a probe extraction below.
+        expected = {"total": 0}
+        got = {}
+
+        def hook(d, job_id=job_id):
+            name = d.get("filename") or ""
+            if d["status"] == "downloading":
+                got[name] = d.get("downloaded_bytes", 0)
+                total = expected["total"] or d.get("total_bytes") or d.get("total_bytes_estimate")
+                pct = (sum(got.values()) / total * 100) if total else 0
+                _update(
+                    job_id,
+                    status="downloading",
+                    percent=round(min(pct, 100), 1),
+                    speed=d.get("speed"),
+                    eta=d.get("eta"),
+                )
+            elif d["status"] == "finished":
+                got[name] = d.get("total_bytes") or got.get(name, 0)
+                total = expected["total"]
+                # Only the last stream landing means the file is really done; earlier
+                # ones just hand over to the next pass.
+                if not total or sum(got.values()) >= total * 0.995:
+                    _update(job_id, status="processing", percent=100)
+
+        opts = {
+            "format": fmt,
+            "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title).150B [%(id)s].%(ext)s"),
+            "progress_hooks": [hook],
+            "quiet": True,
+            "no_warnings": True,
+            "noprogress": True,
+            "restrictfilenames": True,
+            "retries": 5,
+            "fragment_retries": 5,
+            "extractor_retries": 3,
+        }
+        if audio_only:
+            opts["postprocessors"] = [
+                {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
+            ]
+        else:
+            opts["merge_output_format"] = "mp4"
+
+        # YouTube hands out intermittent 403s on media URLs; a fresh extraction
+        # usually just works, so retry the whole thing a couple of times.
+        url = f"https://www.youtube.com/watch?v={video_id}"
+        _update(job_id, status="downloading")
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                # Probe first purely to learn the combined size of the streams that will
+                # be fetched; without it the first stream alone would read as 100%.
+                try:
+                    with YoutubeDL({**opts, "progress_hooks": [], "skip_download": True}) as probe:
+                        pinfo = probe.extract_info(url, download=False)
+                    streams = (pinfo or {}).get("requested_formats") or [pinfo or {}]
+                    expected["total"] = sum(
+                        f.get("filesize") or f.get("filesize_approx") or 0 for f in streams
+                    )
+                except Exception:
+                    expected["total"] = 0  # fall back to per-stream totals
+                got.clear()
+
+                with YoutubeDL(opts) as ydl:
+                    info = ydl.extract_info(url)
+                    path = info.get("requested_downloads", [{}])[0].get("filepath")
+                    if audio_only and path:
+                        path = os.path.splitext(path)[0] + ".mp3"
+                _update(
+                    job_id,
+                    status="done",
+                    percent=100,
+                    error=None,
+                    file=os.path.basename(path) if path else None,
+                )
+                last_error = None
+                break
+            except Exception as exc:
+                last_error = str(exc)[:300]
+                if attempt < 3:
+                    _update(job_id, status="retrying", percent=0, error=last_error)
+                    time.sleep(2 * attempt)
+
+        if last_error:
+            _update(job_id, status="error", error=last_error)
+        QUEUE.task_done()
+
+
+for _ in range(int(os.environ.get("WORKERS", "3"))):
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+if __name__ == "__main__":
+    print(f"\n  YT Channel Scraper -> http://127.0.0.1:5005")
+    print(f"  Saving to {DOWNLOAD_DIR}\n")
+    app.run(host="127.0.0.1", port=5005, debug=False, threaded=True)
