@@ -458,7 +458,8 @@
   .job .top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; }
   .job {
     display: flex; gap: 16px; align-items: center; padding: 14px 16px; margin-bottom: 12px;
-    touch-action: pan-y;
+    /* The whole row is the swipe target, so a swipe would otherwise select its title. */
+    touch-action: pan-y; user-select: none; -webkit-user-select: none;
     background: rgba(255,255,255,.045); border: 1px solid rgba(255,255,255,.08);
     border-radius: 14px;
   }
