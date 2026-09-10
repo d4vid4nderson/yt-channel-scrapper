@@ -10,4 +10,8 @@ vendor/
 # PyInstaller output
 build/
 dist/
+# Native Swift app output
+dist-mac/
+.build/
+# Generated from icon-dark.svg at build time by tools/svg2png.swift
 *.icns

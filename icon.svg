@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Master icon for the .app and the DMG volume. Same mark as docs/logo.svg and the
+       favicon in templates/index.html, on the dark plate the app's hero uses, with the
+       red bloom the brand logo picks up on hover. build-app.sh rasterises this to
+       icon.icns, so the icon is reproducible from source rather than from a stray PNG. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f1f1f"/><stop offset="1" stop-color="#090909"/>
+    </linearGradient>
+    <!-- The bloom is clipped to the plate; unclipped it haloes into the transparent
+         corners and the icon reads as a smudge at 32px. -->
+    <clipPath id="plateclip">
+      <rect x="100" y="100" width="824" height="824" rx="185"/>
+    </clipPath>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="22" result="b"/>
+      <feFlood flood-color="#ff1a1a" flood-opacity="0.85"/>
+      <feComposite in2="b" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#plateclip)">
+    <rect x="100" y="100" width="824" height="824" fill="url(#plate)"/>
+    <!-- Mark is 176x124; 3.409 scales it to 600 wide, centred on the 1024 canvas. -->
+    <g filter="url(#glow)" transform="translate(212 301) scale(3.409)">
+      <path fill="#ff0000" d="M172.32,19.36c-2-7.6-8-13.6-15.6-15.6C143.12,0,88,0,88,0
+        S32.88,0,19.28,3.76c-7.6,2-13.6,8-15.6,15.6C0,32.96,0,62,0,62s0,29.04,3.68,42.64
+        c2,7.6,8,13.6,15.6,15.6C32.88,124,88,124,88,124s55.12,0,68.72-3.76c7.6-2,13.6-8,15.6-15.6
+        C176,91.04,176,62,176,62S176,32.96,172.32,19.36Z"/>
+      <circle cx="88" cy="62" r="31" fill="none" stroke="#fff" stroke-width="9"/>
+      <path d="M88 45v23M88 68l11-11M88 68l-11-11M75 80h26" fill="none" stroke="#fff"
+            stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+    </g>
+  </g>
+</svg>

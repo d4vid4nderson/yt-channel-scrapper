@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- Light-appearance icon: red plate, white mark. The plate takes the badge's job, so
+       the mark is the ringed arrow alone — drawing the red badge on a red plate would
+       lose its shape. The gradient is a shallow vertical one for depth, not a bloom. -->
+  <defs>
+    <linearGradient id="red" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ff2a24"/><stop offset="1" stop-color="#d70000"/>
+    </linearGradient>
+  </defs>
+
+  <g>
+    <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#red)"/>
+    <g fill="none" stroke="#ffffff" stroke-width="58" stroke-linecap="round"
+       stroke-linejoin="round">
+      <circle cx="512" cy="512" r="200"/>
+      <path d="M512 400v152M512 552l72-72M512 552l-72-72M428 630h168"/>
+    </g>
+  </g>
+</svg>
