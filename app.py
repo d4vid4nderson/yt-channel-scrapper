@@ -100,6 +100,36 @@ def _vendored_ffmpeg():
 
 FFMPEG_DIR = _vendored_ffmpeg()
 
+
+def _vendored_jsruntime():
+    """Put the bundled Deno on PATH and report whether it is there.
+
+    YouTube serves media URLs behind a JavaScript "n challenge"; yt-dlp solves it by
+    shelling out to a JS runtime, and without one every format above 360p 403s. yt-dlp
+    resolves the runtime by bare name through PATH, and an app launched from Finder
+    inherits a minimal PATH that has no Homebrew in it — so pointing PATH at vendor/ is
+    what makes the bundled copy findable at all.
+    """
+    vendor = os.path.join(BUNDLE_DIR, "vendor")
+    deno = os.path.join(vendor, "deno")
+    if not os.path.isfile(deno):
+        return False
+    if not os.access(deno, os.X_OK):
+        os.chmod(deno, 0o755)  # PyInstaller drops the exec bit on data files
+    os.environ["PATH"] = vendor + os.pathsep + os.environ.get("PATH", "")
+    return True
+
+
+HAS_JSRUNTIME = _vendored_jsruntime()
+
+# The solver script itself is fetched from GitHub on first use and cached by yt-dlp; it
+# is versioned against the player, so it cannot be frozen in at build time.
+REMOTE_COMPONENTS = ["ejs:github"] if HAS_JSRUNTIME else []
+
+# Anything above 360p also needs a signed-in session. Chrome is tried first, then the
+# other browsers people actually use; whichever yields cookies wins.
+COOKIE_BROWSERS = ("chrome", "brave", "edge", "firefox", "safari")
+
 app = Flask(__name__, template_folder=os.path.join(BUNDLE_DIR, "templates"))
 # Debug is off, which would otherwise let Jinja serve a template it compiled at boot —
 # so an edit to index.html only showed up after a restart.
@@ -588,7 +618,7 @@ def _worker():
                 if not total or sum(got.values()) >= total * 0.995:
                     _update(job_id, status="processing", percent=100)
 
-        opts = {
+        base_opts = {
             "format": fmt,
             "outtmpl": os.path.join(DOWNLOAD_DIR, "%(title).150B [%(id)s].%(ext)s"),
             "progress_hooks": [hook],
@@ -601,20 +631,40 @@ def _worker():
             "extractor_retries": 3,
         }
         if FFMPEG_DIR:
-            opts["ffmpeg_location"] = FFMPEG_DIR
+            base_opts["ffmpeg_location"] = FFMPEG_DIR
         if audio_only:
-            opts["postprocessors"] = [
+            base_opts["postprocessors"] = [
                 {"key": "FFmpegExtractAudio", "preferredcodec": "mp3", "preferredquality": "192"}
             ]
         else:
-            opts["merge_output_format"] = "mp4"
+            base_opts["merge_output_format"] = "mp4"
 
-        # YouTube hands out intermittent 403s on media URLs; a fresh extraction
-        # usually just works, so retry the whole thing a couple of times.
+        # A plain extraction now 403s on every format above 360p: YouTube gates those
+        # behind both a solved JS challenge and a signed-in session. Retrying identical
+        # options cannot clear either, so the attempts step down in capability instead:
+        #
+        #   1. cookies + JS challenge solver  -> full requested quality
+        #   2. no cookies, solver only        -> works when the video is not gated
+        #   3. android client                 -> no auth and no challenge, but 360p only
+        #
+        # The last rung always downloads something, which beats erroring out entirely.
+        attempts = []
+        if HAS_JSRUNTIME:
+            for browser in COOKIE_BROWSERS:
+                attempts.append(
+                    ("cookies", {"remote_components": REMOTE_COMPONENTS,
+                                 "cookiesfrombrowser": (browser, None, None, None)})
+                )
+            attempts.append(("solver", {"remote_components": REMOTE_COMPONENTS}))
+        attempts.append(
+            ("android", {"extractor_args": {"youtube": {"player_client": ["android"]}}})
+        )
+
         url = f"https://www.youtube.com/watch?v={video_id}"
         _update(job_id, status="downloading")
         last_error = None
-        for attempt in range(1, 4):
+        for attempt, (rung, extra) in enumerate(attempts, 1):
+            opts = {**base_opts, **extra}
             try:
                 # Probe first purely to learn the combined size of the streams that will
                 # be fetched; without it the first stream alone would read as 100%.
@@ -650,9 +700,12 @@ def _worker():
                         last_error = None
                         break
                 last_error = str(exc)[:300]
-                if attempt < 3:
+                if attempt < len(attempts):
                     _update(job_id, status="retrying", percent=0, error=last_error)
-                    time.sleep(2 * attempt)
+                    # A browser with no YouTube cookies fails instantly and costs nothing;
+                    # only back off once a rung has actually talked to YouTube.
+                    if rung != "cookies":
+                        time.sleep(2)
 
         if last_error:
             _update(job_id, status="error", error=last_error)

@@ -15,7 +15,7 @@ a = Analysis(
     binaries=[],
     datas=[
         ("templates", "templates"),
-        ("vendor", "vendor"),  # static ffmpeg + ffprobe
+        ("vendor", "vendor"),  # static ffmpeg + ffprobe + deno (JS challenge solver)
     ],
     # yt-dlp resolves extractors lazily, so nothing static points at most of them.
     hiddenimports=collect_submodules("yt_dlp"),
