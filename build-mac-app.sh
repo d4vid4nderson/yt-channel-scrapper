@@ -4,8 +4,14 @@
 # There is no Xcode project: the sources build with SwiftPM and the bundle is put
 # together here, because what makes this an app rather than a binary is mostly the
 # three vendored executables in Resources plus an Info.plist.
+#
+#   ./build-mac-app.sh          just the .app
+#   ./build-mac-app.sh --dmg    also wrap it in a DMG for distribution
 set -euo pipefail
 cd "$(dirname "$0")"
+
+WANT_DMG=
+[ "${1:-}" = "--dmg" ] && WANT_DMG=1
 
 APP_NAME="YT Channel Scraper"
 BUNDLE_ID="com.moregroup.ytchannelscraper"
@@ -146,3 +152,47 @@ codesign --verify --verbose=1 "$APP" 2>&1 | sed 's/^/    /'
 
 SIZE=$(du -sh "$APP" | cut -f1)
 echo "==> done: $APP ($SIZE)"
+
+[ -n "$WANT_DMG" ] || exit 0
+
+# --- dmg ---
+# A plain `hdiutil create` leaves the generic white disk-image icon on both the volume
+# and the .dmg file. Matching the app icon takes two separate pieces of Finder plumbing:
+#   volume    — .VolumeIcon.icns at the volume root + the custom-icon bit on the root
+#   .dmg file — the icns copied into the file's resource fork + the custom-icon bit
+# Neither can be set on a compressed image, so the image is built read-write, dressed
+# while mounted, then converted to UDZO.
+DMG="$OUT/$APP_NAME.dmg"
+RW="$OUT/$APP_NAME.rw.dmg"
+echo "==> building the DMG"
+rm -rf "$OUT/dmg" "$DMG" "$RW" && mkdir -p "$OUT/dmg"
+cp -R "$APP" "$OUT/dmg/"
+ln -s /Applications "$OUT/dmg/Applications"
+cp icon.icns "$OUT/dmg/.VolumeIcon.icns"
+hdiutil create -volname "$APP_NAME" -srcfolder "$OUT/dmg" -ov -format UDRW -quiet "$RW"
+rm -rf "$OUT/dmg"
+
+MNT=$(mktemp -d /tmp/ytcs-dmg.XXXXXX)
+hdiutil attach "$RW" -mountpoint "$MNT" -nobrowse -quiet
+SetFile -a C "$MNT"                       # tells Finder to use .VolumeIcon.icns
+hdiutil detach "$MNT" -quiet
+rmdir "$MNT" 2>/dev/null || true
+hdiutil convert "$RW" -format UDZO -o "$DMG" -quiet
+rm -f "$RW"
+
+# The .dmg file's own Finder icon lives in its resource fork, not the image contents.
+RSRC=$(mktemp -d /tmp/ytcs-rsrc.XXXXXX)
+cp icon.icns "$RSRC/icon.icns"
+sips -i "$RSRC/icon.icns" >/dev/null                      # give the icns an icon resource
+DeRez -only icns "$RSRC/icon.icns" > "$RSRC/icon.rsrc"    # so it can be extracted
+Rez -append "$RSRC/icon.rsrc" -o "$DMG"                   # and appended to the dmg
+SetFile -a C "$DMG"
+rm -rf "$RSRC"
+
+DMG_SIZE=$(du -sh "$DMG" | cut -f1)
+echo "==> done: $DMG ($DMG_SIZE)"
+echo
+echo "    Ad-hoc signed, not notarised. A copy downloaded through a browser carries"
+echo "    the quarantine flag, and Gatekeeper refuses ad-hoc-signed apps from"
+echo "    quarantine. Recipients need Privacy & Security -> Open Anyway, or:"
+echo "        xattr -dr com.apple.quarantine \"/Applications/$APP_NAME.app\""
