@@ -73,9 +73,28 @@ so would only run on a Mac that already had it installed.
 
 Downloads land in `~/Downloads/YT Channel Scraper`, named `Title [videoid].mp4`.
 
-The bundle is ad-hoc signed, which is enough for the Mac that built it. Handing it to
-someone else means either a Developer ID plus notarisation, or they right-click →
-**Open** the first time.
+### Packaging it for distribution
+
+```bash
+./build-mac-app.sh --dmg
+```
+
+Produces `dist-mac/YT Channel Scraper.dmg` (~113 MB), with the app icon on both the
+volume and the `.dmg` file itself.
+
+The bundle is **ad-hoc signed, not notarised**, which is enough for the Mac that built it
+but not for one that downloaded it: a browser marks the download with a quarantine flag,
+and Gatekeeper refuses an ad-hoc-signed app from quarantine — reporting it as *damaged*
+rather than unsigned, which is misleading. Recipients need
+**System Settings → Privacy & Security → Open Anyway**, or:
+
+```bash
+xattr -dr com.apple.quarantine "/Applications/YT Channel Scraper.app"
+```
+
+Opening cleanly for other people means joining the Apple Developer Program, signing with
+a Developer ID Application certificate and the hardened runtime, then submitting to
+`notarytool` and stapling the ticket.
 
 ## Use it
 
