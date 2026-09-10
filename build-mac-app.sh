@@ -13,13 +13,56 @@ VERSION="2.0.0"
 OUT="dist-mac"
 APP="$OUT/$APP_NAME.app"
 
+# --- vendored binaries ---
+# All four are gitignored (~200MB), so a clean checkout stages them here rather than
+# failing with an instruction to go and read something. Everything is cached, so a
+# rebuild is offline.
 VENDORED=(yt-dlp_macos ffmpeg ffprobe deno)
+FFMPEG_RELEASE=b6.1.1   # eugeneware/ffmpeg-static — fully static, includes libmp3lame
+case "$(uname -m)" in
+  arm64)  FF_ARCH=darwin-arm64; DENO_ARCH=aarch64-apple-darwin ;;
+  x86_64) FF_ARCH=darwin-x64;   DENO_ARCH=x86_64-apple-darwin ;;
+  *) echo "unsupported architecture: $(uname -m)" >&2; exit 1 ;;
+esac
+
+mkdir -p vendor
+if [ ! -x vendor/yt-dlp_macos ]; then
+  echo "==> staging yt-dlp"
+  curl -fsSL -o vendor/yt-dlp_macos \
+    https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_macos
+  chmod +x vendor/yt-dlp_macos
+fi
+# Homebrew's ffmpeg links ~18 Homebrew dylibs, so copying that binary would produce a
+# bundle that only runs on a Mac which already has Homebrew's ffmpeg installed.
+for bin in ffmpeg ffprobe; do
+  if [ ! -x "vendor/$bin" ]; then
+    echo "==> staging $bin ($FF_ARCH)"
+    curl -fsSL -o "vendor/$bin" \
+      "https://github.com/eugeneware/ffmpeg-static/releases/download/$FFMPEG_RELEASE/$bin-$FF_ARCH"
+    chmod +x "vendor/$bin"
+  fi
+done
+# YouTube gates every format above 360p behind a JavaScript "n challenge"; yt-dlp solves
+# it by shelling out to a JS runtime, found by bare name on PATH.
+if [ ! -x vendor/deno ]; then
+  echo "==> staging deno ($DENO_ARCH)"
+  curl -fsSL -o vendor/deno.zip \
+    "https://github.com/denoland/deno/releases/latest/download/deno-$DENO_ARCH.zip"
+  ditto -x -k vendor/deno.zip vendor/
+  rm -f vendor/deno.zip
+  chmod +x vendor/deno
+fi
+# curl leaves no quarantine flag, but a browser-downloaded copy would.
+xattr -dr com.apple.quarantine vendor/ 2>/dev/null || true
+
 for bin in "${VENDORED[@]}"; do
-  if [ ! -f "vendor/$bin" ]; then
-    echo "missing vendor/$bin — see README" >&2
+  if [ ! -x "vendor/$bin" ]; then
+    echo "vendor/$bin could not be staged" >&2
     exit 1
   fi
 done
+vendor/ffmpeg -hide_banner -encoders 2>/dev/null | grep -q libmp3lame \
+  || { echo "vendor/ffmpeg cannot encode mp3 — audio-only downloads would fail" >&2; exit 1; }
 
 echo "==> building (release)"
 ( cd mac && swift build -c release )
