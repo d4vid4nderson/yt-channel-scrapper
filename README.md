@@ -222,6 +222,8 @@ the window.
 
 ### The video and the audio, from one download
 
+<img src="docs/06-quality-menu.jpg" alt="The quality menu with Also save an mp3 ticked" width="820">
+
 **Also save an mp3** sits under the qualities in the same menu, because it is not one of
 them: every quality there is a choice of *one* file, and this asks for a second one
 alongside whichever was picked. Tick it and the picker reads `1080p + mp3`.
