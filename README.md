@@ -85,8 +85,8 @@ a picture of the window with that panel out:
 | Panel | Where | What |
 |---|---|---|
 | Saved channels | left (⌘1) | everything you have bookmarked, filterable, one click to its videos |
-| Downloads | bottom (⌘J) | the queue, with per-video progress and the yt-dlp updater |
-| Saved videos | right (⌘2) | videos kept across channels — preview or fetch one, or open them all as a list |
+| Downloads | bottom (⌘2) | the queue, with per-video progress and the yt-dlp updater |
+| Saved videos | right (⌘3) | videos kept across channels — preview or fetch one, or open them all as a list |
 
 They take room from the page rather than covering it, so the list you opened them from is
 still there and still usable. Nothing is dimmed, because nothing is blocked.
