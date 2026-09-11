@@ -111,12 +111,15 @@ struct PreviewModal: View {
                 .pointingHand()
 
                 Button(action: popOut) {
-                    Label("Notch Player", systemImage: "arrow.up.right.and.arrow.down.left")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color(white: 0.75))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(.white.opacity(0.1), in: Capsule())
+                    HStack(spacing: 6) {
+                        NotchIcon(width: 15)
+                        Text("Notch Player")
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(white: 0.75))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.white.opacity(0.1), in: Capsule())
                 }
                 .buttonStyle(.plain)
                 .help("Keep it playing in the notch and put the window away")
