@@ -21,9 +21,23 @@ struct MiniPlayerView: View {
             // any outline — even a faint one — draws a visible seam around it.
             .fill(.black)
 
-            content
-                .padding(.horizontal, expanded ? 14 : 10)
-                .padding(.vertical, expanded ? 12 : 6)
+            VStack(spacing: 0) {
+                content
+                    .padding(.horizontal, expanded ? 14 : 10)
+                    .padding(.vertical, expanded ? 12 : 6)
+
+                if mini.isShowingOutputs, let player = mini.player {
+                    OutputList(
+                        outputs: mini.outputs,
+                        player: player,
+                        dismiss: { mini.showOutputs(false) },
+                        holdOpen: { mini.holdOpen() },
+                        releaseHold: { mini.releaseHold() }
+                    )
+                    .padding(.horizontal, 10)
+                    .padding(.bottom, 10)
+                }
+            }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
@@ -152,11 +166,14 @@ struct MiniPlayerView: View {
 
     private var chrome: some View {
         HStack(spacing: 8) {
-            if let player = mini.player {
-                RoutePickerView(player: player)
-                    .frame(width: 22, height: 22)
-                    .help("AirPlay this video to another device")
-                    .pointingHand()
+            // One way to the question "where is this playing?", answered by one list:
+            // the outputs this Mac has, and AirPlay for the ones it has not met yet.
+            IslandButton(
+                icon: mini.isShowingOutputs ? "speaker.wave.2.fill" : "speaker.wave.2",
+                size: 11,
+                help: "Where this video plays — speakers, headphones, or AirPlay"
+            ) {
+                mini.showOutputs(!mini.isShowingOutputs)
             }
             IslandButton(
                 icon: "arrow.down.right.and.arrow.up.left",

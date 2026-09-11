@@ -10,25 +10,116 @@ final class AppModel {
     var filterText = ""
     var picked: Set<String> = []
     var showDownloads = false
+    /// The two favourites drawers. Held here rather than in the view so the menu bar can
+    /// reach them, and so each can close the others — three panels over one page at once
+    /// would be two too many.
+    var showChannelsDrawer = false
+    var showVideosDrawer = false
+    /// Whether the results area is listing a channel's videos or a search's channels.
+    /// Held rather than derived, so it flips on submit instead of when results land —
+    /// otherwise the old list is still on screen while the new one is being fetched.
+    private(set) var mode: Mode = .videos
     /// What the island is playing, so it can be put back where it came from.
     var islandVideo: Video?
 
     let scraper = Scraper()
+    let search = ChannelSearch()
+    let library = Library()
     let downloader = Downloader()
     let updater = Updater()
     let preview = PreviewSession()
     let miniPlayer = MiniPlayer()
 
-    var visible: [Video] {
-        let needle = filterText.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !needle.isEmpty else { return scraper.videos }
-        return scraper.videos.filter { $0.title.lowercased().contains(needle) }
+    /// The video list the results area is showing — a channel's, or the saved ones.
+    /// Everything downstream of this (filtering, select-all, download) works the same
+    /// either way, which is what makes the saved list a place you can act from rather
+    /// than just look at.
+    var listedVideos: [Video] { mode == .saved ? library.videos : scraper.videos }
+
+    /// The rows on screen, in order: kept first, then the rest.
+    ///
+    /// A channel you come back to is usually a channel you already found something in,
+    /// and hunting back down a 5,000-video list for it defeats the point of having kept
+    /// it. Each group holds the channel's own order underneath, so nothing is scrambled
+    /// — the kept ones are lifted out, not re-sorted.
+    var visible: [Video] { keptVisible + restVisible }
+
+    /// The kept videos belonging to the channel on screen.
+    ///
+    /// Taken from the library rather than from what has been scraped, deliberately: a
+    /// video you kept may sit four hundred entries down the channel, and lifting it to
+    /// the top means nothing if you have to page down to it first. So it is shown above
+    /// the listing whether or not the listing has reached it yet.
+    ///
+    /// Empty in the saved list, where every row is kept and lifting them would say
+    /// nothing.
+    var keptVisible: [Video] {
+        guard mode == .videos else { return [] }
+        return library.videos.filter { isFromCurrentChannel($0) && matchesFilter($0) }
     }
 
-    var hasResults: Bool { !scraper.videos.isEmpty }
+    var restVisible: [Video] {
+        let kept = Set(keptVisible.map(\.id))
+        return listedVideos.filter { !kept.contains($0.id) && matchesFilter($0) }
+    }
+
+    /// Prefer the id: channel names collide, and get changed. The name is the fallback
+    /// for videos kept before the id was recorded.
+    private func isFromCurrentChannel(_ video: Video) -> Bool {
+        if let current = scraper.channelRef?.id, let owner = video.channelId {
+            return owner == current
+        }
+        return !scraper.channel.isEmpty && video.channelName == scraper.channel
+    }
+
+    private func matchesFilter(_ video: Video) -> Bool {
+        let needle = filterText.trimmingCharacters(in: .whitespaces).lowercased()
+        return needle.isEmpty || video.title.lowercased().contains(needle)
+    }
+
+    enum Mode { case videos, channels, saved }
+
+    /// What pressing return does. A URL or an @handle names one channel, so it gets
+    /// scraped; anything else is words, and words are a search. Same field either way —
+    /// the point is not having to know which kind of thing you have before you type it.
+    enum Intent { case scrape, search }
+
+    var intent: Intent {
+        let text = urlText.trimmingCharacters(in: .whitespaces)
+        if text.hasPrefix("@") || text.hasPrefix("http")
+            || text.contains("youtube.com") || text.contains("youtu.be") {
+            return .scrape
+        }
+        return .search
+    }
+
+    /// The header collapses once there is a list to show, whichever kind it is.
+    var hasResults: Bool {
+        switch mode {
+        case .videos:   !scraper.videos.isEmpty
+        case .channels: search.hasResults
+        case .saved:    !library.videos.isEmpty
+        }
+    }
+
+    var isBusy: Bool {
+        switch mode {
+        case .videos:   scraper.isBusy
+        case .channels: search.isBusy
+        case .saved:    false
+        }
+    }
+
+    var statusError: String? {
+        switch mode {
+        case .videos:   scraper.error
+        case .channels: search.error
+        case .saved:    nil
+        }
+    }
 
     var canScrape: Bool {
-        !urlText.trimmingCharacters(in: .whitespaces).isEmpty && !scraper.isBusy
+        !urlText.trimmingCharacters(in: .whitespaces).isEmpty && !isBusy
     }
 
     /// Select-all applies to what the filter is currently showing, so narrowing the list
@@ -38,16 +129,60 @@ final class AppModel {
         return !visible.isEmpty && visible.allSatisfy { picked.contains($0.id) }
     }
 
+    /// The one entry point the search pill's button and its return key both use.
+    func submit() {
+        guard canScrape else { return }
+        switch intent {
+        case .scrape: scrape()
+        case .search: searchChannels()
+        }
+    }
+
+    func stop() {
+        mode == .channels ? search.stop() : scraper.stop()
+    }
+
     func scrape() {
         guard canScrape else { return }
+        mode = .videos
+        search.reset()
         picked = []
         filterText = ""
         scraper.start(rawURL: urlText, tab: tab)
     }
 
+    func searchChannels() {
+        mode = .channels
+        scraper.reset()
+        picked = []
+        filterText = ""
+        search.run(urlText)
+    }
+
+    /// Show the saved videos in place of a channel's, so they can be ticked, previewed
+    /// and downloaded with exactly the machinery a scrape's list uses.
+    func showSavedVideos() {
+        mode = .saved
+        scraper.reset()
+        search.reset()
+        picked = []
+        filterText = ""
+    }
+
+    /// Open a channel — from a search hit, or from the saved shelf. Putting its URL in
+    /// the field first means the scrape is one you could have typed, and leaves it there
+    /// to edit.
+    func open(_ channel: Channel) {
+        library.markOpened(channel.id)
+        urlText = channel.url
+        scrape()
+    }
+
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
         scraper.reset()
+        search.reset()
+        mode = .videos
         picked = []
         filterText = ""
     }
@@ -66,7 +201,7 @@ final class AppModel {
     }
 
     func downloadPicked() {
-        download(scraper.videos.filter { picked.contains($0.id) })
+        download(listedVideos.filter { picked.contains($0.id) })
         picked = []
     }
 
@@ -75,7 +210,43 @@ final class AppModel {
     func download(_ videos: [Video]) {
         guard !videos.isEmpty else { return }
         downloader.enqueue(videos, quality: quality)
+        openDownloads()
+    }
+}
+
+
+// MARK: - Drawers
+
+extension AppModel {
+    /// Downloads sits along the bottom and can be up alongside either side panel — none
+    /// of them covers anything, so there is nothing to be gained by making them fight.
+    ///
+    /// The two side panels are the exception: they take width from the same page, and at
+    /// the window's minimum size both at once would leave the list too narrow to read.
+    func openChannelsDrawer() {
+        showVideosDrawer = false
+        showChannelsDrawer = true
+    }
+
+    func openVideosDrawer() {
+        showChannelsDrawer = false
+        showVideosDrawer = true
+    }
+
+    func toggleChannelsDrawer() {
+        if showChannelsDrawer { showChannelsDrawer = false } else { openChannelsDrawer() }
+    }
+
+    func toggleVideosDrawer() {
+        if showVideosDrawer { showVideosDrawer = false } else { openVideosDrawer() }
+    }
+
+    func openDownloads() {
         showDownloads = true
+    }
+
+    func toggleDownloads() {
+        if showDownloads { showDownloads = false } else { openDownloads() }
     }
 }
 
@@ -109,5 +280,61 @@ extension AppModel {
     func closeIsland() {
         islandVideo = nil
         miniPlayer.release()?.pause()
+    }
+}
+
+
+// MARK: - Saved channels
+
+extension AppModel {
+    /// The channel currently on screen, if there is one to save: the one being scraped.
+    var scrapedChannel: Channel? { scraper.channelRef }
+
+    var isScrapedChannelSaved: Bool {
+        guard let scrapedChannel else { return false }
+        return library.contains(scrapedChannel.id)
+    }
+
+    func toggleSaved(_ channel: Channel) {
+        library.toggle(channel)
+    }
+
+    func isSaved(_ video: Video) -> Bool { library.containsVideo(video.id) }
+
+    /// The channel name comes off the header when the video itself does not carry one,
+    /// so a saved video can always say where it came from.
+    func toggleSaved(_ video: Video) {
+        library.toggleVideo(
+            video,
+            channel: scraper.channelRef,
+            channelName: scraper.channel.isEmpty ? nil : scraper.channel
+        )
+    }
+
+    /// Ask for a Google Takeout `subscriptions.csv` and merge it into the saved list.
+    ///
+    /// This is the no-sign-in route to "the channels I'm subscribed to": YouTube will
+    /// export them, and one file is a great deal less machinery than an OAuth client
+    /// that Google has to review.
+    func importSubscriptions() {
+        let panel = NSOpenPanel()
+        panel.title = "Import YouTube Subscriptions"
+        panel.message = "Choose the subscriptions.csv from your Google Takeout export."
+        panel.prompt = "Import"
+        panel.allowedContentTypes = [.commaSeparatedText]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importSubscriptions(from: url)
+    }
+
+    /// Also the drop target's path, so the file can just be dragged onto the shelf.
+    func importSubscriptions(from url: URL) {
+        do {
+            try library.importTakeout(from: url)
+        } catch {
+            library.report("Could not read \(url.lastPathComponent).")
+        }
     }
 }

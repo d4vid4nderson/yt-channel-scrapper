@@ -32,8 +32,11 @@ you wanted it.
 | **Paged** | 25 at a time, so the first page lands in seconds even on a 5,000-video channel |
 | **Batch download** | Tick as many as you like; 3 download at a time with live per-video progress |
 | **Quality choice** | Best available, 1080p, 720p, 480p, or audio-only as 192 kbps mp3 |
+| **Find a channel** | Don't know the URL? Type a name and pick the channel from the results |
+| **Save what you use** | Bookmark channels and individual videos; each gets a side panel that slides the page over rather than covering it, so what you were reading stays readable |
+| **Bring your subscriptions** | Drop a Google Takeout `subscriptions.csv` into the saved-channels panel and every channel you follow is saved — no sign-in, no API key |
 | **Watch first** | Preview any video in the app — including Shorts and live streams — without downloading it |
-| **Keeps playing** | Minimise and playback moves to a mini player pinned to the notch |
+| **Keeps playing** | Minimise and playback moves to a mini player pinned to the notch, with its own output picker — speakers, headphones or AirPlay, one tap each |
 | **Self-updating yt-dlp** | Update from inside the app; it applies to the very next action, no restart |
 | **Resilient** | Steps down through cookies → JS solver → android client when YouTube gates a format |
 
@@ -72,6 +75,46 @@ A **static** ffmpeg is staged rather than Homebrew's, which links ~18 Homebrew d
 so would only run on a Mac that already had it installed.
 
 Downloads land in `~/Downloads/YT Channel Scraper`, named `Title [videoid].mp4`.
+
+### Saved channels and videos
+
+Three panels hang off the window, opened from the buttons in the title bar — each button is
+a picture of the window with that panel out:
+
+| Panel | Where | What |
+|---|---|---|
+| Saved channels | left (⌘1) | everything you have bookmarked, filterable, one click to its videos |
+| Downloads | bottom (⌘J) | the queue, with per-video progress and the yt-dlp updater |
+| Saved videos | right (⌘2) | videos kept across channels — preview or fetch one, or open them all as a list |
+
+They take room from the page rather than covering it, so the list you opened them from is
+still there and still usable. Nothing is dimmed, because nothing is blocked.
+
+Bookmarking keeps things in `~/Library/Application Support/YT Channel Scraper/` —
+`channels.json` and `saved-videos.json`. Saved videos list, preview and batch-download
+exactly like a scraped channel's do, so a bookmark is a way of building a download queue
+over several sittings.
+
+To bring in the channels you already subscribe to, export them from
+[Google Takeout](https://takeout.google.com/) (YouTube and YouTube Music → *subscriptions*),
+then drop the `subscriptions.csv` onto the saved-channels panel or use **Import YouTube
+Subscriptions…**. Re-importing later merges rather than duplicates. It is a snapshot, not a
+live feed — that is the trade for needing no OAuth client, no app review by Google, and no
+sign-in that expires. Channel pictures are not in the CSV, so they fill in quietly in the
+background, two at a time, and are then kept.
+
+### Where the sound goes
+
+The mini player carries its own output list: the Mac's own outputs read from CoreAudio —
+speakers, headphones, AirPods — each a single tap, routing only this video with
+`AVPlayer.audioOutputDeviceUniqueID`.
+
+Apple TVs, Rokus and other Macs are not audio devices this Mac has; they are found by
+AirPlay discovery, which is the system's own. So the last row of the list is the real
+`AVRoutePickerView`, invisible under a row drawn to match the others — one list, with the
+system doing the part only it can do. That system menu keeps its own checkmark styling:
+every knob that would change it (`prioritizesVideoDevices`, `routingMethod`,
+`routePickerButtonStyle`) is marked `API_UNAVAILABLE(macos)`.
 
 ### Packaging it for distribution
 

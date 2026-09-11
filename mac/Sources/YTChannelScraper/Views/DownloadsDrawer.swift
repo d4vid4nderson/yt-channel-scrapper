@@ -1,9 +1,9 @@
 import SwiftUI
 import AppKit
 
-/// Downloads come up as a drawer from the bottom edge, over a dimmed page — the way the
-/// web app did it. A side column would have cut the header band in half and stolen width
-/// from the list; the drawer sits over the top and gives it all back on dismissal.
+/// Downloads open along the bottom edge, taking height from the page rather than covering
+/// it — so the list you queued from is still in front of you, and still tickable, while
+/// the queue runs.
 struct DownloadsDrawer: View {
     @Bindable var downloader: Downloader
     @Bindable var updater: Updater
@@ -18,51 +18,27 @@ struct DownloadsDrawer: View {
         let jobs = downloader.jobs
         let hasFinished = downloader.hasFinished
 
-        return GeometryReader { geo in
-            ZStack(alignment: .bottom) {
-                Rectangle()
-                    .fill(.black.opacity(0.55))
-                    .background(.ultraThinMaterial)
-                    .ignoresSafeArea()
-                    .opacity(isPresented ? 1 : 0)
-                    .onTapGesture(perform: close)
-
-                // Both views stay mounted and the sheet's offset is animated, rather
-                // than relying on an insertion transition: an offset is guaranteed to
-                // run in both directions, so it slides down on close as well as up.
-                sheet(jobs: jobs, hasFinished: hasFinished)
-                    .frame(maxWidth: 760)
-                    .frame(maxHeight: geo.size.height * 0.72, alignment: .bottom)
-                    .offset(y: isPresented ? 0 : geo.size.height)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
-        .allowsHitTesting(isPresented)
-        .animation(.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.32), value: isPresented)
-        .onExitCommand(perform: close)
-    }
-
-    private func sheet(jobs: [DownloadJob], hasFinished: Bool) -> some View {
-        VStack(spacing: 0) {
+        return VStack(spacing: 0) {
             head(count: jobs.count, hasFinished: hasFinished)
             Divider().overlay(.white.opacity(0.09))
             jobList(jobs)
             Divider().overlay(.white.opacity(0.09))
             UpdaterFooter(updater: updater)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.sheetSurface)
-        .clipShape(UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous))
         .overlay(alignment: .top) {
-            UnevenRoundedRectangle(topLeadingRadius: 20, topTrailingRadius: 20, style: .continuous)
-                .strokeBorder(Color(white: 0.16), lineWidth: 1)
+            Rectangle()
+                .fill(Color(white: 0.2))
+                .frame(height: 1)
         }
-        .shadow(color: .black.opacity(0.55), radius: 35, y: -8)
+        .onExitCommand(perform: close)
     }
 
     private func head(count: Int, hasFinished: Bool) -> some View {
         HStack(spacing: 12) {
             Text("Downloads")
-                .font(.system(size: 17, weight: .medium))
+                .font(.system(size: 15, weight: .medium))
                 .foregroundStyle(.white)
 
             if count > 0 {
@@ -86,16 +62,16 @@ struct DownloadsDrawer: View {
             .opacity(hasFinished ? 1 : 0.4)
             SheetButton(title: "Close", icon: "xmark", action: close)
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 20)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 14)
     }
 
     @ViewBuilder
     private func jobList(_ jobs: [DownloadJob]) -> some View {
         if jobs.isEmpty {
-            VStack(spacing: 8) {
+            VStack(spacing: 7) {
                 Image(systemName: "arrow.down.circle")
-                    .font(.system(size: 26))
+                    .font(.system(size: 24))
                     .foregroundStyle(Color(white: 0.55))
                 Text("No downloads yet")
                     .font(.system(size: 13, weight: .medium))
@@ -104,44 +80,18 @@ struct DownloadsDrawer: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Color(white: 0.5))
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 54)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
             ScrollView {
-                LazyVStack(spacing: 12) {
+                LazyVStack(spacing: 10) {
                     ForEach(jobs) { job in
                         JobRow(job: job) { downloader.remove(job) }
                     }
                 }
-                .padding(.horizontal, 24)
-                .padding(.top, 18)
-                .padding(.bottom, 24)
+                .padding(.horizontal, 20)
+                .padding(.vertical, 14)
             }
         }
-    }
-}
-
-/// The sheet's own button style: light on the dark surface, never the system pill which
-/// would repaint white-on-white here.
-private struct SheetButton: View {
-    let title: String
-    let icon: String
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
-                .frame(width: 28, height: 28)
-                .background(.white.opacity(hovering ? 0.22 : 0.1), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .help(title)
-        .accessibilityLabel(title)
-        .pointingHand()
-        .onHover { hovering = $0 }
     }
 }
 
@@ -279,8 +229,8 @@ private struct UpdaterFooter: View {
                 }
             }
         }
-        .padding(.horizontal, 24)
-        .padding(.vertical, 14)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
     }
 
     @ViewBuilder

@@ -15,7 +15,45 @@ struct RootView: View {
     /// `cubic-bezier(.4, 0, .2, 1)` over .65s.
     private static let morph = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.65)
 
+    /// The panels take room from the page rather than covering it, so whatever you were
+    /// looking at is still there — and still usable — while you dig through what you have
+    /// kept. Nothing is dimmed, because nothing is blocked.
     var body: some View {
+        HStack(spacing: 0) {
+            SavedChannelsDrawer(model: model)
+                .drawerSlot(open: model.showChannelsDrawer, side: .leading)
+
+            VStack(spacing: 0) {
+                page
+                DownloadsDrawer(
+                    downloader: model.downloader,
+                    updater: model.updater,
+                    isPresented: $model.showDownloads
+                )
+                .bottomDrawerSlot(open: model.showDownloads)
+            }
+
+            SavedVideosDrawer(model: model)
+                .drawerSlot(open: model.showVideosDrawer, side: .trailing)
+        }
+        .frame(minWidth: 860, minHeight: 560)
+        .animation(Layout.drawerEase, value: model.showChannelsDrawer)
+        .animation(Layout.drawerEase, value: model.showVideosDrawer)
+        .animation(Layout.drawerEase, value: model.showDownloads)
+        .toolbar { chrome }
+        // Over everything, panels included: previewing something from a drawer has to
+        // land on top of the panel it was started from.
+        .overlay {
+            PreviewModal(
+                session: model.preview,
+                download: { model.download([$0]) },
+                popOut: { model.popOutToIsland() }
+            )
+        }
+    }
+
+    /// The app itself — hero, then results — in whatever width the panels have left it.
+    private var page: some View {
         GeometryReader { geo in
             // One number drives the whole transition: the header's height. The results
             // are offset by exactly that, so they are revealed from underneath as it
@@ -35,12 +73,7 @@ struct RootView: View {
             .frame(width: geo.size.width, height: geo.size.height)
             .clipped()
         }
-        // With the title bar hidden the window still insets its content below where the
-        // bar used to be, leaving an unpainted strip above the header. The page owns the
-        // whole window instead, and the traffic lights float on top of it.
-        .ignoresSafeArea()
         .animation(Self.morph, value: collapsed)
-        .frame(minWidth: 860, minHeight: 560)
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willMiniaturizeNotification)) { _ in
             // Minimising should not stop what you are watching.
             model.popOutToIsland()
@@ -51,29 +84,46 @@ struct RootView: View {
             await model.updater.refreshCurrent()
             await model.updater.check()
         }
-        .overlay(alignment: .bottom) {
-            // The handle sits on the edge the drawer rises from, so the gesture reads
-            // as pulling the panel up rather than pressing an unrelated button.
-            if !model.showDownloads {
-                DownloadsHandle(count: model.downloader.activeCount) {
-                    model.showDownloads = true
-                }
-                .transition(.move(edge: .bottom))
-            }
-        }
-        .animation(.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.28), value: model.showDownloads)
-        .overlay {
-            PreviewModal(
-                session: model.preview,
-                download: { model.download([$0]) },
-                popOut: { model.popOutToIsland() }
+    }
+
+    // MARK: - Toolbar
+
+    /// The three panels live on the window's own chrome, in one cluster at the trailing
+    /// end: left, bottom, right, in the order their edges sit around the window.
+    ///
+    /// Together rather than split across the bar, because they are one set of controls
+    /// doing one kind of thing — a button on each end would read as two unrelated things
+    /// rather than three views of what you have kept.
+    ///
+    /// The icon is a picture of the window with that panel out, so each button says which
+    /// edge it opens without a word on it — and a toggle rather than a plain button, so a
+    /// lit one is a panel that is open, and pressing it again is how you put it away.
+    @ToolbarContentBuilder
+    private var chrome: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            PanelToggle(
+                icon: "rectangle.leadingthird.inset.filled",
+                title: "Saved channels",
+                isOn: model.showChannelsDrawer,
+                help: "The channels you have saved  (⌘1)",
+                toggle: model.toggleChannelsDrawer
             )
-        }
-        .overlay {
-            DownloadsDrawer(
-                downloader: model.downloader,
-                updater: model.updater,
-                isPresented: $model.showDownloads
+            PanelToggle(
+                icon: "rectangle.bottomthird.inset.filled",
+                title: "Downloads",
+                // A dot, not a tally: that something is running is the part worth a mark
+                // on the chrome, and the panel one click away has the numbers.
+                busy: model.downloader.activeCount > 0,
+                isOn: model.showDownloads,
+                help: "What is downloading, and where it went  (⌘J)",
+                toggle: model.toggleDownloads
+            )
+            PanelToggle(
+                icon: "rectangle.trailingthird.inset.filled",
+                title: "Saved videos",
+                isOn: model.showVideosDrawer,
+                help: "The videos you have saved  (⌘2)",
+                toggle: model.toggleVideosDrawer
             )
         }
     }
@@ -83,11 +133,15 @@ struct RootView: View {
     private var resultsArea: some View {
         VStack(spacing: 0) {
             Divider()
-            if let error = model.scraper.error, model.hasResults {
+            if let error = model.statusError, model.hasResults {
                 ErrorBanner(message: error) { model.goHome() }
                 Divider()
             }
-            ResultsList(model: model)
+            switch model.mode {
+            // The saved list is a video list; everything about it is the same view.
+            case .videos, .saved: ResultsList(model: model)
+            case .channels:       ChannelResults(model: model)
+            }
         }
     }
 
@@ -139,13 +193,13 @@ struct RootView: View {
     @ViewBuilder
     private var statusLine: some View {
         Group {
-            if model.scraper.isBusy {
+            if model.isBusy {
                 HStack(spacing: 8) {
                     ProgressView().controlSize(.small).tint(.white)
-                    Text("Reading the channel…")
+                    Text(model.mode == .videos ? "Reading the channel…" : "Searching channels…")
                 }
                 .foregroundStyle(.white.opacity(0.75))
-            } else if let error = model.scraper.error {
+            } else if let error = model.statusError {
                 Text(error)
                     .foregroundStyle(.white)
                     .multilineTextAlignment(.center)
@@ -154,7 +208,7 @@ struct RootView: View {
                     .padding(.vertical, 9)
                     .background(Palette.accent.opacity(0.9), in: RoundedRectangle(cornerRadius: 9))
             } else {
-                Text("Pick the videos you want, download them in one go.")
+                Text("Paste a channel, or search for one by name.")
                     .foregroundStyle(.white.opacity(0.55))
             }
         }
@@ -186,53 +240,6 @@ private struct HomeButton: View {
     }
 }
 
-/// The tab peeking up from the bottom edge — the top lip of the drawer itself, so it
-/// is obvious what pulling it does. Doubles as the progress indicator while closed.
-private struct DownloadsHandle: View {
-    let count: Int
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            HStack(spacing: 8) {
-                Image(systemName: "chevron.up")
-                    .font(.system(size: 10, weight: .bold))
-                    .offset(y: hovering ? -1.5 : 0)
-                Text("Downloads")
-                    .font(.system(size: 12, weight: .medium))
-                if count > 0 {
-                    Text("\(count)")
-                        .font(.system(size: 11, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 1)
-                        .background(Palette.accent, in: Capsule())
-                }
-            }
-            .foregroundStyle(.white)
-            .padding(.horizontal, 18)
-            .frame(height: hovering ? 38 : 33)
-            .background(Palette.sheetSurface)
-            .clipShape(
-                UnevenRoundedRectangle(topLeadingRadius: 13, topTrailingRadius: 13, style: .continuous)
-            )
-            .overlay(alignment: .top) {
-                UnevenRoundedRectangle(topLeadingRadius: 13, topTrailingRadius: 13, style: .continuous)
-                    .strokeBorder(Color(white: 0.18), lineWidth: 1)
-            }
-            .shadow(color: .black.opacity(0.45), radius: 14, y: -3)
-        }
-        .buttonStyle(.plain)
-        .help(count > 0
-              ? "Show the \(count) download\(count == 1 ? "" : "s") in progress  (⌘J)"
-              : "Show downloads  (⌘J)")
-        .pointingHand()
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.16), value: hovering)
-    }
-}
-
 /// The one rounded bar holding the URL field, the tab menu and Scrape. It is the same
 /// view in both states — that is what lets it travel rather than cut.
 private struct SearchPill: View {
@@ -244,7 +251,7 @@ private struct SearchPill: View {
         HStack(spacing: compact ? 6 : 8) {
             ZStack(alignment: .leading) {
                 if model.urlText.isEmpty {
-                    Text("Paste a channel URL — youtube.com/@channelname, an @handle, or a playlist")
+                    Text("Paste a channel URL or @handle — or type a name to search")
                         .foregroundStyle(.black.opacity(0.42))
                         .lineLimit(1)
                 }
@@ -252,7 +259,7 @@ private struct SearchPill: View {
                     .textFieldStyle(.plain)
                     .foregroundStyle(.black)
                     .focused($focused)
-                    .onSubmit { model.scrape() }
+                    .onSubmit { model.submit() }
             }
             .font(.system(size: compact ? 13 : 14))
             .padding(.leading, compact ? 14 : 18)
@@ -286,24 +293,24 @@ private struct SearchPill: View {
             .pointingHand()
 
             Button {
-                model.scraper.isBusy ? model.scraper.stop() : model.scrape()
+                model.isBusy ? model.stop() : model.submit()
             } label: {
-                Text(model.scraper.isBusy ? "Stop" : "Scrape")
+                // The label is the answer to "what will return do with what I have
+                // typed?", so it has to track the field rather than sit on one word.
+                Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
                     .foregroundStyle(.white)
                     .frame(width: compact ? 66 : 78)
                     .padding(.vertical, compact ? 7 : 10)
                     .background(
-                        Palette.accent.opacity(model.canScrape || model.scraper.isBusy ? 1 : 0.45),
+                        Palette.accent.opacity(model.canScrape || model.isBusy ? 1 : 0.45),
                         in: Capsule()
                     )
             }
             .buttonStyle(.plain)
-            .disabled(!model.canScrape && !model.scraper.isBusy)
+            .disabled(!model.canScrape && !model.isBusy)
             .keyboardShortcut(.return, modifiers: [])
-            .help(model.scraper.isBusy
-                  ? "Stop reading this channel and keep what has been found"
-                  : "List this channel's \(model.tab.label.lowercased())  (↩)")
+            .help(helpText)
             .pointingHand()
         }
         .padding(compact ? 5 : 7)
@@ -311,6 +318,22 @@ private struct SearchPill: View {
         .shadow(color: .black.opacity(compact ? 0.2 : 0.35), radius: compact ? 8 : 22, y: compact ? 3 : 8)
         // Landing on the hero, the one thing to do is type a URL.
         .onAppear { if !compact { focused = true } }
+    }
+
+    private var buttonLabel: String {
+        if model.isBusy { return "Stop" }
+        return model.intent == .search ? "Search" : "Scrape"
+    }
+
+    private var helpText: String {
+        if model.isBusy {
+            return model.mode == .videos
+                ? "Stop reading this channel and keep what has been found"
+                : "Stop searching"
+        }
+        return model.intent == .search
+            ? "Find channels called “\(model.urlText.trimmingCharacters(in: .whitespaces))”  (↩)"
+            : "List this channel's \(model.tab.label.lowercased())  (↩)"
     }
 }
 
@@ -339,29 +362,65 @@ private struct ErrorBanner: View {
 private struct ResultsList: View {
     @Bindable var model: AppModel
 
+    /// Where the page being fetched will start, held while it loads so the list can be
+    /// taken to it once it lands.
+    ///
+    /// Without this, loading more looks like it did nothing: you are at the foot of the
+    /// list when you press the button, the new rows are appended *below* the viewport,
+    /// and the pixels in front of you do not change.
+    @State private var nextPageAnchor: Int?
+
     var body: some View {
         VStack(spacing: 0) {
             controls
             Divider()
+            ScrollViewReader { proxy in
             ScrollView {
                 // Cards, not list rows — they need the gap to read as separate surfaces.
                 LazyVStack(spacing: 10) {
-                    ForEach(model.visible) { video in
-                        VideoRow(
-                            video: video,
-                            isPicked: model.picked.contains(video.id),
-                            toggle: { model.toggle(video) },
-                            downloadOne: { model.download([video]) },
-                            preview: { model.preview.open(video) }
-                        )
+                    // Kept first, under a heading — a row that jumps the queue should
+                    // say why it is there rather than leave you wondering whether the
+                    // channel's order is broken.
+                    if !model.keptVisible.isEmpty {
+                        GroupLabel(text: "Kept from this channel", accented: true)
+                        ForEach(model.keptVisible) { row($0) }
+                        if !model.restVisible.isEmpty {
+                            GroupLabel(text: "All videos")
+                        }
                     }
+                    ForEach(model.restVisible) { row($0) }
 
-                    if model.scraper.canLoadMore && model.filterText.isEmpty {
-                        Button("Load 25 more") { model.scraper.loadMore() }
-                            .controlSize(.large)
-                            .padding(.vertical, 10)
-                            .help("Read the next 25 videos from this channel")
-                            .pointingHand()
+                    if model.mode == .saved {
+                        if model.visible.isEmpty {
+                            Text(model.filterText.isEmpty
+                                 ? "No saved videos yet — star one in any channel's list."
+                                 : "Nothing matches “\(model.filterText)”.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                                .padding(.vertical, 40)
+                        }
+                    } else if model.scraper.isBusy {
+                        // Checked before the button, because the button unmounts the
+                        // moment the scrape restarts — leaving the foot of the list
+                        // blank for the whole fetch if nothing takes its place.
+                        HStack(spacing: 8) {
+                            ProgressView().controlSize(.small)
+                            Text(model.scraper.videos.isEmpty
+                                 ? "Reading the channel…"
+                                 : "Reading the next \(Scraper.pageSize)…")
+                                .font(.system(size: 12))
+                                .foregroundStyle(.secondary)
+                        }
+                        .padding(.vertical, 18)
+                    } else if model.scraper.canLoadMore && model.filterText.isEmpty {
+                        Button("Load 25 more") {
+                            nextPageAnchor = model.scraper.videos.count
+                            model.scraper.loadMore()
+                        }
+                        .controlSize(.large)
+                        .padding(.vertical, 10)
+                        .help("Read the next 25 videos from this channel")
+                        .pointingHand()
                     } else if model.visible.isEmpty {
                         Text("Nothing matches “\(model.filterText)”.")
                             .font(.system(size: 12))
@@ -371,10 +430,37 @@ private struct ResultsList: View {
                 }
                 .padding(.horizontal, 16)
                 .padding(.top, 14)
-                .padding(.bottom, 56)   // clear of the downloads tab
+                .padding(.bottom, 22)
+                .animation(.easeOut(duration: 0.24), value: model.keptVisible.count)
             }
             .background(Color(nsColor: .underPageBackgroundColor))
+            // Once the page has settled, put its first row at the top: that is what
+            // "load 25 more" is asking for, and it is the only way the result of
+            // pressing it is visible from where you pressed it.
+            .onChange(of: model.scraper.isBusy) { _, busy in
+                guard !busy, let anchor = nextPageAnchor else { return }
+                nextPageAnchor = nil
+                guard anchor < model.scraper.videos.count else { return }
+                withAnimation(.easeOut(duration: 0.35)) {
+                    proxy.scrollTo(model.scraper.videos[anchor].id, anchor: .top)
+                }
+            }
+            }
         }
+    }
+
+    private func row(_ video: Video) -> some View {
+        VideoRow(
+            video: video,
+            isPicked: model.picked.contains(video.id),
+            isSaved: model.isSaved(video),
+            inSavedList: model.mode == .saved,
+            toggle: { model.toggle(video) },
+            downloadOne: { model.download([video]) },
+            preview: { model.preview.open(video) },
+            toggleSaved: { model.toggleSaved(video) }
+        )
+        .id(video.id)
     }
 
     private var controls: some View {
@@ -404,6 +490,16 @@ private struct ResultsList: View {
                     .frame(width: 150)
             }
             .chip()
+
+            // Sits against the channel's name in the count line, so it reads as
+            // keeping the channel rather than anything to do with the selection.
+            if model.mode != .saved, let channel = model.scrapedChannel {
+                SaveMark(
+                    isSaved: model.library.contains(channel.id),
+                    size: 14,
+                    action: { model.toggleSaved(channel) }
+                )
+            }
 
             Text(countText)
                 .font(.system(size: 11.5).monospacedDigit())
@@ -465,12 +561,141 @@ private struct ResultsList: View {
     }
 
     private var countText: String {
-        let total = model.scraper.videos.count
+        let total = model.listedVideos.count
         let shown = model.visible.count
         var parts: [String] = []
-        if !model.scraper.channel.isEmpty { parts.append(model.scraper.channel) }
-        parts.append(shown == total ? "\(total) videos" : "\(shown) of \(total)")
+        if model.mode == .saved {
+            parts.append("Saved videos")
+        } else if !model.scraper.channel.isEmpty {
+            parts.append(model.scraper.channel)
+        }
+        // A kept video can come from beyond what has been loaded, which would otherwise
+        // read as "26 of 25". The count describes the channel's listing; the kept ones
+        // are reported as their own fact.
+        parts.append(shown >= total
+                     ? "\(total) video\(total == 1 ? "" : "s")"
+                     : "\(shown) of \(total)")
+        if !model.keptVisible.isEmpty { parts.append("\(model.keptVisible.count) kept") }
         if !model.picked.isEmpty { parts.append("\(model.picked.count) selected") }
         return parts.joined(separator: "  ·  ")
+    }
+}
+
+
+// MARK: - Channel results
+
+/// What a search puts in the results area, in place of the video list.
+private struct ChannelResults: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        VStack(spacing: 0) {
+            controls
+            Divider()
+            ScrollView {
+                LazyVStack(spacing: 10) {
+                    ForEach(model.search.results) { channel in
+                        ChannelRow(
+                            channel: channel,
+                            isSaved: model.library.contains(channel.id),
+                            open: { model.open(channel) },
+                            toggleSaved: { model.toggleSaved(channel) }
+                        )
+                    }
+                }
+                .padding(.horizontal, 16)
+                .padding(.top, 14)
+                .padding(.bottom, 22)
+            }
+            .background(Color(nsColor: .underPageBackgroundColor))
+        }
+    }
+
+    private var controls: some View {
+        HStack(spacing: 10) {
+            Text("Channels matching “\(model.search.query)”")
+                .font(.system(size: 12.5, weight: .medium))
+            Text("\(model.search.results.count)")
+                .font(.system(size: 11.5).monospacedDigit())
+                .foregroundStyle(.secondary)
+
+            Spacer(minLength: 12)
+
+            if model.search.isBusy {
+                ProgressView().controlSize(.small)
+            }
+
+            Text("Bookmark a channel to keep it in the side panel")
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 9)
+        .frame(height: 42)
+    }
+}
+
+
+/// The one-line heading over each half of a channel's list.
+private struct GroupLabel: View {
+    let text: String
+    var accented = false
+
+    var body: some View {
+        HStack(spacing: 6) {
+            if accented {
+                Image(systemName: "bookmark.fill")
+                    .font(.system(size: 9))
+                    .foregroundStyle(Palette.accent)
+            }
+            Text(text)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 4)
+        .padding(.top, accented ? 0 : 10)
+    }
+}
+
+
+// MARK: - Toolbar control
+
+/// One panel's button. Built on `Toggle` rather than `Button` so the chrome shows which
+/// panels are open — the toolbar's pressed state is the only thing on screen saying so
+/// once the tabs are gone, and the accent on the open one makes it unmissable.
+private struct PanelToggle: View {
+    let icon: String
+    /// Carried for the tooltip and for VoiceOver. The button itself is the icon alone.
+    let title: String
+    var busy = false
+    let isOn: Bool
+    let help: String
+    let toggle: () -> Void
+
+    var body: some View {
+        Toggle(isOn: Binding(get: { isOn }, set: { _ in toggle() })) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .medium))
+                // White on the lit one, because the lit one is filled with the accent.
+                .foregroundStyle(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                // The frame leaves the corner the dot sits in, so it is never clipped by
+                // the button drawn around it.
+                .frame(width: 21, height: 16)
+                .overlay(alignment: .topTrailing) {
+                    if busy {
+                        Circle()
+                            .fill(isOn ? .white : Palette.accent)
+                            .frame(width: 5.5, height: 5.5)
+                    }
+                }
+        }
+        .toggleStyle(.button)
+        // Without this the pressed state is the user's system accent — blue, on a window
+        // that has exactly one accent and it is red.
+        .tint(Palette.accent)
+        .help(help)
+        .accessibilityLabel(title)
+        .pointingHand()
     }
 }

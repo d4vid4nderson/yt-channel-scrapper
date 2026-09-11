@@ -18,6 +18,9 @@ final class Scraper {
     private(set) var status: Status = .idle
     private(set) var videos: [Video] = []
     private(set) var channel = ""
+    /// The channel this listing belongs to, so it can be saved from the results bar
+    /// without having to be searched for again.
+    private(set) var channelRef: Channel?
     private(set) var error: String?
 
     /// The tab URL that actually answered, kept so "load more" resumes on the same one.
@@ -40,6 +43,7 @@ final class Scraper {
         videos = []
         seen = []
         channel = ""
+        channelRef = nil
         error = nil
         status = .idle
         resolvedURL = nil
@@ -60,6 +64,7 @@ final class Scraper {
         videos = []
         seen = []
         channel = ""
+        channelRef = nil
         error = nil
         outerCursor = 0
         exhausted = false
@@ -173,6 +178,7 @@ final class Scraper {
                     channel = (json["playlist_channel"] as? String)
                         ?? (json["playlist_title"] as? String) ?? ""
                 }
+                if channelRef == nil { channelRef = Channel(listingJSON: json) }
                 await absorb(json, depth: 0)
 
                 if videos.count >= target {

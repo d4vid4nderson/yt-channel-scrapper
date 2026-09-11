@@ -60,6 +60,35 @@ enum YtDlp {
         ]
     }
 
+    /// Search YouTube for *channels* rather than videos.
+    ///
+    /// `sp=EgIQAg%3D%3D` is the results page's own "Channels" filter — the same one the
+    /// site sets when you click that tab. It matters because a plain search returns
+    /// videos, and a video carries none of what you need to recognise a channel: the
+    /// filtered listing comes back with handles, subscriber counts and avatars.
+    static let channelFilter = "EgIQAg%3D%3D"
+
+    static func channelSearchArguments(query: String, count: Int) -> [String] {
+        // Percent-encode everything non-alphanumeric, so a query with spaces, "&" or a
+        // "#" in it cannot rewrite the rest of the URL.
+        let encoded = query.addingPercentEncoding(withAllowedCharacters: .alphanumerics) ?? query
+        return [
+            "--ignore-config", "--flat-playlist", "--dump-json",
+            "--no-warnings", "--ignore-errors", "--lazy-playlist",
+            "--playlist-items", "1:\(count)",
+            "https://www.youtube.com/results?search_query=\(encoded)&sp=\(channelFilter)",
+        ]
+    }
+
+    /// Everything a channel says about itself, and none of its videos.
+    ///
+    /// `--playlist-items 0` is the point: the channel object comes back — avatar,
+    /// subscriber count, handle — without walking a single entry of the listing.
+    static func channelDetailsArguments(url: String) -> [String] {
+        ["--ignore-config", "--no-warnings", "--ignore-errors",
+         "--flat-playlist", "--playlist-items", "0", "--dump-single-json", url]
+    }
+
     // MARK: - Downloading
 
     /// The rungs a download steps down through, in order.

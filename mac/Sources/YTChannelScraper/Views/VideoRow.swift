@@ -5,9 +5,18 @@ import SwiftUI
 struct VideoRow: View {
     let video: Video
     let isPicked: Bool
+    let isSaved: Bool
+    /// Whether this row is being shown in the saved list rather than a channel's.
+    ///
+    /// Two things follow. That list mixes channels, so the row has to say which one this
+    /// is; and every row in it is kept, so marking them all as kept would say nothing —
+    /// the list itself is already the statement. The keeping treatment is for a row that
+    /// stands out *from its neighbours*.
+    var inSavedList = false
     let toggle: () -> Void
     let downloadOne: () -> Void
     let preview: () -> Void
+    let toggleSaved: () -> Void
 
     @State private var hovering = false
     @State private var hoveringThumb = false
@@ -40,12 +49,25 @@ struct VideoRow: View {
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
-                Text(video.viewsText)
+                Text(video.metaText(showingChannel: inSavedList))
                     .font(.system(size: 11.5))
                     .foregroundStyle(isPicked ? Color(white: 0.70) : .secondary)
             }
 
             Spacer(minLength: 8)
+
+            // Keeping a video is a quieter act than picking one to download, so the mark
+            // only shows for the row under the cursor — or for one already kept.
+            if hovering || isSaved {
+                SaveMark(
+                    isSaved: isSaved,
+                    size: 15,
+                    noun: "video",
+                    onDarkSurface: isPicked,
+                    action: toggleSaved
+                )
+                .transition(.opacity)
+            }
 
             // Only picked rows offer it, matching `.item.sel .row-dl { display: grid }`.
             if isPicked {
@@ -59,6 +81,8 @@ struct VideoRow: View {
         .background {
             if isPicked {
                 Palette.pickedSurface(height: rowHeight)
+            } else if marksSaved {
+                Palette.savedSurface(height: rowHeight)
             } else {
                 Color(nsColor: .controlBackgroundColor)
             }
@@ -72,11 +96,14 @@ struct VideoRow: View {
         .offset(y: hovering ? -1 : 0)
         .animation(.easeOut(duration: 0.15), value: hovering)
         .animation(.easeOut(duration: 0.18), value: isPicked)
+        .animation(.easeOut(duration: 0.22), value: isSaved)
         .contentShape(Rectangle())
         .onTapGesture(perform: toggle)
         .onHover { hovering = $0 }
         .pointingHand()
     }
+
+    private var marksSaved: Bool { isSaved && !inSavedList }
 
     private var borderColor: Color {
         if isPicked {
@@ -84,13 +111,16 @@ struct VideoRow: View {
                 ? Color(red: 0.29, green: 0.13, blue: 0.15)
                 : Color(red: 0.20, green: 0.10, blue: 0.11)
         }
+        if marksSaved {
+            return Palette.accent.opacity(hovering ? 0.5 : 0.32)
+        }
         return hovering ? Color.primary.opacity(0.22) : Color.primary.opacity(0.12)
     }
 
     private var shadowColor: Color {
-        isPicked
-            ? Palette.accent.opacity(hovering ? 0.28 : 0.20)
-            : .black.opacity(hovering ? 0.10 : 0.05)
+        if isPicked { return Palette.accent.opacity(hovering ? 0.28 : 0.20) }
+        if marksSaved { return Palette.accent.opacity(hovering ? 0.22 : 0.14) }
+        return .black.opacity(hovering ? 0.10 : 0.05)
     }
 
     private var thumbnail: some View {

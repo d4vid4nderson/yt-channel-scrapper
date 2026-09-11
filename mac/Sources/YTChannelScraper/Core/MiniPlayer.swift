@@ -16,6 +16,20 @@ final class MiniPlayer {
     private(set) var isShowing = false
     var isExpanded = false
 
+    /// Something the island put on screen has the cursor now — the AirPlay route list, so
+    /// far. While that is true the island must not collapse: the picker only exists in
+    /// the expanded layout, so collapsing pulls it out of the hierarchy and the list it
+    /// is presenting goes with it. Which is exactly what happens when you reach down a
+    /// long list of devices and the island decides you have left.
+    private(set) var isHoldingOpen = false
+
+    /// Whether the output list is open below the controls.
+    private(set) var isShowingOutputs = false
+
+    /// Where this video's sound can go. Held here rather than in the view so the island
+    /// can size itself around the list before drawing it.
+    let outputs = AudioOutputs()
+
     let playback = Playback()
     private(set) var title = ""
     private(set) var aspectRatio: CGFloat = 16.0 / 9.0
@@ -28,17 +42,41 @@ final class MiniPlayer {
 
     private var panel: NSPanel?
     private var tracker: Task<Void, Never>?
+    private var outputsWatch: Task<Void, Never>?
 
     private static let expanded = CGSize(width: 640, height: 118)
     private static let collapsedHeight: CGFloat = 48
+
+    static let outputRowHeight: CGFloat = 30
+    /// The section label and the padding around the list.
+    private static let outputsChrome: CGFloat = 30
+    /// Past about six devices the island would be reaching halfway down the screen, so
+    /// the rest scroll.
+    private static let outputsMaxHeight: CGFloat = 214
+    /// The divider and the AirPlay row under the list, which never scroll away.
+    private static let outputsFooter: CGFloat = 39
 
     /// The notch's own width, measured at present time. The collapsed pill has to be
     /// wider than it: sized narrower, it sat black-on-black *inside* the notch and was
     /// effectively invisible.
     private var notchWidth: CGFloat?
 
+    /// How much taller the island stands while the output list is open.
+    var outputsHeight: CGFloat {
+        guard isShowingOutputs else { return 0 }
+        // The devices, plus the row for the system default.
+        let rows = CGFloat(outputs.devices.count + 1)
+        let list = min(rows * Self.outputRowHeight, Self.outputsMaxHeight)
+        return list + Self.outputsChrome + Self.outputsFooter
+    }
+
     var size: CGSize {
-        if isExpanded { return Self.expanded }
+        if isExpanded {
+            return CGSize(
+                width: Self.expanded.width,
+                height: Self.expanded.height + outputsHeight
+            )
+        }
         let clearance: CGFloat = 104     // visibly proud of the notch on both sides
         return CGSize(
             width: max(320, (notchWidth ?? 0) + clearance),
@@ -55,7 +93,10 @@ final class MiniPlayer {
         self.title = title
         self.aspectRatio = aspectRatio
         playback.attach(player)
+        outputs.sync(from: player)
         isExpanded = false
+        isHoldingOpen = false
+        isShowingOutputs = false
         isShowing = true
         present()
     }
@@ -66,6 +107,8 @@ final class MiniPlayer {
         player = nil
         isShowing = false
         isExpanded = false
+        isHoldingOpen = false
+        isShowingOutputs = false
     }
 
     /// Hand the player back out without tearing it down.
@@ -76,13 +119,66 @@ final class MiniPlayer {
         player = nil
         isShowing = false
         isExpanded = false
+        isHoldingOpen = false
+        isShowingOutputs = false
         return held
     }
 
     func setExpanded(_ expanded: Bool) {
         guard isExpanded != expanded else { return }
         isExpanded = expanded
+        // Closing takes the list with it — it is drawn inside the part that just went.
+        if !expanded { isShowingOutputs = false }
         resize(animated: true)
+    }
+
+    /// Open or close the output list, growing the island to fit it.
+    ///
+    /// Open, it holds the island open the same way the AirPlay list does: choosing a
+    /// device means travelling down a list that hangs well below the controls, and the
+    /// island must not read that as you having left.
+    func showOutputs(_ on: Bool) {
+        guard isShowingOutputs != on, isShowing else { return }
+        if on {
+            outputs.refresh()
+            if let player { outputs.sync(from: player) }
+            isShowingOutputs = true
+            isHoldingOpen = true
+            isExpanded = true
+            resize(animated: true)
+            watchOutputs()
+        } else {
+            outputsWatch?.cancel()
+            outputsWatch = nil
+            isShowingOutputs = false
+            isHoldingOpen = false
+            resize(animated: true)
+            updateHover()
+        }
+    }
+
+    /// Keep re-reading the device list for as long as it is on screen.
+    ///
+    /// AirPods leave CoreAudio entirely the moment they idle-disconnect or hand
+    /// themselves to a phone, and reappear a second after they wake — so a list read once
+    /// when the panel opened is wrong by the time you have looked at it. Which is exactly
+    /// the way to open this list, see no AirPods, and conclude the app cannot see them.
+    ///
+    /// Only while the list is up: this is a menu open for a few seconds, not a reason to
+    /// hold a standing subscription to the audio system.
+    private func watchOutputs() {
+        outputsWatch?.cancel()
+        outputsWatch = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(900))
+                guard let self, self.isShowingOutputs, !Task.isCancelled else { return }
+                let before = self.outputs.devices
+                self.outputs.refresh()
+                // The island is sized around the row count, so a device arriving or
+                // leaving has to move the panel as well as the list.
+                if self.outputs.devices.count != before.count { self.resize(animated: true) }
+            }
+        }
     }
 
     // MARK: - Hover
@@ -109,11 +205,35 @@ final class MiniPlayer {
         }
     }
 
+    /// Keep the island open regardless of where the cursor goes, until told otherwise.
+    ///
+    /// The AirPlay list drops well below the island and can run to a dozen devices, so
+    /// picking one means travelling a long way outside anything the island could sensibly
+    /// treat as "still hovering". Rather than guess at a hold zone big enough — which
+    /// would have to cover most of the screen, and would still be a guess — the thing
+    /// presenting the list says when it starts and when it is done.
+    func holdOpen() {
+        isHoldingOpen = true
+        setExpanded(true)
+    }
+
+    func releaseHold() {
+        guard isHoldingOpen else { return }
+        // The output list is its own reason to stay open: the AirPlay menu is opened from
+        // inside it, and closing that menu must not take the list with it.
+        guard !isShowingOutputs else { return }
+        isHoldingOpen = false
+        // Checked at once rather than waiting for the next poll: by the time a device has
+        // been chosen the cursor is usually nowhere near the island, and the island should
+        // close behind you rather than sit there open for another beat.
+        updateHover()
+    }
+
     private func updateHover() {
-        guard let anchor = Self.anchor() else { return }
+        guard !isHoldingOpen, let anchor = Self.anchor() else { return }
         let cursor = NSEvent.mouseLocation
         if isExpanded {
-            if !rect(for: Self.expanded, at: anchor).insetBy(dx: -18, dy: -18).contains(cursor) {
+            if !rect(for: size, at: anchor).insetBy(dx: -18, dy: -18).contains(cursor) {
                 setExpanded(false)
             }
         } else if rect(for: size, at: anchor).contains(cursor) {
@@ -126,6 +246,8 @@ final class MiniPlayer {
     private func dismissPanel() {
         tracker?.cancel()
         tracker = nil
+        outputsWatch?.cancel()
+        outputsWatch = nil
         panel?.contentView = nil
         panel?.orderOut(nil)
         panel = nil
