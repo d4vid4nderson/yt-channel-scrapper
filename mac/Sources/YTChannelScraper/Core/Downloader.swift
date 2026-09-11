@@ -19,9 +19,9 @@ final class Downloader {
     var activeCount: Int { jobs.filter { !$0.state.isFinished }.count }
     var hasFinished: Bool { jobs.contains { $0.state.isFinished } }
 
-    func enqueue(_ videos: [Video], quality: Quality) {
+    func enqueue(_ videos: [Video], quality: Quality, alsoAudio: Bool) {
         for video in videos {
-            let job = DownloadJob(video: video, quality: quality)
+            let job = DownloadJob(video: video, quality: quality, alsoAudio: alsoAudio)
             jobs.append(job)
             waiting.append(job)
         }
@@ -83,9 +83,13 @@ final class Downloader {
 
             do {
                 try await download(job, rung: rung, expected: expected)
-                job.state = .done
                 job.percent = 100
                 job.error = nil
+                if job.wantsSidecarAudio {
+                    await extractAudio(job)
+                    if cancelled.contains(job.id) { return }
+                }
+                job.state = .done
                 return
             } catch {
                 if cancelled.contains(job.id) { return }
@@ -187,6 +191,51 @@ final class Downloader {
             default:
                 break
             }
+        }
+    }
+
+    /// Lift an mp3 out of the video that just landed.
+    ///
+    /// A failure here does not fail the job: the video is on disk and is what was asked
+    /// for first. The reason is kept on the job so the drawer can say why the second
+    /// file is missing instead of leaving it to be noticed in Finder.
+    private func extractAudio(_ job: DownloadJob) async {
+        guard Paths.hasFFmpeg else {
+            job.audioError = "ffmpeg is not bundled with this copy of the app"
+            return
+        }
+        guard let video = job.file else {
+            job.audioError = "yt-dlp did not say where it put the video"
+            return
+        }
+
+        job.state = .processing
+        job.speed = nil
+        job.eta = nil
+
+        let destination = FFmpeg.mp3Path(for: video)
+        let stream = ProcessStream(
+            executable: FFmpeg.executable,
+            arguments: FFmpeg.mp3Arguments(from: video, to: destination),
+            environment: ProcessInfo.processInfo.environment
+        )
+        streams[job.id] = stream
+        defer { streams[job.id] = nil }
+
+        do {
+            // ffmpeg says nothing on stdout at this log level; draining it is just how
+            // the run is awaited, and how a removed job gets its process killed.
+            for try await _ in stream.lines() {
+                if cancelled.contains(job.id) { stream.terminate() }
+            }
+            if cancelled.contains(job.id) { throw CancellationError() }
+            job.audioFile = destination
+        } catch {
+            // Whether it was killed or it failed, what is on disk is half an mp3 — and
+            // one that plays for thirty seconds is worse than one that is not there.
+            try? FileManager.default.removeItem(at: destination)
+            if cancelled.contains(job.id) { return }
+            job.audioError = Self.tidy(error)
         }
     }
 

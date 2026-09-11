@@ -25,18 +25,33 @@ final class DownloadJob: Identifiable {
     let id = UUID()
     let video: Video
     let quality: Quality
+    /// Whether an mp3 is wanted beside the video as well as the video itself.
+    let alsoAudio: Bool
 
     var state: State = .queued
     var percent: Double = 0
     var speed: Double?          // bytes/sec
     var eta: Int?               // seconds
     var file: URL?
+    /// The mp3 taken out of `file`, once there is one.
+    var audioFile: URL?
     var error: String?
+    /// Why there is no mp3, on a job whose video arrived fine. Kept apart from `error`
+    /// so that a missing sidecar cannot read as a failed download — the video is there.
+    var audioError: String?
 
-    init(video: Video, quality: Quality) {
+    init(video: Video, quality: Quality, alsoAudio: Bool) {
         self.video = video
         self.quality = quality
+        self.alsoAudio = alsoAudio
     }
+
+    /// The mp3 only makes sense beside a video; asking for one at audio-only quality
+    /// describes the file yt-dlp is already being asked for.
+    var wantsSidecarAudio: Bool { alsoAudio && !quality.isAudioOnly }
+
+    /// Everything this job put on disk, for revealing in Finder.
+    var savedFiles: [URL] { [file, audioFile].compactMap(\.self) }
 
     var speedText: String {
         guard let speed, speed > 0, state == .downloading else { return "" }

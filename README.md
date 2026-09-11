@@ -32,6 +32,7 @@ you wanted it.
 | **Paged** | 25 at a time, so the first page lands in seconds even on a 5,000-video channel |
 | **Batch download** | Tick as many as you like; 3 download at a time with live per-video progress |
 | **Quality choice** | Best available, 1080p, 720p, 480p, or audio-only as 192 kbps mp3 |
+| **Video and audio at once** | Tick **Also save an mp3** and each download leaves a 192 kbps mp3 beside the video — lifted out of the file you just fetched, not downloaded twice |
 | **Find a channel** | Don't know the URL? Type a name and pick the channel from the results |
 | **Save what you use** | Bookmark channels and individual videos; each gets a side panel that slides the page over rather than covering it, so what you were reading stays readable |
 | **Bring your subscriptions** | Drop a Google Takeout `subscriptions.csv` into the saved-channels panel and every channel you follow is saved — no sign-in, no API key |
@@ -196,9 +197,11 @@ a Developer ID Application certificate and the hardened runtime, then submitting
    **Load 25 more** pulls the next page.
 4. Click any **thumbnail** to watch it first. The rest of the row toggles selection, so
    previewing never disturbs a selection you have already made.
-5. Tick what you want (filter by title, or **Select all**), choose a quality, then
+5. Tick what you want (filter by title, or **Select all**), choose a quality — and tick
+   **Also save an mp3** in the same menu if you want the audio as its own file too — then
    **Download**.
-6. Progress appears in the drawer at the bottom. Finished rows offer **Show in Finder**.
+6. Progress appears in the drawer at the bottom. Finished rows offer **Show in Finder**,
+   which selects both files when an mp3 came with the video.
 
 ### Watch before you download
 
@@ -216,6 +219,23 @@ Minimise the window — or hit the pop-out button — and playback moves to a mi
 that hangs from the top of the screen. Hovering peeks it open into full transport
 controls: scrub, ±10s, play/pause, volume and AirPlay. Click the video to put it back in
 the window.
+
+### The video and the audio, from one download
+
+**Also save an mp3** sits under the qualities in the same menu, because it is not one of
+them: every quality there is a choice of *one* file, and this asks for a second one
+alongside whichever was picked. Tick it and the picker reads `1080p + mp3`.
+
+The mp3 is cut out of the video that has already landed, with the bundled ffmpeg — the
+audio is inside that file already, so the second copy costs a re-encode (about 40s of CPU
+for an hour of audio, shown as **Processing**) instead of a second trip past YouTube's
+gating, which is the slow and failure-prone half. It lands beside the video under the same
+name, and the row reports **+ mp3** when it is there.
+
+If the conversion fails the download does not: the video is on disk and is what was asked
+for first, so the job still finishes and the row says why there is no mp3. The option is
+greyed out at audio-only quality, where it would just describe the file being fetched
+anyway.
 
 ### Downloads and keeping yt-dlp current
 
@@ -309,6 +329,7 @@ mac/
       YtDlp.swift                   every yt-dlp invocation, and the fallback ladders
       Scraper.swift                 paged channel walk
       Downloader.swift              3-at-a-time queue, progress, cancellation
+      FFmpeg.swift                  the one ffmpeg call of our own: mp3 out of a video
       Updater.swift                 in-app yt-dlp update
       PreviewSession.swift          resolves a stream, hands back an AVPlayer
       Playback.swift                AVPlayer state the mini player's controls bind to
