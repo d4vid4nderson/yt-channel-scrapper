@@ -290,6 +290,12 @@ cannot scrape.
   `canStartPictureInPictureAutomaticallyFromInline` is unavailable on macOS. Its hover is
   driven by cursor position with asymmetric zones rather than `.onHover`, because
   expanding resizes the panel, which rebuilds its tracking areas and oscillates.
+- **The quality menu is an AppKit one.** SwiftUI anchors a `Menu` to the leading edge of
+  its label and the SDK has no modifier for alignment — only `menuStyle`, `menuOrder`,
+  `menuIndicator` and `menuActionDismissBehavior`. A picker at the right end of the bar is
+  narrower than its own menu, so leading-anchored means the list opens out over the
+  Download button beside it. `NSMenu` can be popped at a point of our choosing, which is
+  the only reason that one control is not a `Menu`.
 - **The window has no title bar.** The traffic lights float over the page and the app's
   own header is the only chrome, which is why the hero can run edge to edge.
 - **Icons are rasterised from SVG** by `tools/svg2png.swift`, at each size rather than
