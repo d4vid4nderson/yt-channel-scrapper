@@ -534,33 +534,14 @@ private struct ResultsList: View {
 
             // Quality and Download sit with the list they act on, the way the web app's
             // results bar had them, now that there is no window toolbar.
-            Menu {
-                Picker("Quality", selection: $model.quality) {
-                    ForEach(Quality.menuOrder) { Text($0.label).tag($0) }
-                }
-                .pickerStyle(.inline)
-                .labelsHidden()
-
-                Divider()
-
-                // Sits under the qualities rather than among them because it is not one
-                // of them: every quality above is a choice of one file, and this asks
-                // for a second one alongside whichever was chosen.
-                Toggle("Also save an mp3", isOn: $model.alsoAudio)
-                    .disabled(model.quality.isAudioOnly)
-            } label: {
-                HStack(spacing: 9) {
-                    Image(systemName: "slider.horizontal.3")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                    Text(model.formatLabel).font(.system(size: 12.5))
-                }
-                .padding(.leading, 5)
-                .padding(.trailing, 7)
-                .padding(.vertical, 5)
-            }
-            .menuStyle(.button)
-            .fixedSize()
+            // The mp3 sits under the qualities rather than among them because it is not
+            // one of them: every quality above is a choice of one file, and this asks for
+            // a second one alongside whichever was chosen.
+            QualityMenu(
+                quality: $model.quality,
+                alsoAudio: $model.alsoAudio,
+                face: model.formatLabel
+            )
             .help(model.quality.isAudioOnly
                   ? "Which quality to fetch for the videos you pick"
                   : "Which quality to fetch for the videos you pick, and whether to keep an mp3 beside each one")
