@@ -129,14 +129,28 @@ private struct JobRow: View {
                             .foregroundStyle(job.state == .failed ? Palette.accent : Color(white: 0.62))
                             .lineLimit(1)
                     }
+                    // The mp3 is reported either way once the video is down: silence
+                    // would leave "did I get one?" to be answered in Finder.
+                    if job.state == .done, job.wantsSidecarAudio {
+                        if let audioError = job.audioError {
+                            Text("no mp3 — \(audioError)")
+                                .font(.system(size: 11))
+                                .foregroundStyle(.orange)
+                                .lineLimit(1)
+                        } else if job.audioFile != nil {
+                            Text("+ mp3")
+                                .font(.system(size: 11, weight: .medium))
+                                .foregroundStyle(Color(white: 0.62))
+                        }
+                    }
                 }
             }
 
             Spacer(minLength: 4)
 
-            if job.state == .done, let file = job.file {
+            if job.state == .done, !job.savedFiles.isEmpty {
                 SheetButton(title: "Show in Finder", icon: "magnifyingglass") {
-                    NSWorkspace.shared.activateFileViewerSelecting([file])
+                    NSWorkspace.shared.activateFileViewerSelecting(job.savedFiles)
                 }
             }
             SheetButton(

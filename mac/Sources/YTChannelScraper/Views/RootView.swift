@@ -540,12 +540,20 @@ private struct ResultsList: View {
                 }
                 .pickerStyle(.inline)
                 .labelsHidden()
+
+                Divider()
+
+                // Sits under the qualities rather than among them because it is not one
+                // of them: every quality above is a choice of one file, and this asks
+                // for a second one alongside whichever was chosen.
+                Toggle("Also save an mp3", isOn: $model.alsoAudio)
+                    .disabled(model.quality.isAudioOnly)
             } label: {
                 HStack(spacing: 9) {
                     Image(systemName: "slider.horizontal.3")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
-                    Text(model.quality.label).font(.system(size: 12.5))
+                    Text(model.formatLabel).font(.system(size: 12.5))
                 }
                 .padding(.leading, 5)
                 .padding(.trailing, 7)
@@ -553,7 +561,9 @@ private struct ResultsList: View {
             }
             .menuStyle(.button)
             .fixedSize()
-            .help("Which quality to fetch for the videos you pick")
+            .help(model.quality.isAudioOnly
+                  ? "Which quality to fetch for the videos you pick"
+                  : "Which quality to fetch for the videos you pick, and whether to keep an mp3 beside each one")
             .pointingHand()
 
             Button {
@@ -574,7 +584,7 @@ private struct ResultsList: View {
             .keyboardShortcut("d", modifiers: .command)
             .help(model.picked.isEmpty
                   ? "Tick some videos first, then download them here"
-                  : "Download the \(model.picked.count) ticked video\(model.picked.count == 1 ? "" : "s") at \(model.quality.label)  (⌘D)")
+                  : "Download the \(model.picked.count) ticked video\(model.picked.count == 1 ? "" : "s") at \(model.formatLabel)  (⌘D)")
             .pointingHand()
         }
         .padding(.horizontal, 16)

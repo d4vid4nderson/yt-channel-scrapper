@@ -7,6 +7,10 @@ final class AppModel {
     var urlText = ""
     var tab: ChannelTab = .videos
     var quality: Quality = .p1080
+    /// Whether a download leaves an mp3 beside the video as well as the video itself.
+    /// Useful for anything you want to listen to as well as watch — a mix, a talk, a
+    /// podcast — without paying for the download twice.
+    var alsoAudio = false
     var filterText = ""
     var picked: Set<String> = []
     var showDownloads = false
@@ -201,6 +205,12 @@ final class AppModel {
         }
     }
 
+    /// What the quality picker shows on its face, and what the download button promises:
+    /// the quality, plus the mp3 when one is coming with it.
+    var formatLabel: String {
+        alsoAudio && !quality.isAudioOnly ? "\(quality.label) + mp3" : quality.label
+    }
+
     func downloadPicked() {
         download(listedVideos.filter { picked.contains($0.id) })
         picked = []
@@ -210,7 +220,7 @@ final class AppModel {
     /// wider selection.
     func download(_ videos: [Video]) {
         guard !videos.isEmpty else { return }
-        downloader.enqueue(videos, quality: quality)
+        downloader.enqueue(videos, quality: quality, alsoAudio: alsoAudio)
         openDownloads()
     }
 }
