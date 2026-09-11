@@ -68,10 +68,6 @@ struct PreviewModal: View {
                         .foregroundStyle(Color(white: 0.6))
                 }
                 Spacer(minLength: 8)
-                CircleButton(
-                    icon: "arrow.up.right.and.arrow.down.left",
-                    title: "Keep playing in the island at the top of the screen"
-                ) { popOut() }
                 CircleButton(icon: "xmark", title: "Close preview") { session.close() }
             }
             .padding(.horizontal, 20)
@@ -112,6 +108,21 @@ struct PreviewModal: View {
                 }
                 .buttonStyle(.plain)
                 .help("Open this video in your browser")
+                .pointingHand()
+
+                Button(action: popOut) {
+                    HStack(spacing: 6) {
+                        NotchIcon(width: 15)
+                        Text("Notch Player")
+                    }
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color(white: 0.75))
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 7)
+                    .background(.white.opacity(0.1), in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .help("Keep it playing in the notch and put the window away")
                 .pointingHand()
 
                 Spacer()

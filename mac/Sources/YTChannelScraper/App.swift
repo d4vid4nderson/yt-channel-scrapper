@@ -13,6 +13,12 @@ struct YTChannelScraperApp: App {
         }
         .defaultSize(width: 1020, height: 700)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    Task { await model.appUpdater.check(announce: true) }
+                }
+                .disabled(model.appUpdater.isBusy)
+            }
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .toolbar) {
                 Button("Saved Channels") { model.toggleChannelsDrawer() }
@@ -21,6 +27,9 @@ struct YTChannelScraperApp: App {
                     .keyboardShortcut("2", modifiers: .command)
                 Button("Downloads") { model.toggleDownloads() }
                     .keyboardShortcut("j", modifiers: .command)
+                Divider()
+                Button("Export Library…") { model.exportLibrary() }
+                Button("Import Library…") { model.importLibrary() }
                 Divider()
                 Button("Import YouTube Subscriptions…") { model.importSubscriptions() }
                 Divider()
@@ -36,9 +45,30 @@ struct YTChannelScraperApp: App {
     }
 }
 
+extension Notification.Name {
+    /// A library file was opened from the Finder.
+    static let openLibrary = Notification.Name("YTCSOpenLibrary")
+}
+
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Files opened before the window exists — double-clicking a library launches the app,
+    /// and the open arrives before there is anything listening. Held here and drained by
+    /// the view once it is up.
+    @MainActor static var pendingLibraries: [URL] = []
+
     /// A single-window utility has nothing to stay open for once its window is gone.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        let libraries = urls.filter {
+            $0.pathExtension.lowercased() == LibraryArchive.fileExtension
+        }
+        guard !libraries.isEmpty else { return }
+        Task { @MainActor in
+            AppDelegate.pendingLibraries.append(contentsOf: libraries)
+            NotificationCenter.default.post(name: .openLibrary, object: nil)
+        }
+    }
 
     private var appearanceWatch: NSKeyValueObservation?
 

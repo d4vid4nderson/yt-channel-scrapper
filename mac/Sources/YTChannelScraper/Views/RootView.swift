@@ -19,35 +19,47 @@ struct RootView: View {
     /// looking at is still there — and still usable — while you dig through what you have
     /// kept. Nothing is dimmed, because nothing is blocked.
     var body: some View {
-        HStack(spacing: 0) {
-            SavedChannelsDrawer(model: model)
-                .drawerSlot(open: model.showChannelsDrawer, side: .leading)
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                SavedChannelsDrawer(model: model)
+                    .drawerSlot(open: model.showChannelsDrawer, side: .leading)
 
-            VStack(spacing: 0) {
-                page
-                DownloadsDrawer(
-                    downloader: model.downloader,
-                    updater: model.updater,
-                    isPresented: $model.showDownloads
-                )
-                .bottomDrawerSlot(open: model.showDownloads)
+                VStack(spacing: 0) {
+                    page
+                    DownloadsDrawer(
+                        downloader: model.downloader,
+                        updater: model.updater,
+                        isPresented: $model.showDownloads
+                    )
+                    .bottomDrawerSlot(open: model.showDownloads)
+                }
+
+                SavedVideosDrawer(model: model)
+                    .drawerSlot(open: model.showVideosDrawer, side: .trailing)
             }
 
-            SavedVideosDrawer(model: model)
-                .drawerSlot(open: model.showVideosDrawer, side: .trailing)
+            VersionFooter(updater: model.appUpdater)
         }
         .frame(minWidth: 860, minHeight: 560)
         .animation(Layout.drawerEase, value: model.showChannelsDrawer)
         .animation(Layout.drawerEase, value: model.showVideosDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
         .toolbar { chrome }
+        // Dismissal goes through the model rather than straight at the flag, so closing
+        // the sheet also clears whatever one-off answer it was showing.
+        .sheet(isPresented: Binding(
+            get: { model.appUpdater.isShowingResult },
+            set: { if !$0 { model.appUpdater.dismissResult() } }
+        )) {
+            AppUpdateSheet(updater: model.appUpdater)
+        }
         // Over everything, panels included: previewing something from a drawer has to
         // land on top of the panel it was started from.
         .overlay {
             PreviewModal(
                 session: model.preview,
                 download: { model.download([$0]) },
-                popOut: { model.popOutToIsland() }
+                popOut: { model.popOutToIsland(tuckingWindowAway: true) }
             )
         }
     }
@@ -78,11 +90,20 @@ struct RootView: View {
             // Minimising should not stop what you are watching.
             model.popOutToIsland()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openLibrary)) { _ in
+            model.drainOpenedLibraries()
+        }
         .task {
+            // A library double-clicked in the Finder may have arrived before this view
+            // existed, so the queue is drained here as well as on the notification.
+            model.drainOpenedLibraries()
             // One quiet check per launch: yt-dlp ages out of working every few weeks,
             // and the failure it causes looks like a broken app rather than stale tool.
             await model.updater.refreshCurrent()
             await model.updater.check()
+            // And one for the app itself. Quiet too — if there is nothing, nothing is
+            // said; if there is, a pill appears in the chrome and waits to be noticed.
+            await model.appUpdater.check()
         }
     }
 
