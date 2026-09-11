@@ -11,15 +11,18 @@ struct YTChannelScraperApp: App {
         WindowGroup {
             RootView(model: model)
         }
-        // No title bar: the traffic lights float over the page and the app's own
-        // header is the only chrome.
-        .windowStyle(.hiddenTitleBar)
         .defaultSize(width: 1020, height: 700)
         .commands {
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .toolbar) {
-                Button("Downloads") { model.showDownloads.toggle() }
+                Button("Saved Channels") { model.toggleChannelsDrawer() }
+                    .keyboardShortcut("1", modifiers: .command)
+                Button("Saved Videos") { model.toggleVideosDrawer() }
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Downloads") { model.toggleDownloads() }
                     .keyboardShortcut("j", modifiers: .command)
+                Divider()
+                Button("Import YouTube Subscriptions…") { model.importSubscriptions() }
                 Divider()
                 Button("Open Downloads Folder") { NSWorkspace.shared.open(Paths.downloads) }
                     .keyboardShortcut("o", modifiers: [.command, .shift])

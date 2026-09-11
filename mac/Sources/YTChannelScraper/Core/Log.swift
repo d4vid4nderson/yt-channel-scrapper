@@ -9,4 +9,5 @@ enum Log {
     static let preview = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "preview")
     static let updater = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "updater")
     static let icon = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "icon")
+    static let library = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "library")
 }

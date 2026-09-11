@@ -10,6 +10,18 @@ enum Layout {
     /// horizontal reserve for them — just the page's own gutter, which lines the home
     /// button up with the Select all chip underneath it.
     static let gutter: CGFloat = 16
+
+    /// What a favourites panel takes from the page. Wide enough for a two-line video
+    /// title beside its thumbnail, narrow enough that the list it is standing next to is
+    /// still a list you can read.
+    static let drawerWidth: CGFloat = 330
+
+    /// The downloads panel is a handful of rows and a footer, not a page of its own.
+    static let downloadsHeight: CGFloat = 340
+
+    /// One easing for all three panels, so opening any of them is recognisably the same
+    /// gesture.
+    static let drawerEase = Animation.timingCurve(0.2, 0.8, 0.3, 1, duration: 0.32)
 }
 
 enum Palette {
@@ -40,6 +52,51 @@ enum Palette {
                 startRadius: 0,
                 endRadius: 420
             )
+        }
+    }
+
+    /// A kept row. The bookmark on the trailing edge is treated as the light source —
+    /// the same red the rest of the app pools in from a corner, here leaking from the one
+    /// element that makes this row different from its neighbours.
+    ///
+    /// Deliberately weaker than `pickedSurface`: a row can be kept *and* ticked, and when
+    /// it is, the ticked state has to win. Keeping is a property of the video; ticking is
+    /// something about to happen to it.
+    static func savedSurface(height: CGFloat) -> some View {
+        ZStack {
+            Color(nsColor: .controlBackgroundColor)
+            RadialGradient(
+                stops: [
+                    .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.22), location: 0),
+                    .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.08), location: 0.42),
+                    .init(color: .clear, location: 0.8),
+                ],
+                center: UnitPoint(x: 1.0, y: 0.5),
+                startRadius: 0,
+                endRadius: max(height * 2.4, 170)
+            )
+        }
+    }
+
+    /// A row inside one of the favourites drawers. The same red light the hero throws
+    /// from its bottom-right corner, turned right down — so the panel reads as part of
+    /// the app rather than a list dropped onto it. At rest it is only a lift in the
+    /// surface; the light arrives on hover.
+    static func tileSurface(active: Bool) -> some View {
+        ZStack {
+            Color.white.opacity(active ? 0.075 : 0.04)
+            if active {
+                RadialGradient(
+                    stops: [
+                        .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.30), location: 0),
+                        .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.10), location: 0.48),
+                        .init(color: .clear, location: 0.78),
+                    ],
+                    center: UnitPoint(x: 1.02, y: 1.18),
+                    startRadius: 0,
+                    endRadius: 168
+                )
+            }
         }
     }
 
