@@ -15,3 +15,9 @@ dist-mac/
 .build/
 # Generated from icon-dark.svg at build time by tools/svg2png.swift
 *.icns
+
+# iOS
+ios/Local.xcconfig
+ios/*.xcodeproj/
+ios/build/
+ios/DerivedData/
