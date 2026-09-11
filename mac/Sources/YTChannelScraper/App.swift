@@ -23,10 +23,10 @@ struct YTChannelScraperApp: App {
             CommandGroup(after: .toolbar) {
                 Button("Saved Channels") { model.toggleChannelsDrawer() }
                     .keyboardShortcut("1", modifiers: .command)
-                Button("Saved Videos") { model.toggleVideosDrawer() }
-                    .keyboardShortcut("2", modifiers: .command)
                 Button("Downloads") { model.toggleDownloads() }
-                    .keyboardShortcut("j", modifiers: .command)
+                    .keyboardShortcut("2", modifiers: .command)
+                Button("Saved Videos") { model.toggleVideosDrawer() }
+                    .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Button("Export Library…") { model.exportLibrary() }
                 Button("Import Library…") { model.importLibrary() }

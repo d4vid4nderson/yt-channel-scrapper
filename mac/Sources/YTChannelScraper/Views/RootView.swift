@@ -136,14 +136,14 @@ struct RootView: View {
                 // on the chrome, and the panel one click away has the numbers.
                 busy: model.downloader.activeCount > 0,
                 isOn: model.showDownloads,
-                help: "What is downloading, and where it went  (⌘J)",
+                help: "What is downloading, and where it went  (⌘2)",
                 toggle: model.toggleDownloads
             )
             PanelToggle(
                 icon: "rectangle.trailingthird.inset.filled",
                 title: "Saved videos",
                 isOn: model.showVideosDrawer,
-                help: "The videos you have saved  (⌘2)",
+                help: "The videos you have saved  (⌘3)",
                 toggle: model.toggleVideosDrawer
             )
         }
