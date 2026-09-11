@@ -255,9 +255,14 @@ extension AppModel {
 // MARK: - The island
 
 extension AppModel {
-    /// Move a playing preview up to the island. Called when the window is minimised, and
-    /// by the modal's own pop-out button.
-    func popOutToIsland() {
+    /// Move a playing preview up to the island.
+    ///
+    /// Two ways in, and they want opposite things of the window. Minimising the window is
+    /// already the user putting it away, so the island simply follows; pressing the
+    /// player's own button is the user asking for the island, and leaving a full-size
+    /// window sitting behind it would be answering half the request — so that one takes
+    /// the window down as well.
+    func popOutToIsland(tuckingWindowAway: Bool = false) {
         guard let handed = preview.handOff() else { return }
         islandVideo = handed.video
         miniPlayer.onRestore = { [weak self] in self?.restoreFromIsland() }
@@ -267,6 +272,13 @@ extension AppModel {
             title: handed.video.title,
             aspectRatio: handed.ratio
         )
+        // After the island is up, so the picture never has nowhere to be: miniaturising
+        // first would take the window down with the preview still inside it.
+        if tuckingWindowAway {
+            NSApp.windows
+                .first { $0.isVisible && !$0.isMiniaturized && $0.canBecomeMain }?
+                .miniaturize(nil)
+        }
     }
 
     func restoreFromIsland() {
@@ -312,6 +324,60 @@ extension AppModel {
         )
     }
 
+    /// Write everything kept to one file, to be carried to another Mac.
+    func exportLibrary() {
+        let panel = NSSavePanel()
+        panel.title = "Export Library"
+        panel.message = "Everything you have saved — channels and videos — in one file you can copy to another Mac."
+        panel.prompt = "Export"
+        panel.nameFieldStringValue = LibraryArchive.suggestedFilename
+        panel.allowedContentTypes = [.ytcsLibrary]
+        panel.isExtensionHidden = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        do {
+            try library.export(to: url)
+        } catch {
+            library.report("Could not write \(url.lastPathComponent).")
+        }
+    }
+
+    func importLibrary() {
+        let panel = NSOpenPanel()
+        panel.title = "Import Library"
+        panel.message = "Choose a library exported from another Mac. Anything already here is kept."
+        panel.prompt = "Import"
+        panel.allowedContentTypes = [.ytcsLibrary]
+        panel.allowsMultipleSelection = false
+        panel.canChooseDirectories = false
+
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        importLibrary(from: url)
+    }
+
+    /// Take whatever the Finder handed the app while it was starting, or since.
+    func drainOpenedLibraries() {
+        let waiting = AppDelegate.pendingLibraries
+        guard !waiting.isEmpty else { return }
+        AppDelegate.pendingLibraries = []
+        for url in waiting { importLibrary(from: url) }
+    }
+
+    /// Also the path a dropped file and a double-clicked one take.
+    func importLibrary(from url: URL) {
+        do {
+            try library.merge(archiveAt: url)
+        } catch {
+            library.report(
+                (error as? LibraryArchive.Failure)?.errorDescription
+                    ?? "Could not read \(url.lastPathComponent)."
+            )
+        }
+        // Opened either way: the result is a line in that panel, and an import that
+        // reports into a drawer you cannot see has not reported anything.
+        showChannelsDrawer = true
+    }
+
     /// Ask for a Google Takeout `subscriptions.csv` and merge it into the saved list.
     ///
     /// This is the no-sign-in route to "the channels I'm subscribed to": YouTube will
@@ -337,5 +403,6 @@ extension AppModel {
         } catch {
             library.report("Could not read \(url.lastPathComponent).")
         }
+        showChannelsDrawer = true
     }
 }

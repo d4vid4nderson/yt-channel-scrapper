@@ -138,6 +138,33 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>Local use only.</string>
   <key>NSSupportsAutomaticTermination</key><false/>
+
+  <!-- The exported library: its own type, so the Finder gives it an icon and a
+       double-click opens it here rather than in a text editor. -->
+  <key>UTExportedTypeDeclarations</key>
+  <array>
+    <dict>
+      <key>UTTypeIdentifier</key><string>$BUNDLE_ID.library</string>
+      <key>UTTypeDescription</key><string>$APP_NAME Library</string>
+      <key>UTTypeConformsTo</key>
+      <array><string>public.json</string></array>
+      <key>UTTypeTagSpecification</key>
+      <dict>
+        <key>public.filename-extension</key>
+        <array><string>ytcslibrary</string></array>
+      </dict>
+    </dict>
+  </array>
+  <key>CFBundleDocumentTypes</key>
+  <array>
+    <dict>
+      <key>CFBundleTypeName</key><string>$APP_NAME Library</string>
+      <key>CFBundleTypeRole</key><string>Viewer</string>
+      <key>LSHandlerRank</key><string>Owner</string>
+      <key>LSItemContentTypes</key>
+      <array><string>$BUNDLE_ID.library</string></array>
+    </dict>
+  </array>
 </dict>
 </plist>
 PLIST

@@ -59,7 +59,7 @@ struct RootView: View {
             PreviewModal(
                 session: model.preview,
                 download: { model.download([$0]) },
-                popOut: { model.popOutToIsland() }
+                popOut: { model.popOutToIsland(tuckingWindowAway: true) }
             )
         }
     }
@@ -90,7 +90,13 @@ struct RootView: View {
             // Minimising should not stop what you are watching.
             model.popOutToIsland()
         }
+        .onReceive(NotificationCenter.default.publisher(for: .openLibrary)) { _ in
+            model.drainOpenedLibraries()
+        }
         .task {
+            // A library double-clicked in the Finder may have arrived before this view
+            // existed, so the queue is drained here as well as on the notification.
+            model.drainOpenedLibraries()
             // One quiet check per launch: yt-dlp ages out of working every few weeks,
             // and the failure it causes looks like a broken app rather than stale tool.
             await model.updater.refreshCurrent()

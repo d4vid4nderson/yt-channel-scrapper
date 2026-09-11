@@ -132,6 +132,25 @@ for: it reads the latest release, picks the `.dmg` matching the machine it is ru
 and compares the tag to its own `CFBundleShortVersionString`. A release with no `.dmg`
 attached is simply not offered.
 
+### Moving to another Mac
+
+The library is per-account and local — `~/Library/Application Support/YT Channel Scraper/`
+in your own home folder — so another login on the same Mac, or the same login on a
+different Mac, starts empty.
+
+**Export Library…** writes both lists to one `.ytcslibrary` file. Copy it across however you
+like, then **Import Library…** on the other Mac, drop it on the saved-channels panel, or
+just double-click it — the app owns the file type and opens it.
+
+Importing merges rather than replaces. Moving to a fresh Mac those are the same thing,
+because the far side is empty; where they differ, keeping both is the answer that cannot
+lose a bookmark. Channels already present are filled in field by field, so an export from a
+Mac that had resolved a channel's picture supplies one that never did.
+
+The file is plain JSON, readable and dated. It is a few hundred entries at most, and a
+transfer format you can open in a text editor is one you can still rescue something from
+long after this app is gone.
+
 ### Where the sound goes
 
 The mini player carries its own output list: the Mac's own outputs read from CoreAudio —
