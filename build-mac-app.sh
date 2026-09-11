@@ -15,7 +15,8 @@ WANT_DMG=
 
 APP_NAME="YT Channel Scraper"
 BUNDLE_ID="com.moregroup.ytchannelscraper"
-VERSION="2.0.0"
+# Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
+VERSION="${VERSION:-2.1.0}"
 OUT="dist-mac"
 APP="$OUT/$APP_NAME.app"
 
@@ -162,7 +163,10 @@ echo "==> done: $APP ($SIZE)"
 #   .dmg file — the icns copied into the file's resource fork + the custom-icon bit
 # Neither can be set on a compressed image, so the image is built read-write, dressed
 # while mounted, then converted to UDZO.
-DMG="$OUT/$APP_NAME.dmg"
+# Named for the version and the architecture, because that is what the in-app updater
+# looks for on a release: it picks the .dmg matching the machine it is running on.
+DMG_NAME="YT-Channel-Scraper-$VERSION-$(uname -m).dmg"
+DMG="$OUT/$DMG_NAME"
 RW="$OUT/$APP_NAME.rw.dmg"
 echo "==> building the DMG"
 rm -rf "$OUT/dmg" "$DMG" "$RW" && mkdir -p "$OUT/dmg"
@@ -191,6 +195,9 @@ rm -rf "$RSRC"
 
 DMG_SIZE=$(du -sh "$DMG" | cut -f1)
 echo "==> done: $DMG ($DMG_SIZE)"
+echo
+echo "    To publish it — this is what the app's own updater reads:"
+echo "        gh release create v$VERSION \"$DMG\" --title \"v$VERSION\" --notes \"…\""
 echo
 echo "    Ad-hoc signed, not notarised. A copy downloaded through a browser carries"
 echo "    the quarantine flag, and Gatekeeper refuses ad-hoc-signed apps from"

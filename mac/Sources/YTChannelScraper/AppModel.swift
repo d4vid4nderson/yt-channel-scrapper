@@ -27,6 +27,7 @@ final class AppModel {
     let library = Library()
     let downloader = Downloader()
     let updater = Updater()
+    let appUpdater = AppUpdater()
     let preview = PreviewSession()
     let miniPlayer = MiniPlayer()
 

@@ -224,7 +224,8 @@ final class Updater {
 }
 
 /// Reports download progress; `URLSession`'s async `download` gives none on its own.
-private final class DownloadWatcher: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
+/// Shared with `AppUpdater`, which has the same problem with a much larger file.
+final class DownloadWatcher: NSObject, URLSessionDownloadDelegate, @unchecked Sendable {
     private let onProgress: @Sendable (Double) -> Void
 
     init(onProgress: @escaping @Sendable (Double) -> Void) {

@@ -13,6 +13,12 @@ struct YTChannelScraperApp: App {
         }
         .defaultSize(width: 1020, height: 700)
         .commands {
+            CommandGroup(after: .appInfo) {
+                Button("Check for Updates…") {
+                    Task { await model.appUpdater.check(announce: true) }
+                }
+                .disabled(model.appUpdater.isBusy)
+            }
             CommandGroup(replacing: .newItem) {}
             CommandGroup(after: .toolbar) {
                 Button("Saved Channels") { model.toggleChannelsDrawer() }
