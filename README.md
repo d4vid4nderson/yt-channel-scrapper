@@ -37,6 +37,7 @@ you wanted it.
 | **Bring your subscriptions** | Drop a Google Takeout `subscriptions.csv` into the saved-channels panel and every channel you follow is saved — no sign-in, no API key |
 | **Watch first** | Preview any video in the app — including Shorts and live streams — without downloading it |
 | **Keeps playing** | Minimise and playback moves to a mini player pinned to the notch, with its own output picker — speakers, headphones or AirPlay, one tap each |
+| **Updates itself** | The app checks GitHub for a newer release, installs it, and reopens into it — no re-download, no drag to Applications |
 | **Self-updating yt-dlp** | Update from inside the app; it applies to the very next action, no restart |
 | **Resilient** | Steps down through cookies → JS solver → android client when YouTube gates a format |
 
@@ -102,6 +103,34 @@ Subscriptions…**. Re-importing later merges rather than duplicates. It is a sn
 live feed — that is the trade for needing no OAuth client, no app review by Google, and no
 sign-in that expires. Channel pictures are not in the CSV, so they fill in quietly in the
 background, two at a time, and are then kept.
+
+### Updating the app
+
+The version sits at the foot of the window. When a newer release is out that line says so,
+and clicking it — or **Check for Updates…** in the app menu — shows what changed and offers
+to install it. The app downloads the release's `.dmg`, mounts it, checks the bundle inside
+is really this app and really newer, swaps it in, and reopens into the new version.
+
+The swap is a rename rather than a write, which is what makes replacing a running app safe:
+the executable this process started from stays valid until it exits.
+
+Fetching the disk image in-process also sidesteps the thing that makes this app awkward to
+hand out. Gatekeeper refuses ad-hoc-signed apps that arrive quarantined, and quarantine is
+set by the browser, not by the network — so an update installed from inside the app needs
+none of the Open Anyway dance a browser download does.
+
+Cutting a release is two commands:
+
+```bash
+VERSION=2.2.0 ./build-mac-app.sh --dmg
+gh release create v2.2.0 "dist-mac/YT-Channel-Scraper-2.2.0-arm64.dmg" \
+  --title "v2.2.0" --notes "what changed"
+```
+
+The DMG is named for its version and architecture because that is what the updater looks
+for: it reads the latest release, picks the `.dmg` matching the machine it is running on,
+and compares the tag to its own `CFBundleShortVersionString`. A release with no `.dmg`
+attached is simply not offered.
 
 ### Where the sound goes
 
