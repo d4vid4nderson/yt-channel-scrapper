@@ -181,7 +181,7 @@ final class AppUpdater {
             _ = try FileManager.default.replaceItemAt(destination, withItemAt: staged)
 
             state = .relaunching
-            try await Self.relaunch(destination)
+            try Self.relaunch(destination)
         } catch {
             state = .failed(Self.describe(error))
             isShowingResult = true
@@ -257,16 +257,43 @@ final class AppUpdater {
         guard Updater.isNewer(version, than: installed) else { throw Failure.notNewer(version) }
     }
 
-    /// Start the new copy, then stand down. `createsNewApplicationInstance` is what lets
-    /// the two overlap — without it macOS simply activates this one, and the update is
-    /// installed but never running.
-    private static func relaunch(_ bundle: URL) async throws {
-        let configuration = NSWorkspace.OpenConfiguration()
-        configuration.createsNewApplicationInstance = true
-        configuration.activates = true
-        _ = try await NSWorkspace.shared.openApplication(at: bundle, configuration: configuration)
-        try? await Task.sleep(for: .milliseconds(600))
+    /// Stand down, and have something outside this process start the new copy.
+    ///
+    /// Asking `NSWorkspace` to open the bundle *this process is running from* — a bundle
+    /// whose contents were replaced a moment ago — is the one case that hangs: the call
+    /// never returns, so the terminate after it never runs, and an update that installed
+    /// perfectly sits on "Reopening the new version…" forever. Which is a bad way for
+    /// something whose whole job is to be unattended to fail.
+    ///
+    /// So nothing here waits on LaunchServices. A detached shell outlives this process,
+    /// watches for the pid to go, and only then opens the new copy — by which point there
+    /// is no second instance to negotiate and no replaced bundle still in use.
+    private static func relaunch(_ bundle: URL) throws {
+        let pid = ProcessInfo.processInfo.processIdentifier
+        let script = """
+        while /bin/kill -0 \(pid) 2>/dev/null; do /bin/sleep 0.2; done
+        /usr/bin/open -n \(shellQuoted(bundle.path))
+        """
+        let waiter = Process()
+        waiter.executableURL = URL(fileURLWithPath: "/bin/sh")
+        waiter.arguments = ["-c", script]
+        try waiter.run()
+
         NSApp.terminate(nil)
+
+        // If something refuses the quit, the waiter is left watching a pid that never
+        // goes and the update is installed but not running. Past the point of no return
+        // — the bundle on disk is already the new one — staying alive on code that no
+        // longer exists is the worse outcome of the two.
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(5))
+            exit(0)
+        }
+    }
+
+    /// The app's path has spaces in it, and this goes through `sh`.
+    private static func shellQuoted(_ path: String) -> String {
+        "'" + path.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     @discardableResult
