@@ -45,17 +45,33 @@ struct SavedChannelsDrawer: View {
                 Divider().overlay(.white.opacity(0.09))
                 list
                 Divider().overlay(.white.opacity(0.09))
-                DrawerFooterButton(
-                    icon: "square.and.arrow.down",
-                    title: "Import subscriptions…",
-                    hint: "or drop a .csv",
-                    action: model.importSubscriptions
-                )
-                .help("Merge a Google Takeout subscriptions.csv into your saved channels")
+                if let note = model.library.note {
+                    DrawerNote(text: note) { model.library.report(nil) }
+                }
+                HStack(spacing: 0) {
+                    DrawerFooterButton(
+                        icon: "square.and.arrow.down",
+                        title: "Import subscriptions…",
+                        action: model.importSubscriptions
+                    )
+                    .help("Merge a Google Takeout subscriptions.csv into your saved channels")
+
+                    Spacer(minLength: 0)
+
+                    // Moving Macs is a rare, deliberate act, so it sits behind a menu
+                    // rather than taking a permanent row of its own.
+                    LibraryMenu(model: model)
+                }
             }
             // The same drop the shelf takes, in the panel that has now become the place
             // those channels live.
             .dropDestination(for: URL.self) { urls, _ in
+                if let library = urls.first(where: {
+                    $0.pathExtension.lowercased() == LibraryArchive.fileExtension
+                }) {
+                    model.importLibrary(from: library)
+                    return true
+                }
                 guard let csv = urls.first(where: { $0.pathExtension.lowercased() == "csv" })
                 else { return false }
                 model.importSubscriptions(from: csv)
@@ -506,6 +522,64 @@ private struct DrawerFooterButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .pointingHand()
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+}
+
+
+/// What the last import or export did.
+///
+/// The landing shelf used to carry this line and went with it; without somewhere to say
+/// "imported 184 channels", an import is a file dialog closing and nothing else visibly
+/// happening, which reads as failure.
+private struct DrawerNote: View {
+    let text: String
+    let dismiss: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundStyle(.white.opacity(0.62))
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 4)
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.45))
+            }
+            .buttonStyle(.plain)
+            .help("Dismiss")
+            .pointingHand()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.white.opacity(0.04))
+    }
+}
+
+/// Carrying the library somewhere else, and bringing one back.
+private struct LibraryMenu: View {
+    @Bindable var model: AppModel
+    @State private var hovering = false
+
+    var body: some View {
+        Menu {
+            Button("Export Library…") { model.exportLibrary() }
+                .disabled(model.library.isEmpty && model.library.videos.isEmpty)
+            Button("Import Library…") { model.importLibrary() }
+        } label: {
+            Image(systemName: "ellipsis.circle")
+                .font(.system(size: 13))
+                .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.5))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .fixedSize()
+        .padding(.trailing, 16)
+        .help("Move your saved channels and videos to another Mac")
         .pointingHand()
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.14), value: hovering)

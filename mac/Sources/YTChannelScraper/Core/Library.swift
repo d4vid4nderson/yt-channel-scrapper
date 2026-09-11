@@ -16,7 +16,8 @@ final class Library {
     /// recency is the order that matters.
     private(set) var videos: [Video] = []
 
-    /// What the last import did, shown next to the shelf. Cleared by the next one.
+    /// What the last import or export did, shown at the foot of the channels panel.
+    /// Cleared by the next one, and by dismissing it.
     private(set) var note: String?
 
     private static var channelsFile: URL { Paths.support.appendingPathComponent("channels.json") }
@@ -58,7 +59,7 @@ final class Library {
         persistChannels()
     }
 
-    /// Say what just happened, next to the shelf.
+    /// Say what just happened, at the foot of the channels panel.
     func report(_ message: String?) { note = message }
 
     // MARK: - Channels
@@ -287,5 +288,71 @@ final class Library {
                 "could not write \(file.lastPathComponent, privacy: .public): \(error.localizedDescription, privacy: .public)"
             )
         }
+    }
+}
+
+
+// MARK: - Moving to another Mac
+
+extension Library {
+    var archive: LibraryArchive {
+        LibraryArchive(channels: channels, videos: videos)
+    }
+
+    func export(to url: URL) throws {
+        try archive.write(to: url)
+        note = "Exported \(channels.count) channel\(channels.count == 1 ? "" : "s") and \(videos.count) video\(videos.count == 1 ? "" : "s")."
+    }
+
+    /// Merge rather than replace, the same way a repeated Takeout import does.
+    ///
+    /// Moving to a second Mac is the obvious case and there merging and replacing are the
+    /// same thing, because the far side is empty. Where they differ — a Mac you already
+    /// use — keeping both is the answer that cannot lose anything, and losing a bookmark
+    /// silently is the one outcome worth designing against.
+    @discardableResult
+    func merge(_ archive: LibraryArchive) -> (channels: Int, videos: Int) {
+        var freshChannels = 0
+        for incoming in archive.channels {
+            guard let index = channels.firstIndex(where: { $0.id == incoming.id }) else {
+                channels.append(incoming)
+                freshChannels += 1
+                continue
+            }
+            // Whichever record knows more wins, field by field: an export from a Mac that
+            // had resolved the avatar should fill in one that never did, and vice versa.
+            var merged = channels[index]
+            if !incoming.title.isEmpty { merged.title = incoming.title }
+            merged.handle = merged.handle ?? incoming.handle
+            merged.subscribers = merged.subscribers ?? incoming.subscribers
+            merged.avatar = merged.avatar ?? incoming.avatar
+            merged.savedAt = [merged.savedAt, incoming.savedAt].compactMap { $0 }.min()
+            merged.lastOpenedAt = [merged.lastOpenedAt, incoming.lastOpenedAt]
+                .compactMap { $0 }.max()
+            channels[index] = merged
+        }
+
+        // Appended rather than inserted: the list is newest-first for this library, and
+        // another Mac's history is not news here.
+        var freshVideos = 0
+        for incoming in archive.videos where !containsVideo(incoming.id) {
+            videos.append(incoming)
+            freshVideos += 1
+        }
+
+        sortChannels()
+        persistChannels()
+        persistVideos()
+        fillInAvatars()
+        return (freshChannels, freshVideos)
+    }
+
+    @discardableResult
+    func merge(archiveAt url: URL) throws -> (channels: Int, videos: Int) {
+        let added = merge(try LibraryArchive.read(from: url))
+        note = added == (0, 0)
+            ? "Everything in that library was already here."
+            : "Added \(added.channels) channel\(added.channels == 1 ? "" : "s") and \(added.videos) video\(added.videos == 1 ? "" : "s")."
+        return added
     }
 }
