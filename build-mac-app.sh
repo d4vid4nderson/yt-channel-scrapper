@@ -16,7 +16,7 @@ WANT_DMG=
 APP_NAME="YT Channel Scraper"
 BUNDLE_ID="com.moregroup.ytchannelscraper"
 # Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
-VERSION="${VERSION:-2.4.0}"
+VERSION="${VERSION:-2.4.1}"
 OUT="dist-mac"
 APP="$OUT/$APP_NAME.app"
 
