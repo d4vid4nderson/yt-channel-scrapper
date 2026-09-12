@@ -62,6 +62,12 @@ enum Palette {
     /// Deliberately weaker than `pickedSurface`: a row can be kept *and* ticked, and when
     /// it is, the ticked state has to win. Keeping is a property of the video; ticking is
     /// something about to happen to it.
+    ///
+    /// Mac-only, and the one thing in this otherwise platform-clean file that is: the
+    /// plate underneath is `.controlBackgroundColor`, which is AppKit's. The phone
+    /// compiles this file in place and draws its own saved rows in `Views/Style.swift`,
+    /// so the conditional costs iOS nothing and leaves the Mac's appearance untouched.
+    #if os(macOS)
     static func savedSurface(height: CGFloat) -> some View {
         ZStack {
             Color(nsColor: .controlBackgroundColor)
@@ -77,6 +83,7 @@ enum Palette {
             )
         }
     }
+    #endif
 
     /// A row inside one of the favourites drawers. The same red light the hero throws
     /// from its bottom-right corner, turned right down — so the panel reads as part of

@@ -2,7 +2,7 @@
 # Rasterise Support/icon-ios.svg into the asset catalog. Run once after cloning; the
 # generated PNG is committed, so this only needs re-running when the artwork changes.
 #
-# Deliberately does not require Homebrew: the fallback renders the SVG in a WKWebView,
+# Deliberately does not require Homebrew: the fallback renders the SVG through CoreSVG,
 # which every Mac already has. App Store Connect rejects an icon with an alpha channel,
 # so the PNG is flattened onto opaque black on the way out either way.
 set -euo pipefail
@@ -15,72 +15,51 @@ if command -v rsvg-convert >/dev/null 2>&1; then
   echo "==> rasterising with rsvg-convert"
   rsvg-convert -w 1024 -h 1024 -b '#090909' "$SRC" -o "$OUT"
 else
-  echo "==> rasterising with WKWebView (no Homebrew needed)"
+  echo "==> rasterising with CoreSVG (no Homebrew needed)"
   TMP="$(mktemp -d)"
   trap 'rm -rf "$TMP"' EXIT
   cat > "$TMP/render.swift" <<'SWIFT'
 import AppKit
-import WebKit
 
-// A snapshot needs a run loop and a real window to draw into, so this is an NSApplication
-// rather than a plain script: an off-screen WKWebView never finishes its first paint.
+// NSImage reads an SVG through CoreSVG: no WebKit, no window, no run loop. This replaced
+// a WKWebView snapshot, which needed all three and crashes outright inside
+// -takeSnapshotWithConfiguration: on macOS 26. tools/svg2png.swift has rendered the Mac
+// icon this way all along, so both icons now come off the same path.
+//
+// CoreSVG does not implement <feMerge>, so the glow filter is dropped and the mark comes
+// out flat. Install librsvg (brew install librsvg) for a faithful render - the branch
+// above prefers rsvg-convert whenever it is present.
 let source = URL(fileURLWithPath: CommandLine.arguments[1])
 let destination = URL(fileURLWithPath: CommandLine.arguments[2])
 
-final class Renderer: NSObject, WKNavigationDelegate {
-    let web = WKWebView(frame: NSRect(x: 0, y: 0, width: 1024, height: 1024))
-    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1024, height: 1024),
-                          styleMask: [.borderless], backing: .buffered, defer: false)
-
-    func run() {
-        web.navigationDelegate = self
-        window.contentView = web
-        window.orderBack(nil)
-        // The SVG is wrapped so it fills the viewport exactly with no page margin —
-        // otherwise the snapshot comes back 1024 wide with the art inset by 8px.
-        let svg = (try? String(contentsOf: source, encoding: .utf8)) ?? ""
-        web.loadHTMLString(
-            "<html><body style=\"margin:0;background:#090909\">\(svg)</body></html>",
-            baseURL: nil)
-    }
-
-    func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
-        // One runloop turn after didFinish: the filter and gradient are composited after
-        // the navigation completes, and snapshotting immediately catches a flat plate.
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-            let config = WKSnapshotConfiguration()
-            config.rect = NSRect(x: 0, y: 0, width: 1024, height: 1024)
-            webView.takeSnapshot(with: config) { image, error in
-                guard let image, error == nil else {
-                    FileHandle.standardError.write(Data("snapshot failed: \(error?.localizedDescription ?? "?")\n".utf8))
-                    exit(1)
-                }
-                // Redraw onto an opaque bitmap: WKWebView hands back a representation
-                // with alpha, and App Store Connect refuses an icon that has one.
-                let flat = NSBitmapImageRep(
-                    bitmapDataPlanes: nil, pixelsWide: 1024, pixelsHigh: 1024,
-                    bitsPerSample: 8, samplesPerPixel: 3, hasAlpha: false, isPlanar: false,
-                    colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
-                NSGraphicsContext.saveGraphicsState()
-                NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: flat)
-                NSColor(red: 0.035, green: 0.035, blue: 0.035, alpha: 1).setFill()
-                NSRect(x: 0, y: 0, width: 1024, height: 1024).fill()
-                image.draw(in: NSRect(x: 0, y: 0, width: 1024, height: 1024))
-                NSGraphicsContext.restoreGraphicsState()
-
-                guard let png = flat.representation(using: .png, properties: [:]) else { exit(1) }
-                try? png.write(to: destination)
-                exit(0)
-            }
-        }
-    }
+guard let image = NSImage(contentsOf: source) else {
+    FileHandle.standardError.write("could not load \(source.path)\n".data(using: .utf8)!)
+    exit(1)
 }
+image.size = NSSize(width: 1024, height: 1024)
 
-let app = NSApplication.shared
-app.setActivationPolicy(.accessory)
-let renderer = Renderer()
-renderer.run()
-app.run()
+// noneSkipLast, not a 24-bit RGB rep: App Store Connect rejects an icon with an alpha
+// channel, but CoreGraphics has no packed 24-bit format and traps if asked for one
+// (samplesPerPixel: 3, hasAlpha: false). This is 32-bit with the alpha ignored, which
+// encodes to a PNG carrying no alpha channel.
+guard let context = CGContext(
+    data: nil, width: 1024, height: 1024, bitsPerComponent: 8, bytesPerRow: 0,
+    space: CGColorSpace(name: CGColorSpace.sRGB)!,
+    bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+) else { exit(1) }
+
+context.setFillColor(red: 0.035, green: 0.035, blue: 0.035, alpha: 1)
+context.fill(CGRect(x: 0, y: 0, width: 1024, height: 1024))
+
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = NSGraphicsContext(cgContext: context, flipped: false)
+image.draw(in: NSRect(x: 0, y: 0, width: 1024, height: 1024))
+NSGraphicsContext.restoreGraphicsState()
+
+guard let cgImage = context.makeImage(),
+      let png = NSBitmapImageRep(cgImage: cgImage).representation(using: .png, properties: [:])
+else { exit(1) }
+try png.write(to: destination)
 SWIFT
   swift "$TMP/render.swift" "$PWD/$SRC" "$PWD/$OUT"
 fi

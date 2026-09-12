@@ -302,8 +302,8 @@ final class Library {
             encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
             try encoder.encode(value).write(to: file, options: .atomic)
         } catch {
-            Log.library.error("could not write \(file.lastPathComponent, privacy: .public): "
-                + "\(error.localizedDescription, privacy: .public)")
+            let detail = "could not write \(file.lastPathComponent): \(error.localizedDescription)"
+            Log.library.error("\(detail, privacy: .public)")
         }
     }
 }

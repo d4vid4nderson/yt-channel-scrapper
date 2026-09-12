@@ -136,9 +136,8 @@ enum StreamResolver {
                     return resolved
                 }
             } catch {
-                Log.engine.info(
-                    "\(client.key, privacy: .public) failed \(videoID, privacy: .public): "
-                        + "\(error.localizedDescription, privacy: .public)")
+                let detail = "\(client.key) failed \(videoID): \(error.localizedDescription)"
+                Log.engine.info("\(detail, privacy: .public)")
                 lastError = error
             }
         }

@@ -20,7 +20,10 @@ ship signed. So the UI moved and **the engine was rewritten**, natively, in Swif
 
 Nothing under `mac/` is modified. The iOS target compiles the Mac package's `Model/`,
 `Core/Log.swift`, `Core/LibraryArchive.swift` and `Views/Palette.swift` **in place** —
-they carry no AppKit — and everything iOS needs on top of them is an extension. A
+nothing in them reaches for AppKit on this platform, the one exception being
+`Palette.savedSurface`, which is `#if os(macOS)` because its plate is an AppKit system
+colour and only the Mac's rows use it — and everything iOS needs on top of them is an
+extension. A
 mistake here cannot break the shipping Mac app. A `.ytcslibrary` exported on one opens
 on the other.
 

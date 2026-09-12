@@ -59,14 +59,14 @@ final class Playback {
                 self.state = .ready(built.player)
                 built.player.play()
                 self.watch(built.player)
-                Log.preview.info("playing \(video.id, privacy: .public) "
-                    + "via \(resolved.client, privacy: .public)")
+                let detail = "playing \(video.id) via \(resolved.client)"
+                Log.preview.info("\(detail, privacy: .public)")
             } catch is CancellationError {
                 Log.preview.info("cancelled \(video.id, privacy: .public)")
             } catch {
                 let message = Self.describe(error)
-                Log.preview.error("failed \(video.id, privacy: .public): "
-                    + "\(message, privacy: .public)")
+                let detail = "failed \(video.id): \(message)"
+                Log.preview.error("\(detail, privacy: .public)")
                 self.state = .failed(message)
             }
         }

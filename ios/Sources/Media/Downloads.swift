@@ -155,8 +155,8 @@ final class Downloads {
         } catch {
             job.error = Self.describe(error)
             job.state = .failed
-            Log.transfer.error("failed \(job.video.id, privacy: .public): "
-                + "\(error.localizedDescription, privacy: .public)")
+            let detail = "failed \(job.video.id): \(error.localizedDescription)"
+            Log.transfer.error("\(detail, privacy: .public)")
         }
     }
 
