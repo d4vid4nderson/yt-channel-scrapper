@@ -54,8 +54,8 @@ struct LibraryView: View {
     private var channels: some View {
         Group {
             if model.library.channels.isEmpty {
-                Placeholder(icon: "star", title: "No saved channels",
-                            detail: "Star a channel to keep it here, or import your "
+                Placeholder(icon: "bookmark", title: "No saved channels",
+                            detail: "Bookmark a channel to keep it here, or import your "
                                 + "YouTube subscriptions from a Takeout export.")
             } else {
                 List {

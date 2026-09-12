@@ -77,7 +77,7 @@ struct ChannelRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             if isSaved {
-                Image(systemName: "star.fill")
+                Image(systemName: "bookmark.fill")
                     .font(.system(size: 12))
                     .foregroundStyle(Palette.accent)
             }
@@ -87,7 +87,11 @@ struct ChannelRow: View {
     }
 }
 
-/// The header above a channel's videos: who it is, and whether it is starred.
+/// The header above a channel's videos: who it is, and whether it is kept.
+///
+/// A bookmark rather than a star, for the reason the Mac's `SaveMark` gives: a star is a
+/// rating and this is not one — nothing is being scored, it is being put somewhere to
+/// come back to. The videos here already used a bookmark; the channels did not.
 struct ChannelHeader: View {
     let channel: Channel
     let isSaved: Bool
@@ -113,7 +117,7 @@ struct ChannelHeader: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             Button(action: onToggleSaved) {
-                Image(systemName: isSaved ? "star.fill" : "star")
+                Image(systemName: isSaved ? "bookmark.fill" : "bookmark")
                     .font(.system(size: 17))
                     .foregroundStyle(isSaved ? Palette.accent : Color.secondaryText)
                     .tappable()

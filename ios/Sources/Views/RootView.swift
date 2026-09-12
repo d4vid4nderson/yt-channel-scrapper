@@ -16,7 +16,7 @@ struct RootView: View {
                 .tabItem { Label("Browse", systemImage: "magnifyingglass") }
 
             LibraryView(model: model)
-                .tabItem { Label("Saved", systemImage: "star") }
+                .tabItem { Label("Saved", systemImage: "bookmark") }
 
             DownloadsView(model: model)
                 .tabItem { Label("Downloads", systemImage: "arrow.down.circle") }

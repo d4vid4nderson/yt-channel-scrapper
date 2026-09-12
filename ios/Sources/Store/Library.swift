@@ -37,7 +37,7 @@ final class Library {
 
     var isEmpty: Bool { channels.isEmpty }
 
-    /// The shelf's order: what you reached for most recently, then what you starred most
+    /// The shelf's order: what you reached for most recently, then what you bookmarked most
     /// recently. Alphabetical is right for a list you scan for a known name and wrong for
     /// a shelf of six — there, the six should be the six you actually use.
     var recent: [Channel] {

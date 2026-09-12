@@ -89,7 +89,7 @@ struct BrowseView: View {
                         model.library.toggle(channel)
                     } label: {
                         Label(model.library.contains(channel.id) ? "Unsave" : "Save",
-                              systemImage: model.library.contains(channel.id) ? "star.slash" : "star")
+                              systemImage: model.library.contains(channel.id) ? "bookmark.slash" : "bookmark")
                     }
                     .tint(Palette.accent)
                 }
