@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// The downloads panel, as a tab.
 ///

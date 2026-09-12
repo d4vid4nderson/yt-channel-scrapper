@@ -123,7 +123,7 @@ struct Thumbnail: View {
 struct Placeholder: View {
     let icon: String
     let title: String
-    var detail: String?
+    var detail: String? = nil
 
     var body: some View {
         VStack(spacing: 10) {

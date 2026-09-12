@@ -38,7 +38,7 @@ enum Renderers {
     /// Only safe where the key is unique in the subtree — `channelMetadataRenderer`,
     /// the `videoId` inside one item's tap command. Never use it to pick between
     /// candidates.
-    static func findFirst<T>(_ key: String, in node: Any, as: T.Type = T.self) -> T? {
+    static func findFirst<T>(_ key: String, in node: Any?, as: T.Type = T.self) -> T? {
         var result: T?
         sweep(node) { object in
             guard result == nil else { return }
@@ -61,7 +61,7 @@ enum Renderers {
         return found
     }
 
-    private static func sweep(_ node: Any, _ visit: ([String: Any]) -> Void) {
+    private static func sweep(_ node: Any?, _ visit: ([String: Any]) -> Void) {
         if let object = node as? [String: Any] {
             visit(object)
             for value in object.values { sweep(value, visit) }
@@ -281,7 +281,7 @@ enum Renderers {
     /// Shorts have their own shape again: no duration at all, and the title and view
     /// count in an overlay block rather than a metadata row.
     private static func shortsVideo(from lockup: [String: Any], channel: Channel?) -> Video? {
-        var id = findFirst("videoId", in: lockup["onTap"] as Any, as: String.self)
+        var id = findFirst("videoId", in: lockup["onTap"], as: String.self)
         if id == nil, let entity = lockup["entityId"] as? String,
            entity.hasPrefix("shorts-shelf-item-") {
             id = String(entity.dropFirst("shorts-shelf-item-".count))
@@ -312,8 +312,8 @@ enum Renderers {
         let ownerName = text(renderer["ownerText"])
             ?? text(renderer["longBylineText"])
             ?? text(renderer["shortBylineText"])
-        let ownerID = findFirst("browseId", in: renderer["ownerText"] as Any, as: String.self)
-            ?? findFirst("browseId", in: renderer["longBylineText"] as Any, as: String.self)
+        let ownerID = findFirst("browseId", in: renderer["ownerText"], as: String.self)
+            ?? findFirst("browseId", in: renderer["longBylineText"], as: String.self)
 
         return Video(
             id: id,
@@ -367,7 +367,7 @@ enum Renderers {
         // count and throws the handle away. Verified live; see Tools/check-renderers.py.
         let subscriberField = text(renderer["subscriberCountText"])
         // The count is on the accessibility label when the visible text is abbreviated.
-        let videoCountField = findFirst("label", in: renderer["videoCountText"] as Any, as: String.self)
+        let videoCountField = findFirst("label", in: renderer["videoCountText"], as: String.self)
             ?? text(renderer["videoCountText"])
 
         var handle = subscriberField?.hasPrefix("@") == true ? subscriberField : nil

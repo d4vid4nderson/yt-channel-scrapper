@@ -24,6 +24,10 @@ extension Video {
         // assignments: `Video`'s stored properties are `let`, so a second memberwise
         // initialiser would have to live in the type itself. Force-unwrapped because the
         // only failure `init?(json:)` has is a missing id, and `id` is non-optional here.
+        // The only way `init?(json:)` fails is an empty id, and every caller in
+        // `Renderers` already excludes that — but a force-unwrap that crashes with no
+        // explanation is worse than one that says why.
+        precondition(!id.isEmpty, "Video needs an id")
         var json: [String: Any] = ["id": id, "title": title]
         if let duration { json["duration"] = NSNumber(value: duration) }
         if let views { json["view_count"] = NSNumber(value: views) }

@@ -60,13 +60,14 @@ actor Transfer {
 
         return try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { continuation in
-                Task {
-                    await delegate.register(
-                        task: task, destination: destination,
-                        progress: onProgress, continuation: continuation
-                    )
-                    task.resume()
-                }
+                // Registered before the task is resumed, not after: a cached or very
+                // small response can complete before the next line runs, and a delegate
+                // callback that finds no entry drops the download on the floor.
+                delegate.register(
+                    task: task, destination: destination,
+                    progress: onProgress, continuation: continuation
+                )
+                task.resume()
             }
         } onCancel: {
             task.cancel()
@@ -77,7 +78,9 @@ actor Transfer {
     /// that finished during a relaunch is not left holding a temporary file forever.
     func discardOrphans() async {
         let tasks = await session.allTasks
-        for task in tasks where await delegate.isUnclaimed(task) {
+        // `isUnclaimed` is a plain lock-guarded read, not an async call — an `await` in
+        // the `where` clause would not compile.
+        for task in tasks where delegate.isUnclaimed(task) {
             task.cancel()
         }
     }

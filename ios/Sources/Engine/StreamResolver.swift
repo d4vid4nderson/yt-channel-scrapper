@@ -192,9 +192,13 @@ enum StreamResolver {
 
         // Descrambling is per-format and only the web client needs it, so the solver is
         // fetched once here rather than per stream.
-        let solver: JSSolver? = client.needsDescrambling
-            ? try? await JSChallenge.shared.solver()
-            : nil
+        var solver: JSSolver?
+        if client.needsDescrambling {
+            // A solver that cannot be built is not an error here: the formats simply
+            // stay scrambled, `url(from:solver:)` returns nil for them, and the ladder
+            // moves on. See JSChallenge's note on why that is the expected case today.
+            solver = try? await JSChallenge.shared.solver()
+        }
         let streams = raw.compactMap { stream(from: $0, solver: solver) }
         guard !streams.isEmpty else { return nil }
 

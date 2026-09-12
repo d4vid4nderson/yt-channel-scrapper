@@ -37,7 +37,7 @@ struct LibraryView: View {
             .fileImporter(
                 isPresented: Binding(get: { importing != nil },
                                      set: { if !$0 { importing = nil } }),
-                allowedContentTypes: importing.map { [$0] } ?? [],
+                allowedContentTypes: importing.map { [$0] } ?? [.data],
                 allowsMultipleSelection: false
             ) { result in
                 guard case .success(let urls) = result, let url = urls.first else { return }
