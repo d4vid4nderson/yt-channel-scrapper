@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+  <!-- The iOS variant of ../../icon.svg. Two differences, both forced by the platform:
+       the plate is full-bleed and square (iOS masks the corners itself, and a
+       pre-rounded icon shows a visible double-radius), and nothing is transparent —
+       App Store Connect rejects an icon with an alpha channel outright. -->
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f1f1f"/><stop offset="1" stop-color="#090909"/>
+    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="22" result="b"/>
+      <feFlood flood-color="#ff1a1a" flood-opacity="0.85"/>
+      <feComposite in2="b" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#plate)"/>
+  <!-- Mark is 176x124. iOS trims ~10% off every edge for the mask, so the mark sits a
+       little smaller than on the Mac: 3.0 scales it to 528 wide, centred. -->
+  <g filter="url(#glow)" transform="translate(248 326) scale(3.0)">
+    <path fill="#ff0000" d="M172.32,19.36c-2-7.6-8-13.6-15.6-15.6C143.12,0,88,0,88,0
+      S32.88,0,19.28,3.76c-7.6,2-13.6,8-15.6,15.6C0,32.96,0,62,0,62s0,29.04,3.68,42.64
+      c2,7.6,8,13.6,15.6,15.6C32.88,124,88,124,88,124s55.12,0,68.72-3.76c7.6-2,13.6-8,15.6-15.6
+      C176,91.04,176,62,176,62S176,32.96,172.32,19.36Z"/>
+    <circle cx="88" cy="62" r="31" fill="none" stroke="#fff" stroke-width="9"/>
+    <path d="M88 45v23M88 68l11-11M88 68l-11-11M75 80h26" fill="none" stroke="#fff"
+          stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+</svg>

@@ -1,0 +1,6 @@
+// Copy to Local.xcconfig and fill in. Local.xcconfig is gitignored so the repo does not
+// carry a team id. Find the team id at developer.apple.com → Membership.
+DEVELOPMENT_TEAM = ABCDE12345
+
+// Change this if com.moregroup.ytchannelscraper is already taken on your account.
+PRODUCT_BUNDLE_IDENTIFIER = com.moregroup.ytchannelscraper

@@ -1,0 +1,93 @@
+# Generated into YTChannelScraper.xcodeproj by `xcodegen generate` (run from ios/).
+#
+# The project is kept as YAML rather than a checked-in .pbxproj because the iOS target
+# deliberately compiles files that live in the *Mac* package — Model/ and Palette.swift
+# are platform-clean and carry no AppKit — and expressing that as a plain path here is
+# far less fragile than the file-reference soup Xcode would write for it. Nothing in
+# mac/ is modified or moved; the sharing is one-directional.
+name: YTChannelScraper
+
+options:
+  bundleIdPrefix: com.moregroup
+  deploymentTarget:
+    iOS: "17.0"        # @Observable, NavigationStack, .scrollTargetBehavior
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_STRICT_CONCURRENCY: complete
+    ENABLE_USER_SCRIPT_SANDBOXING: YES
+    # Personal/internal distribution: set DEVELOPMENT_TEAM in ios/Local.xcconfig (gitignored)
+    # so a clone does not carry somebody else's team id around.
+    CODE_SIGN_STYLE: Automatic
+
+configFiles:
+  Debug: Local.xcconfig
+  Release: Local.xcconfig
+
+targets:
+  YTChannelScraper:
+    type: application
+    platform: iOS
+    sources:
+      - path: Sources
+      - path: Support/Assets.xcassets
+      - path: Support/PrivacyInfo.xcprivacy
+        buildPhase: resources
+      # Shared with the Mac app, compiled in place. Both directories are AppKit-free —
+      # verified by grep, and the build breaks loudly here if that ever stops being true.
+      - path: ../mac/Sources/YTChannelScraper/Model
+        name: Shared-Model
+      - path: ../mac/Sources/YTChannelScraper/Core/Log.swift
+        name: Shared-Log
+      # The transfer format, shared so a .ytcslibrary written on the Mac opens on the
+      # phone and back. Platform-clean apart from Paths.appName, which iOS also defines.
+      - path: ../mac/Sources/YTChannelScraper/Core/LibraryArchive.swift
+        name: Shared-Archive
+      - path: ../mac/Sources/YTChannelScraper/Views/Palette.swift
+        name: Shared-Palette
+    info:
+      path: Support/Info.plist
+      properties:
+        CFBundleDisplayName: YT Scraper
+        CFBundleShortVersionString: "1.0.0"
+        # Bump for every TestFlight upload — App Store Connect refuses a build number it
+        # has already seen, and a TestFlight build expires 90 days after upload, so this
+        # gets bumped roughly quarterly for the life of the app.
+        CFBundleVersion: "1"
+        # Answers the export-compliance question up front. The app talks HTTPS and
+        # nothing else, which is the exempt case. Without this key App Store Connect
+        # asks on every single upload and holds the build until someone answers.
+        ITSAppUsesNonExemptEncryption: false
+        UILaunchScreen:
+          UIColorName: LaunchBackground
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # Downloads land in Documents/ and are meant to be reachable without the app:
+        # these two keys are what put the folder in Files.app under "On My iPhone".
+        # Deliberately the only destination — saving into the photo library would mean
+        # asking for NSPhotoLibraryAddUsageDescription, and an app that requests a
+        # permission it then never uses is worse than one that does not ask.
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIBackgroundModes:
+          - audio          # playback survives locking the screen
+          - fetch          # background URLSession completion
+        # The exported library type, matching Model/LibraryType.swift.
+        UTExportedTypeDeclarations:
+          - UTTypeIdentifier: com.moregroup.ytchannelscraper.library
+            UTTypeDescription: YT Channel Scraper Library
+            UTTypeConformsTo: [public.json]
+            UTTypeTagSpecification:
+              public.filename-extension: [ytcslib]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.moregroup.ytchannelscraper
+        INFOPLIST_KEY_CFBundleDisplayName: YT Scraper
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
+        TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad
