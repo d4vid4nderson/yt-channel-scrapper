@@ -52,29 +52,48 @@ rejects an app icon with an alpha channel.
 
 ## Get it onto a phone
 
-**Just your own devices** — no App Store Connect, no review, nothing to wait for. Plug
-the phone in, pick it as the run destination, press ⌘R. With a paid developer account
-the build stays valid for a year; with a free Apple ID, seven days, then re-run.
+**TestFlight, internal testing. That is the plan, and the only plan.** This app is never
+going to the App Store, so nothing here is built to survive App Review and no decision in
+it should be made in the hope of passing one.
 
-**TestFlight, internal** — up to 100 testers, but every one of them has to be a user on
-your App Store Connect team. No Beta App Review: the build only has to pass automated
-validation.
+That is not pessimism, it is the premise: an app that downloads YouTube videos is among
+the most reliably rejected categories there is — App Review Guideline 5.2.3, plus
+YouTube's own terms — so a plan that ends in the App Store is a plan that ends in a
+rejection. Internal TestFlight sidesteps the whole question, because **internal testing
+has no Beta App Review at all.** A build only has to pass automated validation.
 
-1. App Store Connect → Apps → **+** → New App. Pick the bundle id, give it a name and
-   an SKU.
-2. Xcode → any iOS device as destination → Product → **Archive**.
-3. In the Organizer: **Distribute App** → **TestFlight & App Store** → Upload.
-4. Wait for processing (a few minutes), then App Store Connect → TestFlight → Internal
-   Testing → add your testers.
+What it costs: a paid Apple Developer Program membership, and every tester has to be a
+user on your App Store Connect team (up to 100 of them).
 
-Bump `CFBundleVersion` in `project.yml` for every upload; App Store Connect rejects a
-build number it has seen before.
+### The one thing to plan around
 
-**External TestFlight or the App Store — don't plan on it.** External testing requires
-Beta App Review, and an app that downloads YouTube videos is among the most reliably
-rejected categories there is: App Review Guideline 5.2.3, plus YouTube's own terms.
-Internal TestFlight and direct install are the realistic distribution routes, which is
-what this app is set up for.
+**A TestFlight build stops working 90 days after you upload it.** Not the app, not the
+account — that specific build. Every 90 days you archive and upload again, and testers
+update from the TestFlight app.
+
+Worth knowing: for **your own** phone, plugging in and pressing ⌘R lasts a *year* on a
+paid account, which is four times longer than TestFlight. TestFlight earns its keep when
+you want installs without a cable, or on devices that are not in front of you — not when
+you want the longest-lived install.
+
+### Each release
+
+1. **Once, at the start:** App Store Connect → Apps → **+** → New App. Pick the bundle
+   id, give it a name and an SKU. Do not submit it for review, then or ever — the record
+   sits in "Prepare for Submission" indefinitely and that is fine.
+2. Bump `CFBundleVersion` in `project.yml`. App Store Connect rejects a build number it
+   has seen before, and this is the step everyone forgets.
+3. `xcodegen generate` if you changed `project.yml`.
+4. Xcode → any iOS device as the destination → Product → **Archive**.
+5. Organizer → **Distribute App** → **TestFlight & App Store** → Upload. The wording
+   mentions the App Store; uploading is not submitting, and nothing is sent for review.
+6. Wait a few minutes for processing, then App Store Connect → TestFlight → **Internal
+   Testing** → add testers.
+
+Export compliance is answered in advance: `ITSAppUsesNonExemptEncryption` is set to
+`false` in the Info.plist because the app uses nothing but HTTPS. Without it App Store
+Connect asks the same encryption question on every single upload and holds the build
+until you answer.
 
 ---
 

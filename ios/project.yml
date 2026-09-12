@@ -53,7 +53,14 @@ targets:
       properties:
         CFBundleDisplayName: YT Scraper
         CFBundleShortVersionString: "1.0.0"
+        # Bump for every TestFlight upload — App Store Connect refuses a build number it
+        # has already seen, and a TestFlight build expires 90 days after upload, so this
+        # gets bumped roughly quarterly for the life of the app.
         CFBundleVersion: "1"
+        # Answers the export-compliance question up front. The app talks HTTPS and
+        # nothing else, which is the exempt case. Without this key App Store Connect
+        # asks on every single upload and holds the build until someone answers.
+        ITSAppUsesNonExemptEncryption: false
         UILaunchScreen:
           UIColorName: LaunchBackground
         UISupportedInterfaceOrientations:
@@ -62,13 +69,14 @@ targets:
           - UIInterfaceOrientationLandscapeRight
         # Downloads land in Documents/ and are meant to be reachable without the app:
         # these two keys are what put the folder in Files.app under "On My iPhone".
+        # Deliberately the only destination — saving into the photo library would mean
+        # asking for NSPhotoLibraryAddUsageDescription, and an app that requests a
+        # permission it then never uses is worse than one that does not ask.
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
         UIBackgroundModes:
           - audio          # playback survives locking the screen
           - fetch          # background URLSession completion
-        NSPhotoLibraryAddUsageDescription:
-          Saves videos you download into your photo library.
         # The exported library type, matching Model/LibraryType.swift.
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: com.moregroup.ytchannelscraper.library
