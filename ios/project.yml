@@ -42,6 +42,10 @@ targets:
         name: Shared-Model
       - path: ../mac/Sources/YTChannelScraper/Core/Log.swift
         name: Shared-Log
+      # The transfer format, shared so a .ytcslibrary written on the Mac opens on the
+      # phone and back. Platform-clean apart from Paths.appName, which iOS also defines.
+      - path: ../mac/Sources/YTChannelScraper/Core/LibraryArchive.swift
+        name: Shared-Archive
       - path: ../mac/Sources/YTChannelScraper/Views/Palette.swift
         name: Shared-Palette
     info:
