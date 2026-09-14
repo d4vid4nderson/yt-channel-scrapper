@@ -42,18 +42,107 @@ actor Transfer {
     ///
     /// `onProgress` is called with (bytesWritten, totalExpected) as it goes; the total
     /// is -1 when the server did not say.
+    /// How much to ask for at a time.
+    ///
+    /// The single most important number in this file. googlevideo throttles one
+    /// long-lived request down to roughly the video's own playback bitrate — measured
+    /// 2026-09-13, an open-ended `bytes=0-` held 701 KB/s flat from the first megabyte,
+    /// while the same 48 MB fetched as 8 MB ranges came down at 3559 KB/s. Five times
+    /// faster for the same bytes off the same URL. It is why yt-dlp has
+    /// `--http-chunk-size`, and why this cannot be one request no matter how convenient
+    /// that would be.
+    private static let chunkSize: Int64 = 8 * 1024 * 1024
+
+    /// Download `url` into `Paths.scratch`, one range at a time.
+    ///
+    /// Resumption falls out of the design rather than needing `URLSession`'s resume
+    /// data: whatever is already on disk is how far we got, so a paused job continues
+    /// from its own file length. That survives things resume data does not — notably a
+    /// YouTube URL expiring, since the offset is just a number and the next attempt can
+    /// carry it to a freshly resolved URL.
     func download(
         _ url: URL,
         named name: String,
         onProgress: @escaping @Sendable (Int64, Int64) -> Void
     ) async throws -> URL {
+        let destination = Paths.scratch.appendingPathComponent(name)
+        var have = Self.sizeOnDisk(destination)
+        var total: Int64 = -1
+        var restarted = false
+
+        while true {
+            try Task.checkCancellation()
+
+            let end = have + Self.chunkSize - 1
+            // Captured as lets: the closure escapes, and `have`/`total` are moving.
+            let base = have
+            let known = total
+            let chunk: URL
+            let response: HTTPURLResponse?
+            do {
+                (chunk, response) = try await fetchRange(
+                    url, "bytes=\(have)-\(end)", into: "\(name).part",
+                    reporting: { written in onProgress(base + written, known) })
+            } catch Failure.http(416) where have > 0 && !restarted {
+                // Range Not Satisfiable: the offset we resumed from is at or past the
+                // end of the resource. The file on disk is stale — a different format,
+                // or over-long from an earlier append — so it is worth nothing. Throw
+                // it away and fetch from the beginning, once.
+                let detail = "\(name): stale partial of \(have) bytes, restarting"
+                Log.transfer.error("\(detail, privacy: .public)")
+                try? FileManager.default.removeItem(at: destination)
+                have = 0
+                total = -1
+                restarted = true
+                continue
+            }
+
+            if total < 0 { total = Self.totalLength(from: response) ?? -1 }
+
+            let got = Self.sizeOnDisk(chunk)
+            guard got > 0 else {
+                try? FileManager.default.removeItem(at: chunk)
+                break                      // server had nothing more to give
+            }
+            try Self.append(chunk, to: destination)
+            have += got
+            onProgress(have, total)
+
+            // A short chunk is only proof of the end when nothing better is known.
+            // With a total from Content-Range, trust that instead and ask again from
+            // the new offset: a range that comes back short because the connection
+            // hiccuped is recoverable, and treating it as the end silently truncates
+            // the file — which then downloads "successfully" and will not open.
+            if total > 0 {
+                if have >= total { break }
+            } else if got < Self.chunkSize {
+                break
+            }
+        }
+
+        // Never hand back a file that is shorter than the server said it would be.
+        // Better a failure the queue can retry than a plausible-looking broken video.
+        if total > 0, have < total {
+            let detail = "\(name) truncated at \(have) of \(total) bytes"
+            Log.transfer.error("\(detail, privacy: .public)")
+            throw Failure.interrupted
+        }
+
+        return destination
+    }
+
+    /// One ranged request, using the machinery the whole file already had.
+    private func fetchRange(
+        _ url: URL,
+        _ range: String,
+        into name: String,
+        reporting: @escaping @Sendable (Int64) -> Void
+    ) async throws -> (URL, HTTPURLResponse?) {
         var request = URLRequest(url: url)
         // googlevideo refuses a request with no user agent, and hands back a 403 that
         // looks exactly like an expired signature.
         request.setValue(InnerTube.webClient.userAgent, forHTTPHeaderField: "User-Agent")
-        // Ask for the whole thing explicitly. Without a Range header googlevideo
-        // throttles hard after the first few megabytes.
-        request.setValue("bytes=0-", forHTTPHeaderField: "Range")
+        request.setValue(range, forHTTPHeaderField: "Range")
 
         let task = session.downloadTask(with: request)
         let destination = Paths.scratch.appendingPathComponent(name)
@@ -65,12 +154,55 @@ actor Transfer {
                 // callback that finds no entry drops the download on the floor.
                 delegate.register(
                     task: task, destination: destination,
-                    progress: onProgress, continuation: continuation
+                    progress: { written, _ in reporting(written) },
+                    continuation: continuation
                 )
                 task.resume()
             }
         } onCancel: {
             task.cancel()
+        }
+    }
+
+    // MARK: - Pieces
+
+    private static func sizeOnDisk(_ url: URL) -> Int64 {
+        (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? Int64) ?? 0
+    }
+
+    /// The total length of the resource, from `Content-Range: bytes 0-8388607/1234567890`.
+    ///
+    /// `expectedContentLength` is only the answer on a 200. On the 206 this code asks
+    /// for, it is the length of *that range* — 8 MB — and taking it as the total means
+    /// stopping after one chunk with a file that looks complete and is not.
+    private static func totalLength(from response: HTTPURLResponse?) -> Int64? {
+        guard let response else { return nil }
+        if let header = response.value(forHTTPHeaderField: "Content-Range"),
+           let slash = header.lastIndex(of: "/"),
+           let total = Int64(header[header.index(after: slash)...]) {
+            return total
+        }
+        // No Content-Range means the server ignored the request and sent the lot.
+        return response.statusCode == 200 ? response.expectedContentLength : nil
+    }
+
+    /// Append one chunk to the file being assembled, then throw the chunk away.
+    private static func append(_ chunk: URL, to destination: URL) throws {
+        defer { try? FileManager.default.removeItem(at: chunk) }
+
+        guard FileManager.default.fileExists(atPath: destination.path) else {
+            try FileManager.default.moveItem(at: chunk, to: destination)
+            return
+        }
+        let handle = try FileHandle(forWritingTo: destination)
+        defer { try? handle.close() }
+        try handle.seekToEnd()
+        // Streamed in rather than read whole: a chunk is 8 MB and a phone under memory
+        // pressure is exactly where this would be asked to fall over.
+        let reader = try FileHandle(forReadingFrom: chunk)
+        defer { try? reader.close() }
+        while let block = try reader.read(upToCount: 1 << 20), !block.isEmpty {
+            try handle.write(contentsOf: block)
         }
     }
 
@@ -93,7 +225,7 @@ actor Transfer {
         private struct Pending {
             let destination: URL
             let progress: @Sendable (Int64, Int64) -> Void
-            let continuation: CheckedContinuation<URL, Error>
+            let continuation: CheckedContinuation<(URL, HTTPURLResponse?), Error>
         }
 
         private let lock = NSLock()
@@ -103,7 +235,7 @@ actor Transfer {
             task: URLSessionDownloadTask,
             destination: URL,
             progress: @escaping @Sendable (Int64, Int64) -> Void,
-            continuation: CheckedContinuation<URL, Error>
+            continuation: CheckedContinuation<(URL, HTTPURLResponse?), Error>
         ) {
             lock.withLock {
                 pending[task.taskIdentifier] = Pending(
@@ -150,7 +282,8 @@ actor Transfer {
             do {
                 try? FileManager.default.removeItem(at: job.destination)
                 try FileManager.default.moveItem(at: location, to: job.destination)
-                job.continuation.resume(returning: job.destination)
+                job.continuation.resume(
+                    returning: (job.destination, downloadTask.response as? HTTPURLResponse))
             } catch {
                 job.continuation.resume(throwing: error)
             }
