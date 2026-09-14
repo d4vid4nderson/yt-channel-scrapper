@@ -46,7 +46,7 @@ open YTChannelScraper.xcodeproj
 ```
 
 `Local.xcconfig` is gitignored so the repo does not carry a team id around. Find yours
-at developer.apple.com → Membership. If `com.moregroup.ytchannelscraper` is taken on
+at developer.apple.com → Membership. If `com.d4vid4nderson.ytchannelscraper` is taken on
 your account, set `YTCS_BUNDLE_ID` in the same file.
 
 Both knobs really are knobs. `project.yml` spells the bundle id as
@@ -78,7 +78,7 @@ user on your App Store Connect team (up to 100 of them).
 Two failures look alike from the command line and have nothing to do with each other.
 
 ```
-No profiles for 'com.moregroup.ytchannelscraper' were found … Automatic signing is
+No profiles for 'com.d4vid4nderson.ytchannelscraper' were found … Automatic signing is
 disabled and unable to generate a profile.
 ```
 
@@ -155,24 +155,67 @@ until you answer.
 
 These are real, measured, and deliberately written down rather than discovered later.
 
-### The player endpoint is behind a bot wall
+### The player endpoint needs a visitor id — it is not a bot wall
 
-Listing a channel and searching for one work, and are verified against live YouTube —
-run `Tools/check-renderers.py`. **Resolving a video's streams is the part that may not.**
+This section used to say the opposite, and the correction is worth keeping rather than
+quietly deleting, because the wrong version was believed for two days and sent someone
+looking at IP reputation and PO tokens.
 
-Measured 2026-09-11 from a datacenter address: every client in `InnerTube.playerLadder`
-came back `LOGIN_REQUIRED` / "Sign in to confirm you're not a bot" with zero formats,
-while `browse` and `search` answered normally from the same address in the same minute.
+The symptom: every client in `InnerTube.playerLadder` comes back `LOGIN_REQUIRED` with
+the reason "Sign in to confirm you're not a bot" and zero formats, while `browse` and
+`search` answer normally from the same address in the same minute. That was measured on
+2026-09-11 from a datacenter and read as an IP-reputation block, with the expectation
+that a phone on cellular would behave differently.
 
-YouTube treats residential and cellular addresses — which is what a phone is — far more
-leniently than server ranges, so this is expected to behave differently on a real
-device. But it is unverified, and it is the first thing to test once the app is on a
-phone: **open any video and try to play it.** If it fails, `Failure.refused` carries
-YouTube's own wording into the UI, so the reason will be on screen.
+It does not. The same failure reproduces from a phone, and the same fix works from a
+datacenter, because the variable was never the address. The `player` endpoint wants
+`visitorData` — YouTube's anonymous session id, carried in `ytcfg` on any page — and
+refuses without it. Replaying one request twice on 2026-09-13, seconds apart from the
+same machine:
 
-If the wall follows you onto the device, what YouTube is asking for is a signed-in
-session or a PO token. This app has neither, and adding them is a substantial piece of
-work rather than a setting.
+    no visitorData  ->  LOGIN_REQUIRED, 0 formats
+    visitorData     ->  OK, 23 adaptive formats, HLS offered
+
+`VisitorID` fetches one per launch and `InnerTube.post` attaches it to every call, as
+both `context.client.visitorData` and the `X-Goog-Visitor-Id` header. Either alone is
+sufficient; sending both is what YouTube's own clients do.
+
+The lesson worth carrying: `browse` working while `player` refuses is not evidence about
+where the request came from. The listing endpoints are simply laxer about the same
+missing field.
+
+### Clients rot, and the ladder now reflects that
+
+The version strings in `InnerTube.Client` were all from March 2025 and by late 2026 two
+of the four rungs had gone bad in different ways. What the ladder looks like now, and
+why:
+
+- **`visionos`** leads. No proof-of-origin requirement, no JavaScript player, and it is
+  served the full H.264 ladder to 1080p with AAC beside it — the pair `Muxer` writes
+  through untouched.
+- **`android_vr`** is second. Also outside the PO-token requirement, but usually offers
+  only the muxed 360p rung, so it is a floor rather than a choice.
+- **`tv`** third.
+- **`ios`** demoted from first to fourth. yt-dlp marks its media URLs
+  `GvsPoTokenPolicy(required: true)` as of 2026.08.19: it resolves, promises an HLS
+  master, and then answers the fetch with 403. It is kept only in case that lifts.
+- **`web`** last, as before, because it needs `JSChallenge`.
+
+A 403 arrives *after* `resolve` has returned, so `StreamResolver` cannot see it. Both
+callers feed the refused client back in through `resolve(videoID:for:refused:)`, which
+is what lets the ladder keep walking instead of picking the same dead rung forever.
+
+When extraction breaks again, `vendor/yt-dlp_macos` is the fastest oracle available —
+it is maintained by people watching this full time:
+
+```sh
+./vendor/yt-dlp_macos --simulate -v "https://www.youtube.com/watch?v=<id>"
+./vendor/yt-dlp_macos -F --extractor-args "youtube:player_client=android_vr" "<url>"
+```
+
+The first line names the client it chose; the second says what a given client is being
+offered. Current definitions live in `yt_dlp/extractor/youtube/_base.py` under
+`INNERTUBE_CLIENTS`.
 
 ### The JavaScript solver does not currently fire
 
@@ -244,7 +287,7 @@ time.
 Runtime logs:
 
 ```sh
-log stream --predicate 'subsystem == "com.moregroup.ytchannelscraper"'
+log stream --predicate 'subsystem == "com.d4vid4nderson.ytchannelscraper"'
 ```
 
 `engine` covers extraction and says which client answered; `transfer` covers downloads

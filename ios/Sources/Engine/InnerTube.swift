@@ -60,15 +60,44 @@ enum InnerTube {
 
     // MARK: - The clients
 
-    /// The iOS YouTube app. The only client that reliably returns `hlsManifestUrl` for
-    /// ordinary on-demand videos, which is why it is tried first: an HLS master is a
-    /// single URL AVPlayer handles end to end.
+    /// The Vision Pro's YouTube app, and currently the best rung on the ladder.
+    ///
+    /// It is outside the proof-of-origin requirement, needs no JavaScript player, and —
+    /// unlike `android_vr`, the other client with those properties — is served the whole
+    /// H.264 ladder up to 1080p with AAC beside it, which is exactly the pair `Muxer`
+    /// can write through without re-encoding. Verified against a live video on
+    /// 2026-09-13: formats 137 (1920x1080 avc1) and 140 (m4a) both offered, no PO token.
+    static let visionOSClient = Client(
+        key: "visionos",
+        name: "VISIONOS",
+        numericID: 101,
+        version: "1.02",
+        userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_7_3) AppleWebKit/605.1.15 "
+            + "(KHTML, like Gecko) Version/26.0 Safari/605.1.15",
+        extraContext: [
+            "deviceMake": "Apple",
+            "deviceModel": "RealityDevice17,1",
+            "osName": "visionOS",
+            "osVersion": "26.5.23O471",
+        ],
+        needsDescrambling: false,
+        servesHLS: true
+    )
+
+    /// The iOS YouTube app.
+    ///
+    /// It used to lead the ladder, because it is the one client that reliably hands back
+    /// an `hlsManifestUrl`. It no longer earns that place: as of yt-dlp 2026.08.19 its
+    /// media URLs carry `GvsPoTokenPolicy(required: true)`, meaning YouTube serves the
+    /// URL and then answers the fetch with 403 unless a proof-of-origin token rides
+    /// along. This app has no way to mint one, so the rung resolves, promises an HLS
+    /// master, and fails the moment anything reads from it.
     static let iosClient = Client(
         key: "ios",
         name: "IOS",
         numericID: 5,
-        version: "20.10.4",
-        userAgent: "com.google.ios.youtube/20.10.4 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X; en_US)",
+        version: "21.02.3",
+        userAgent: "com.google.ios.youtube/21.02.3 (iPhone16,2; U; CPU iOS 18_3_2 like Mac OS X;)",
         extraContext: [
             "deviceMake": "Apple",
             "deviceModel": "iPhone16,2",
@@ -85,13 +114,14 @@ enum InnerTube {
         key: "android_vr",
         name: "ANDROID_VR",
         numericID: 28,
-        version: "1.62.27",
-        userAgent: "com.google.android.apps.youtube.vr.oculus/1.62.27 (Linux; U; Android 12; en_US) gzip",
+        version: "1.65.10",
+        userAgent: "com.google.android.apps.youtube.vr.oculus/1.65.10 (Linux; U; Android 12L; "
+            + "eureka-user Build/SQ3A.220605.009.A1) gzip",
         extraContext: [
             "deviceMake": "Oculus",
             "deviceModel": "Quest 3",
             "osName": "Android",
-            "osVersion": "12",
+            "osVersion": "12L",
             "androidSdkVersion": "32",
         ],
         needsDescrambling: false,
@@ -104,8 +134,9 @@ enum InnerTube {
         key: "tv",
         name: "TVHTML5",
         numericID: 7,
-        version: "7.20250312.16.00",
-        userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/Version",
+        version: "7.20260114.12.00",
+        userAgent: "Mozilla/5.0 (ChromiumStylePlatform) Cobalt/25.lts.30.1034943-gold "
+            + "(unlike Gecko), Unknown_TV_Unknown_0/Unknown (Unknown, Unknown)",
         extraContext: [:],
         needsDescrambling: false,
         servesHLS: false
@@ -131,7 +162,13 @@ enum InnerTube {
     /// the Mac: give up capability rung by rung rather than retrying the same thing.
     /// HLS first because it is the cheapest good answer, then the two plain-URL clients,
     /// then the web client with the solver behind it as the one that always answers.
-    static let playerLadder: [Client] = [iosClient, androidVRClient, tvClient, webClient]
+    static let playerLadder: [Client] = [
+        visionOSClient,     // no PO token, no JS, full H.264 ladder — the one that works
+        androidVRClient,    // no PO token either, but usually only the muxed 360p rung
+        tvClient,
+        iosClient,          // PO-token gated: resolves, then 403s. Kept for HLS if it lifts
+        webClient,          // needs JSChallenge, which does not currently solve
+    ]
 
     // MARK: - Requests
 
@@ -176,16 +213,34 @@ enum InnerTube {
         ]
         body.merge(payload) { _, new in new }
 
+        // The one field that decides whether `player` answers at all. Without it every
+        // client comes back LOGIN_REQUIRED / "Sign in to confirm you're not a bot" with
+        // zero formats, which reads like an IP-based block and is not one: it fails the
+        // same way from a phone on cellular as from a datacenter, and supplying this
+        // fixes it from either. Measured 2026-09-13 — see ios/README.md.
+        if let visitor = await VisitorID.shared.get(),
+           var context = body["context"] as? [String: Any],
+           var fields = context["client"] as? [String: String] {
+            fields["visitorData"] = visitor
+            context["client"] = fields
+            body["context"] = context
+        }
+
         var request = URLRequest(url: base.appendingPathComponent(endpoint))
         request.httpMethod = "POST"
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.setValue(client.userAgent, forHTTPHeaderField: "User-Agent")
-        request.setValue(client.name, forHTTPHeaderField: "X-YouTube-Client-Name")
+        // The numeric id, not the name. `numericID` was carried on every client and
+        // never read, so this header has always said "WEB" where YouTube wanted "1".
+        request.setValue(String(client.numericID), forHTTPHeaderField: "X-YouTube-Client-Name")
         request.setValue(client.version, forHTTPHeaderField: "X-YouTube-Client-Version")
         request.setValue("https://www.youtube.com", forHTTPHeaderField: "Origin")
         request.setValue("https://www.youtube.com/", forHTTPHeaderField: "Referer")
         request.setValue("en-US,en;q=0.9", forHTTPHeaderField: "Accept-Language")
+        if let visitor = await VisitorID.shared.get() {
+            request.setValue(visitor, forHTTPHeaderField: "X-Goog-Visitor-Id")
+        }
 
         let (data, response) = try await session.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
