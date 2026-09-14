@@ -52,6 +52,12 @@ targets:
       path: Support/Info.plist
       properties:
         CFBundleDisplayName: YT Scraper
+        # App Store Connect rejects an upload without this (ITMS-90713), and nothing
+        # catches it until you try. Xcode injects it for itself when it generates the
+        # Info.plist, but this target supplies its own, so `actool` writes the nested
+        # CFBundleIcons dictionaries and leaves the top-level key the validator actually
+        # reads unset. Stating it here is the whole fix.
+        CFBundleIconName: AppIcon
         CFBundleShortVersionString: "1.0.0"
         # Bump for every TestFlight upload — App Store Connect refuses a build number it
         # has already seen, and a TestFlight build expires 90 days after upload, so this
@@ -86,7 +92,10 @@ targets:
               public.filename-extension: [ytcslib]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: com.moregroup.ytchannelscraper
+        # Overridable from Local.xcconfig. A plain value here would silently beat
+        # the xcconfig — target-level build settings outrank it — which made the
+        # "change this if the id is taken" note over there a lie.
+        PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.moregroup.ytchannelscraper)
         INFOPLIST_KEY_CFBundleDisplayName: YT Scraper
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor

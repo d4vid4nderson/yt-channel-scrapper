@@ -47,7 +47,12 @@ open YTChannelScraper.xcodeproj
 
 `Local.xcconfig` is gitignored so the repo does not carry a team id around. Find yours
 at developer.apple.com → Membership. If `com.moregroup.ytchannelscraper` is taken on
-your account, change `PRODUCT_BUNDLE_IDENTIFIER` in the same file.
+your account, set `YTCS_BUNDLE_ID` in the same file.
+
+Both knobs really are knobs. `project.yml` spells the bundle id as
+`$(YTCS_BUNDLE_ID:default=…)` rather than as a plain value, because a target-level build
+setting outranks an xcconfig — written plainly, the id here would have silently ignored
+whatever `Local.xcconfig` said.
 
 `make-icon.sh` needs no Homebrew — it falls back to rendering the SVG in a `WKWebView`,
 which every Mac has. It flattens the result onto opaque black, because App Store Connect
@@ -67,6 +72,52 @@ has no Beta App Review at all.** A build only has to pass automated validation.
 
 What it costs: a paid Apple Developer Program membership, and every tester has to be a
 user on your App Store Connect team (up to 100 of them).
+
+### If signing fails
+
+Two failures look alike from the command line and have nothing to do with each other.
+
+```
+No profiles for 'com.moregroup.ytchannelscraper' were found … Automatic signing is
+disabled and unable to generate a profile.
+```
+
+Not an error, just `xcodebuild` refusing to talk to Apple unless asked. Add
+`-allowProvisioningUpdates` and it creates the App ID and the profile itself. Xcode.app
+does this silently, which is why the same project builds there and not here.
+
+```
+Your development team has reached the maximum number of registered iPhone devices.
+```
+
+That one is an account limit, not a project problem, and no build flag gets past it. A
+paid membership registers **100 devices per device type per membership year**, and the
+trap is that *disabling* a device does not give the slot back — it only drops it out of
+newly generated profiles. The count that matters is every device ever registered this
+year, so a team can be at its cap with three devices actually in use.
+
+Slots come back **once per membership year**, in the window Apple opens at renewal:
+developer.apple.com → Certificates, Identifiers & Profiles → Devices, where the option
+to remove devices appears for that period and nowhere else. Your renewal date is on the
+Membership details page. Outside that window the honest options are a different team or
+a different phone.
+
+To check which devices a profile actually covers, rather than guessing:
+
+```sh
+security cms -D -i ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/<uuid>.mobileprovision \
+  | plutil -p - | grep -A20 ProvisionedDevices
+xcrun devicectl list devices                       # the phone's UDID is in here
+```
+
+Once a slot is free, this puts the app on a connected phone without opening Xcode:
+
+```sh
+xcodebuild -project YTChannelScraper.xcodeproj -scheme YTChannelScraper \
+  -destination 'id=<device-id>' -allowProvisioningUpdates build
+xcrun devicectl device install app --device <device-id> \
+  ~/Library/Developer/Xcode/DerivedData/YTChannelScraper-*/Build/Products/Debug-iphoneos/YTChannelScraper.app
+```
 
 ### The one thing to plan around
 

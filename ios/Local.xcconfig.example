@@ -2,5 +2,6 @@
 // carry a team id. Find the team id at developer.apple.com → Membership.
 DEVELOPMENT_TEAM = ABCDE12345
 
-// Change this if com.moregroup.ytchannelscraper is already taken on your account.
-PRODUCT_BUNDLE_IDENTIFIER = com.moregroup.ytchannelscraper
+// Optional. Only needed if com.moregroup.ytchannelscraper is taken on your account, or
+// if you are signing with a team that already has that id spoken for.
+YTCS_BUNDLE_ID = com.moregroup.ytchannelscraper
