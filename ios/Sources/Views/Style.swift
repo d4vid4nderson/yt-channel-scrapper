@@ -144,3 +144,40 @@ struct Placeholder: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
+
+/// A poster for the things that have a URL rather than a `Video` — a file on disk,
+/// whose thumbnail is recovered from the id in its name, and which may not have one
+/// at all if the user put the file there themselves.
+struct Artwork: View {
+    let url: URL?
+    var icon: String = "music.note"
+    var width: CGFloat = Metrics.thumbWidth
+    var height: CGFloat = Metrics.thumbHeight
+    var corner: CGFloat = 8
+
+    var body: some View {
+        ZStack {
+            Color.white.opacity(0.06)
+            if let url {
+                AsyncImage(url: url) { phase in
+                    if let image = phase.image {
+                        image.resizable().scaledToFill()
+                    } else {
+                        fallback
+                    }
+                }
+            } else {
+                fallback
+            }
+        }
+        .frame(width: width, height: height)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: corner))
+    }
+
+    private var fallback: some View {
+        Image(systemName: icon)
+            .font(.system(size: min(width, height) * 0.3, weight: .light))
+            .foregroundStyle(Color.secondaryText)
+    }
+}

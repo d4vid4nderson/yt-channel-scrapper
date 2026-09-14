@@ -17,6 +17,15 @@ final class AppModel {
     let library = Library()
     let downloads = Downloads()
     let playback = Playback()
+    /// What is already on the phone. `Downloads` only knows about this run's jobs; this
+    /// is the folder itself, and it is what survives a relaunch.
+    let localFiles = LocalFiles()
+
+    init() {
+        // A finished job leaves a new file in Documents, and the on-disk list is a scan
+        // rather than an index — so it has to be told to look again.
+        downloads.didSave = { [weak self] in self?.localFiles.reload() }
+    }
 
     // MARK: - Input
 
@@ -31,8 +40,8 @@ final class AppModel {
     var picked: Set<String> = []
     var isSelecting = false
 
-    /// The video the player sheet is showing, if any.
-    var playing: Video?
+    /// What the player sheet is showing, if anything — a stream or a file on disk.
+    var playing: Playable?
 
     /// A message for the banner — an import result, an export path, a failure that is
     /// not attached to any one row.
@@ -157,6 +166,11 @@ final class AppModel {
     func toggleSaved(_ video: Video) {
         library.toggleVideo(video, channel: listing.channel)
     }
+
+    // MARK: - Playing
+
+    func play(_ video: Video) { playing = .stream(video) }
+    func play(_ file: LocalFile) { playing = .local(file) }
 
     // MARK: - Transfer
 

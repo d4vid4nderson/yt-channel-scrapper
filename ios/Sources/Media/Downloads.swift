@@ -18,6 +18,10 @@ import Foundation
 final class Downloads {
     private(set) var jobs: [DownloadJob] = []
 
+    /// Called after a job leaves a new file in Documents. `LocalFiles` reads the folder
+    /// rather than keeping an index, so it has to be told when the folder changed.
+    var didSave: (@MainActor () -> Void)?
+
     /// Two at a time. A phone on cellular gains nothing from more parallelism — the link
     /// is the limit, not the concurrency — and each running job holds a video and an
     /// audio file in the scratch directory before muxing.
@@ -149,6 +153,7 @@ final class Downloads {
             job.eta = nil
             job.state = .done
             Log.transfer.info("saved \(job.video.id, privacy: .public)")
+            didSave?()
 
         } catch is CancellationError {
             job.state = .cancelled

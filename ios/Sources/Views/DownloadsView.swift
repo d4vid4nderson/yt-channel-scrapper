@@ -6,38 +6,29 @@ import UIKit
 /// On the Mac this hangs from the header as a drawer. A phone has no room for a drawer
 /// and, more to the point, downloads are the thing you come back to check — so they get
 /// a tab of their own with a badge on it.
+///
+/// Two lists, not one. Transfers are this run's jobs and they disappear with the process;
+/// "On this phone" is the folder itself, which is what is still there tomorrow. Before
+/// the second section a finished download became unreachable the moment the app was
+/// killed — the file was in Files.app, and nowhere in the app that made it.
 struct DownloadsView: View {
     @Bindable var model: AppModel
     @State private var sharing: URL?
+    @Environment(\.scenePhase) private var phase
 
     var body: some View {
         NavigationStack {
             Group {
-                if model.downloads.jobs.isEmpty {
+                if model.downloads.jobs.isEmpty && model.localFiles.isEmpty {
                     Placeholder(
                         icon: "arrow.down.circle",
-                        title: "Nothing downloading",
+                        title: "Nothing downloaded yet",
                         detail: "Swipe a video left, or select several and download them "
-                            + "together. Finished files appear in Files under "
+                            + "together. Finished files land here, and in Files under "
                             + "On My iPhone → YT Scraper."
                     )
                 } else {
-                    List {
-                        ForEach(model.downloads.jobs) { job in
-                            JobRow(job: job) { sharing = $0 }
-                                .listRowBackground(Color.card)
-                                .swipeActions(edge: .trailing) {
-                                    Button(role: .destructive) {
-                                        model.downloads.remove(job)
-                                    } label: {
-                                        Label(job.state.isFinished ? "Remove" : "Cancel",
-                                              systemImage: job.state.isFinished ? "trash" : "xmark")
-                                    }
-                                }
-                        }
-                    }
-                    .listStyle(.plain)
-                    .scrollContentBackground(.hidden)
+                    lists
                 }
             }
             .ground()
@@ -52,6 +43,73 @@ struct DownloadsView: View {
                 ShareSheet(items: [url])
             }
         }
+        // A scan rather than an index, so it has to be re-run to stay honest. Once on
+        // appearance, and again whenever the app comes back to the front: these files
+        // are deliberately reachable from Files.app, and deleting one there is a normal
+        // thing to do. Coming back to a row that no longer has a file behind it would
+        // otherwise only fail at the point of tapping it.
+        .task { model.localFiles.reload() }
+        .onChange(of: phase) { _, new in
+            if new == .active { model.localFiles.reload() }
+        }
+    }
+
+    private var lists: some View {
+        List {
+            if !model.downloads.jobs.isEmpty {
+                Section {
+                    ForEach(model.downloads.jobs) { job in
+                        JobRow(job: job) { sharing = $0 }
+                            .listRowBackground(Color.card)
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    model.downloads.remove(job)
+                                } label: {
+                                    Label(job.state.isFinished ? "Remove" : "Cancel",
+                                          systemImage: job.state.isFinished ? "trash" : "xmark")
+                                }
+                            }
+                    }
+                } header: {
+                    header("Transfers")
+                }
+            }
+
+            if !model.localFiles.isEmpty {
+                Section {
+                    ForEach(model.localFiles.files) { file in
+                        FileRow(file: file)
+                            .listRowBackground(Color.card)
+                            .contentShape(Rectangle())
+                            .onTapGesture { model.play(file) }
+                            .swipeActions(edge: .trailing) {
+                                Button(role: .destructive) {
+                                    model.localFiles.delete(file)
+                                } label: {
+                                    Label("Delete", systemImage: "trash")
+                                }
+                                Button {
+                                    sharing = file.url
+                                } label: {
+                                    Label("Share", systemImage: "square.and.arrow.up")
+                                }
+                                .tint(Color.secondaryText)
+                            }
+                    }
+                } header: {
+                    header("On this phone")
+                }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+    }
+
+    private func header(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Color.secondaryText)
+            .textCase(nil)
     }
 }
 
@@ -119,6 +177,46 @@ struct JobRow: View {
         default:
             return job.state.label
         }
+    }
+}
+
+/// One file on disk: tap it to play.
+struct FileRow: View {
+    let file: LocalFile
+
+    var body: some View {
+        HStack(spacing: 12) {
+            ZStack {
+                Artwork(url: file.artwork,
+                        icon: file.kind == .audio ? "waveform" : "film",
+                        width: 84, height: 48)
+                Image(systemName: "play.fill")
+                    .font(.system(size: 15))
+                    .foregroundStyle(.white)
+                    .shadow(radius: 3)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(file.title)
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundStyle(Color.primaryText)
+                    .lineLimit(2)
+
+                Text(file.subtitle)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.secondaryText)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            if file.kind == .audio {
+                Image(systemName: "headphones")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Color.secondaryText)
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Play \(file.title)")
     }
 }
 

@@ -23,8 +23,8 @@ struct RootView: View {
                 .badge(model.downloads.active)
         }
         .tint(Palette.accent)
-        .sheet(item: $model.playing) { video in
-            PlayerSheet(model: model, video: video)
+        .sheet(item: $model.playing) { item in
+            PlayerSheet(model: model, item: item)
         }
         .overlay(alignment: .top) { banner }
         .animation(.easeInOut(duration: 0.2), value: model.banner)

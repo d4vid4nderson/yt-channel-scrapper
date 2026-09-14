@@ -149,7 +149,7 @@ struct BrowseView: View {
             if model.isSelecting {
                 model.toggle(video)
             } else {
-                model.playing = video
+                model.play(video)
             }
         } label: {
             VideoRow(

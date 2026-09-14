@@ -84,7 +84,7 @@ struct LibraryView: View {
             } else {
                 List {
                     ForEach(model.library.videos) { video in
-                        Button { model.playing = video } label: {
+                        Button { model.play(video) } label: {
                             VideoRow(video: video, isSaved: true, showChannel: true)
                         }
                         .listRowBackground(Color.card)

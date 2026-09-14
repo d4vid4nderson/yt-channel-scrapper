@@ -1,5 +1,6 @@
 import AVKit
 import SwiftUI
+import UIKit
 
 /// The player, as a sheet over whatever list you started from.
 ///
@@ -8,9 +9,15 @@ import SwiftUI
 /// mattered: the stage is sized to the video's own aspect ratio, so a Short is not
 /// letterboxed into a 16:9 box, and the resolving stages are named rather than hidden
 /// behind an unexplained spinner.
+///
+/// It takes a `Playable` rather than a `Video` because a file already on the phone plays
+/// through the same stage and the same transport. What differs is only what you can do
+/// with it underneath: a stream can be saved or downloaded, a local file can be shared.
 struct PlayerSheet: View {
     @Bindable var model: AppModel
-    let video: Video
+    let item: Playable
+
+    @State private var sharing: URL?
 
     var body: some View {
         NavigationStack {
@@ -27,13 +34,22 @@ struct PlayerSheet: View {
                     Button("Close") { close() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button { model.download([video]) } label: {
-                        Label("Download", systemImage: "arrow.down.circle")
+                    if let video = item.video {
+                        Button { model.download([video]) } label: {
+                            Label("Download", systemImage: "arrow.down.circle")
+                        }
+                    } else if let file = item.file {
+                        Button { sharing = file.url } label: {
+                            Label("Share", systemImage: "square.and.arrow.up")
+                        }
                     }
                 }
             }
+            .sheet(item: $sharing) { url in
+                ShareSheet(items: [url])
+            }
         }
-        .onAppear { model.playback.open(video) }
+        .onAppear { model.playback.open(item) }
         .onDisappear { model.playback.close() }
     }
 
@@ -55,7 +71,10 @@ struct PlayerSheet: View {
                         .foregroundStyle(Color.secondaryText)
                 }
             case .ready(let player):
-                VideoPlayer(player: player)
+                // An m4a has no picture of its own, and without one this is a black
+                // rectangle with a scrubber on it — which reads as a video that failed
+                // to load rather than as audio.
+                Stage(player: player, poster: item.isVideo ? nil : item.artwork)
             case .failed(let message):
                 VStack(spacing: 8) {
                     Image(systemName: "exclamationmark.triangle")
@@ -75,40 +94,137 @@ struct PlayerSheet: View {
 
     private var details: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(video.title)
+            Text(item.title)
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.primaryText)
 
-            let meta = video.metaText(showingChannel: true)
-            if !meta.isEmpty {
-                Text(meta)
+            if !item.subtitle.isEmpty {
+                Text(item.subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondaryText)
             }
 
-            HStack(spacing: 10) {
-                Button {
-                    model.toggleSaved(video)
-                } label: {
-                    Label(model.isSaved(video) ? "Saved" : "Save",
-                          systemImage: model.isSaved(video) ? "bookmark.fill" : "bookmark")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .buttonStyle(.bordered)
-                .tint(model.isSaved(video) ? Palette.accent : Color.secondaryText)
-
-                Button {
-                    model.download([video])
-                } label: {
-                    Label(model.formatLabel, systemImage: "arrow.down.circle")
-                        .font(.system(size: 13, weight: .medium))
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Palette.accent)
-            }
-            .padding(.top, 4)
+            HStack(spacing: 10) { actions }
+                .padding(.top, 4)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(Metrics.gutter)
+    }
+
+    @ViewBuilder
+    private var actions: some View {
+        if let video = item.video {
+            Button {
+                model.toggleSaved(video)
+            } label: {
+                Label(model.isSaved(video) ? "Saved" : "Save",
+                      systemImage: model.isSaved(video) ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.bordered)
+            .tint(model.isSaved(video) ? Palette.accent : Color.secondaryText)
+
+            Button {
+                model.download([video])
+            } label: {
+                Label(model.formatLabel, systemImage: "arrow.down.circle")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.accent)
+        } else if let file = item.file {
+            Button {
+                sharing = file.url
+            } label: {
+                Label("Share", systemImage: "square.and.arrow.up")
+                    .font(.system(size: 13, weight: .medium))
+            }
+            .buttonStyle(.borderedProminent)
+            .tint(Palette.accent)
+
+            Text("On this phone")
+                .font(.system(size: 12))
+                .foregroundStyle(Color.secondaryText)
+        }
+    }
+}
+
+/// `AVPlayerViewController`, wrapped, rather than SwiftUI's `VideoPlayer`.
+///
+/// `VideoPlayer` is this same controller underneath, but it exposes no way to turn off
+/// `updatesNowPlayingInfoCenter`, which defaults to on. AVKit then writes the lock screen
+/// entry itself, from whatever metadata the file carries — a downloaded mp4 carries none
+/// — at the same time as `NowPlaying` is writing the real title and poster, and the user
+/// sees whichever of the two wrote last. That surface needs exactly one owner, so AVKit
+/// is told to leave it alone.
+struct Stage: UIViewControllerRepresentable {
+    let player: AVPlayer
+    /// Drawn behind the transport controls when the item has no picture of its own.
+    var poster: URL?
+
+    func makeUIViewController(context: Context) -> AVPlayerViewController {
+        let controller = AVPlayerViewController()
+        controller.player = player
+        controller.updatesNowPlayingInfoCenter = false
+        // Touching `view` forces the controller to load, which is what makes
+        // `contentOverlayView` exist to hang the poster on.
+        controller.view.backgroundColor = .black
+        if let poster { context.coordinator.show(poster, in: controller) }
+        return controller
+    }
+
+    func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
+        if controller.player !== player { controller.player = player }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    /// Holds the poster fetch, so it is cancelled with the view rather than outliving it.
+    @MainActor
+    final class Coordinator {
+        private var task: Task<Void, Never>?
+
+        deinit { task?.cancel() }
+
+        /// `contentOverlayView` is AVKit's own slot for this: above the video surface,
+        /// below the transport controls. Anything layered over the controller in SwiftUI
+        /// instead would sit on top of the controls and swallow them.
+        ///
+        /// The opaque backdrop is not padding. On an audio-only item AVKit draws its own
+        /// placeholder — a speaker with sound waves — into the empty video surface, and
+        /// a poster laid over that lands in the middle of it. Filling the overlay hides
+        /// the placeholder so there is one picture on screen instead of two.
+        func show(_ url: URL, in controller: AVPlayerViewController) {
+            guard let overlay = controller.contentOverlayView else { return }
+
+            let backdrop = UIView()
+            backdrop.backgroundColor = .black
+            backdrop.translatesAutoresizingMaskIntoConstraints = false
+            overlay.addSubview(backdrop)
+
+            let image = UIImageView()
+            image.contentMode = .scaleAspectFit
+            image.translatesAutoresizingMaskIntoConstraints = false
+            overlay.addSubview(image)
+
+            NSLayoutConstraint.activate([
+                backdrop.topAnchor.constraint(equalTo: overlay.topAnchor),
+                backdrop.bottomAnchor.constraint(equalTo: overlay.bottomAnchor),
+                backdrop.leadingAnchor.constraint(equalTo: overlay.leadingAnchor),
+                backdrop.trailingAnchor.constraint(equalTo: overlay.trailingAnchor),
+
+                image.centerXAnchor.constraint(equalTo: overlay.centerXAnchor),
+                image.centerYAnchor.constraint(equalTo: overlay.centerYAnchor),
+                image.heightAnchor.constraint(equalTo: overlay.heightAnchor, multiplier: 0.7),
+                image.widthAnchor.constraint(equalTo: overlay.widthAnchor, multiplier: 0.7),
+            ])
+
+            task = Task {
+                guard let (data, _) = try? await URLSession.shared.data(from: url),
+                      !Task.isCancelled
+                else { return }
+                image.image = UIImage(data: data)
+            }
+        }
     }
 }
