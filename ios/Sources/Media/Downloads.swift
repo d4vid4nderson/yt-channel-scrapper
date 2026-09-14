@@ -81,15 +81,66 @@ final class Downloads {
 
     // MARK: - One job
 
+    /// A fetch YouTube refused, carrying the client whose URL it refused so the next
+    /// attempt can ask a different one.
+    private struct Refused: Error { let client: String }
+
     private func run(_ job: DownloadJob) async {
         defer { running.remove(job.id) }
         guard job.state == .queued else { return }
 
+        // Clients whose URLs have already come back 403. `StreamResolver` cannot learn
+        // this for itself: it returns the first rung that yields streams, and the
+        // refusal happens later, while fetching. Feeding them back is what lets the
+        // ladder keep walking instead of choosing the same dead rung every time.
+        var refused: Set<String> = []
+
         do {
-            job.state = .downloading
-            let resolved = try await StreamResolver.resolve(
-                videoID: job.video.id, for: .download(job.quality))
-            try checkCancelled(job)
+            while true {
+                do {
+                    try await attempt(job, refused: refused)
+                    break
+                } catch let stop as Refused {
+                    refused.insert(stop.client)
+                    let detail = "\(stop.client) refused \(job.video.id), trying the next client"
+                    Log.transfer.info("\(detail, privacy: .public)")
+                    // The bar restarts with the new source rather than carrying a
+                    // percentage that belonged to a download now abandoned.
+                    job.percent = 0
+                    job.speed = nil
+                    job.eta = nil
+                }
+            }
+
+            job.percent = 1
+            job.speed = nil
+            job.eta = nil
+            job.state = .done
+            Log.transfer.info("saved \(job.video.id, privacy: .public)")
+            didSave?()
+
+        } catch is CancellationError {
+            job.state = .cancelled
+        } catch {
+            job.error = Self.describe(error)
+            job.state = .failed
+            let detail = "failed \(job.video.id): \(error.localizedDescription)"
+            Log.transfer.error("\(detail, privacy: .public)")
+        }
+    }
+
+    /// One pass at a job: resolve, fetch, mux.
+    ///
+    /// A 403 anywhere in the fetch becomes `Refused` so the caller can retry against a
+    /// different client. Everything else propagates and fails the job, because a codec
+    /// the muxer cannot write will not write any better from another rung.
+    private func attempt(_ job: DownloadJob, refused: Set<String>) async throws {
+        job.state = .downloading
+        let resolved = try await StreamResolver.resolve(
+            videoID: job.video.id, for: .download(job.quality), refused: refused)
+        try checkCancelled(job)
+
+        do {
 
             switch resolved.source {
             case .hls:
@@ -148,20 +199,8 @@ final class Downloads {
                 if let audioFile { try? FileManager.default.removeItem(at: audioFile) }
             }
 
-            job.percent = 1
-            job.speed = nil
-            job.eta = nil
-            job.state = .done
-            Log.transfer.info("saved \(job.video.id, privacy: .public)")
-            didSave?()
-
-        } catch is CancellationError {
-            job.state = .cancelled
-        } catch {
-            job.error = Self.describe(error)
-            job.state = .failed
-            let detail = "failed \(job.video.id): \(error.localizedDescription)"
-            Log.transfer.error("\(detail, privacy: .public)")
+        } catch Transfer.Failure.http(403) {
+            throw Refused(client: resolved.client)
         }
     }
 

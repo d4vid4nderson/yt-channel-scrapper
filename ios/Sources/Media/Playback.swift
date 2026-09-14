@@ -97,14 +97,27 @@ final class Playback {
 
     private var task: Task<Void, Never>?
     private var statusWatch: Task<Void, Never>?
+    /// Clients whose URLs YouTube has already refused for this item. AVPlayer reports
+    /// that refusal long after `resolve` returned, so it has to be remembered here and
+    /// fed back in on the next attempt.
+    private var refused: Set<String> = []
+    private var playingClient: String?
 
     var isOpen: Bool { item != nil }
 
     func open(_ item: Playable) {
         close()
         self.item = item
-        state = .working(item.file == nil ? "Finding a stream…" : "Opening…")
         Log.preview.info("open \(item.id, privacy: .public)")
+        start(item)
+    }
+
+    /// One attempt, with any client already refused for this item left out of the ladder.
+    private func start(_ item: Playable) {
+        task?.cancel()
+        statusWatch?.cancel()
+        state = .working(item.file == nil ? "Finding a stream…" : "Opening…")
+        let refused = self.refused
 
         task = Task { [weak self] in
             guard let self else { return }
@@ -115,9 +128,11 @@ final class Playback {
                 switch item {
                 case .stream(let video):
                     let resolved = try await self.timed(Self.resolveTimeout, "finding a stream") {
-                        try await StreamResolver.resolve(videoID: video.id, for: .playback)
+                        try await StreamResolver.resolve(
+                            videoID: video.id, for: .playback, refused: refused)
                     }
                     try Task.checkCancellation()
+                    self.playingClient = resolved.client
                     self.state = .working("Starting playback…")
                     built = try await Self.makePlayer(from: resolved)
                     let detail = "playing \(video.id) via \(resolved.client)"
@@ -171,6 +186,8 @@ final class Playback {
         Self.releaseAudioSession()
         state = .working("Finding a stream…")
         item = nil
+        refused = []
+        playingClient = nil
     }
 
     /// Let playback keep going with the screen locked, and stop it muting when the
@@ -200,6 +217,20 @@ final class Playback {
             guard let item = player.currentItem else { return }
             while !Task.isCancelled {
                 if item.status == .failed {
+                    // A 403 here is YouTube refusing the URL it just handed over, not a
+                    // broken stream — the same wall the downloader hits, arriving through
+                    // AVPlayer instead. Try the next client before giving up.
+                    if Self.isRefused(item.error),
+                       let self, let playing = self.item, playing.video != nil,
+                       let client = self.playingClient {
+                        self.refused.insert(client)
+                        let detail = "\(client) refused \(playing.id), trying the next client"
+                        Log.preview.info("\(detail, privacy: .public)")
+                        NowPlaying.shared.end()
+                        self.start(playing)
+                        return
+                    }
+
                     let message = item.error?.localizedDescription
                         ?? "The stream stopped working."
                     Log.preview.error("item failed: \(message, privacy: .public)")
@@ -210,6 +241,21 @@ final class Playback {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
+    }
+
+    /// Whether AVFoundation's failure is really an HTTP 403 from googlevideo.
+    ///
+    /// CoreMedia reports it as -12660 and usually buries it one or two levels down in
+    /// `NSUnderlyingError`, with a `localizedDescription` of "unknown error" — which is
+    /// what the player sheet used to show, and what made this look like a mystery rather
+    /// than a refusal.
+    private static func isRefused(_ error: Error?) -> Bool {
+        guard let error = error as NSError? else { return false }
+        if error.code == -12660 { return true }
+        if let under = error.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isRefused(under)
+        }
+        return false
     }
 
     // MARK: - Building the player

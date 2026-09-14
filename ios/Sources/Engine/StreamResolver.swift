@@ -112,10 +112,21 @@ enum StreamResolver {
 
     // MARK: - Resolving
 
-    static func resolve(videoID: String, for purpose: Purpose) async throws -> Resolved {
+    /// Walk the ladder and keep the first client that yields streams.
+    ///
+    /// `refused` names clients whose URLs YouTube has already rejected at *fetch* time,
+    /// which is a failure this function cannot see for itself: those 403s land later, in
+    /// `Transfer` or inside AVPlayer, long after the answer that caused them was
+    /// returned. Without a way to say "not that one again" a refused rung would be
+    /// chosen forever and the three behind it never tried.
+    static func resolve(
+        videoID: String,
+        for purpose: Purpose,
+        refused: Set<String> = []
+    ) async throws -> Resolved {
         var lastError: Error?
 
-        for client in InnerTube.playerLadder {
+        for client in InnerTube.playerLadder where !refused.contains(client.key) {
             do {
                 let response = try await InnerTube.post(
                     "player",
@@ -142,7 +153,11 @@ enum StreamResolver {
             }
         }
 
-        throw lastError ?? Failure.noStreams
+        // Nothing worked. If the ladder was narrowed by earlier refusals, say so —
+        // "no playable stream" would describe the wrong problem entirely.
+        if let lastError { throw lastError }
+        if !refused.isEmpty { throw Failure.allRefused }
+        throw Failure.noStreams
     }
 
     /// InnerTube reports refusals inside a 200 response.
@@ -333,6 +348,7 @@ enum StreamResolver {
     enum Failure: LocalizedError {
         case noStreams
         case refused(String)
+        case allRefused
 
         var errorDescription: String? {
             switch self {
@@ -341,6 +357,10 @@ enum StreamResolver {
                     + "or only offered in a format this app cannot handle."
             case .refused(let reason):
                 reason
+            case .allRefused:
+                "YouTube handed over a link and then refused it, for every client this "
+                    + "app knows how to ask as. That is the proof-of-origin wall rather "
+                    + "than a broken link, and retrying will not move it."
             }
         }
     }
