@@ -28,7 +28,22 @@ final class Downloads {
     private static let concurrency = 2
 
     private var running: Set<UUID> = []
-    private var pump: Task<Void, Never>?
+    /// One task per running job, kept so that cancelling a job can cancel the work
+    /// rather than only marking it. `Transfer` cancels the underlying `URLSessionTask`
+    /// from `withTaskCancellationHandler`, so this is what actually stops the bytes.
+    private var tasks: [UUID: Task<Void, Never>] = [:]
+    /// Jobs whose half-written scratch files are worth continuing from. Only a pause
+    /// puts a job in here. Everything else — a fresh start, a retry against another
+    /// client — must not append to bytes that came from a different format, because the
+    /// scratch name is per video and says nothing about which stream filled it.
+    private var resumable: Set<UUID> = []
+    /// Partial progress for paused jobs, keyed by job and stream. Held here rather than
+    /// on `DownloadJob` because that model is shared with the Mac app, which has no
+    /// concept of resuming — its downloads are one yt-dlp invocation.
+
+    private static func key(_ job: DownloadJob, _ name: String) -> String {
+        "\(job.id)-\(name)"
+    }
 
     var active: Int { jobs.filter { !$0.state.isFinished }.count }
     var hasFinished: Bool { jobs.contains { $0.state.isFinished } }
@@ -48,32 +63,112 @@ final class Downloads {
 
     func cancel(_ job: DownloadJob) {
         job.state = .cancelled
+        // Cancelling the task is the part that matters. Setting the state alone only
+        // gets noticed at the next stage boundary, so a job cancelled two minutes into
+        // a large file went on downloading the whole thing before it noticed.
+        tasks[job.id]?.cancel()
+        tasks[job.id] = nil
         running.remove(job.id)
+        resumable.remove(job.id)
+        forgetPartials(of: job)
+        start()
+    }
+
+    /// Stop, but keep what has arrived so far.
+    ///
+    /// The state is set before the task is cancelled, because that is how `fetch` tells
+    /// a pause from a cancel — both arrive as the same `Transfer.Failure.stopped`.
+    func pause(_ job: DownloadJob) {
+        guard job.state == .downloading || job.state == .queued else { return }
+        job.state = .paused
+        job.speed = nil
+        job.eta = nil
+        resumable.insert(job.id)
+        tasks[job.id]?.cancel()
+        tasks[job.id] = nil
+        running.remove(job.id)
+        start()
+    }
+
+    func resume(_ job: DownloadJob) {
+        guard job.state == .paused else { return }
+        job.state = .queued
         start()
     }
 
     func remove(_ job: DownloadJob) {
         if !job.state.isFinished { cancel(job) }
+        forgetPartials(of: job)
         jobs.removeAll { $0.id == job.id }
     }
 
     func clearFinished() {
+        for job in jobs where job.state.isFinished { forgetPartials(of: job) }
         jobs.removeAll { $0.state.isFinished }
     }
 
-    private func start() {
-        guard pump == nil else { return }
-        pump = Task { [weak self] in
-            while let next = self?.claimNext() {
-                await self?.run(next)
-            }
-            self?.pump = nil
+    /// Where a job's two streams are written while being fetched.
+    ///
+    /// The extensions are not decoration. `AVURLAsset` decides what a file is from its
+    /// path extension before reading a byte, so a perfectly good MP4 called
+    /// `<id>.video` fails with AVFoundation -11828, "Cannot Open — this media format is
+    /// not supported", while the identical bytes under `.mp4` open fine. The streams are
+    /// always H.264 in MP4 and AAC in M4A, because `Stream.isMuxable` selects nothing
+    /// else.
+    private static func videoScratch(_ job: DownloadJob) -> String {
+        "\(job.video.id).video.mp4"
+    }
+
+    private static func audioScratch(_ job: DownloadJob) -> String {
+        "\(job.video.id).audio.m4a"
+    }
+
+    /// Throw away a job's half-downloaded bytes. Only for cancelling and failing —
+    /// pausing keeps them, because they are what resuming continues from.
+    ///
+    /// The extensionless names are what earlier builds wrote, and the `.part` files are
+    /// the in-flight chunk. All of them are listed so that a stale one cannot be
+    /// resumed from: a partial as long as the resource makes the next range request
+    /// start past the end, and googlevideo answers that with 416.
+    private func forgetPartials(of job: DownloadJob) {
+        let names = [Self.videoScratch(job), Self.audioScratch(job),
+                     "\(job.video.id).video", "\(job.video.id).audio"]
+        for name in names.flatMap({ [$0, "\($0).part"] }) {
+            try? FileManager.default.removeItem(
+                at: Paths.scratch.appendingPathComponent(name))
         }
     }
 
+    /// Fill the free slots.
+    ///
+    /// One task per job rather than a single pump walking them in turn: a pump that
+    /// `await`s each job runs exactly one at a time no matter what `concurrency` says,
+    /// and gives cancellation nothing to aim at.
+    private func start() {
+        while let next = claimNext() {
+            let job = next
+            tasks[job.id] = Task { [weak self] in
+                await self?.run(job)
+                self?.finished(job)
+            }
+        }
+    }
+
+    /// A job has stopped, one way or another. Free its slot and pull in whatever is
+    /// waiting behind it.
+    private func finished(_ job: DownloadJob) {
+        tasks[job.id] = nil
+        running.remove(job.id)
+        start()
+    }
+
     private func claimNext() -> DownloadJob? {
+        // `!running.contains` is load-bearing, not belt and braces. A claimed job keeps
+        // `.queued` until its task actually starts, which is some time after this
+        // returns — so matching on state alone hands the same job back on the next turn
+        // of the loop, forever. The old single pump hid this by awaiting each job.
         guard running.count < Self.concurrency,
-              let next = jobs.first(where: { $0.state == .queued })
+              let next = jobs.first(where: { $0.state == .queued && !running.contains($0.id) })
         else { return nil }
         running.insert(next.id)
         return next
@@ -86,7 +181,6 @@ final class Downloads {
     private struct Refused: Error { let client: String }
 
     private func run(_ job: DownloadJob) async {
-        defer { running.remove(job.id) }
         guard job.state == .queued else { return }
 
         // Clients whose URLs have already come back 403. `StreamResolver` cannot learn
@@ -120,8 +214,21 @@ final class Downloads {
             didSave?()
 
         } catch is CancellationError {
-            job.state = .cancelled
+            if job.state != .paused { resumable.remove(job.id) }
+            // Pausing and cancelling both cancel the task, so they arrive identically.
+            // The state separates them: `pause` sets it before cancelling, and leaves
+            // the half-written scratch file for the next attempt to continue from.
+            if job.state == .paused {
+                Log.transfer.info("paused \(job.video.id, privacy: .public)")
+            } else {
+                job.state = .cancelled
+                Log.transfer.info("cancelled \(job.video.id, privacy: .public)")
+            }
         } catch {
+            // A failed job's partial bytes are not worth continuing from: the retry
+            // re-resolves and may well be handed a different format.
+            resumable.remove(job.id)
+            forgetPartials(of: job)
             job.error = Self.describe(error)
             job.state = .failed
             let detail = "failed \(job.video.id): \(error.localizedDescription)"
@@ -135,9 +242,13 @@ final class Downloads {
     /// different client. Everything else propagates and fails the job, because a codec
     /// the muxer cannot write will not write any better from another rung.
     private func attempt(_ job: DownloadJob, refused: Set<String>) async throws {
+        // Continue only what a pause left behind. Anything else starts clean: appending
+        // 1080p bytes onto a 720p partial would produce a file that is neither.
+        if resumable.remove(job.id) == nil { forgetPartials(of: job) }
         job.state = .downloading
         let resolved = try await StreamResolver.resolve(
             videoID: job.video.id, for: .download(job.quality), refused: refused)
+        job.totalBytes = resolved.expectedBytes
         try checkCancelled(job)
 
         do {
@@ -151,7 +262,7 @@ final class Downloads {
             case .audioOnly(let audio):
                 let name = Paths.filename(title: job.video.title, id: job.video.id,
                                           extension: "m4a")
-                let scratch = try await fetch(audio.url, as: "\(job.video.id).audio",
+                let scratch = try await fetch(audio.url, as: Self.audioScratch(job),
                                               expecting: resolved.expectedBytes, job: job)
                 try checkCancelled(job)
                 job.state = .processing
@@ -162,14 +273,14 @@ final class Downloads {
 
             case .pair(let video, let audio):
                 let total = resolved.expectedBytes
-                let videoFile = try await fetch(video.url, as: "\(job.video.id).video",
+                let videoFile = try await fetch(video.url, as: Self.videoScratch(job),
                                                 expecting: total, job: job)
                 try checkCancelled(job)
 
                 var audioFile: URL?
                 if let audio {
                     audioFile = try await fetch(
-                        audio.url, as: "\(job.video.id).audio", expecting: total, job: job,
+                        audio.url, as: Self.audioScratch(job), expecting: total, job: job,
                         alreadyDone: video.contentLength ?? 0)
                 }
                 try checkCancelled(job)
@@ -261,7 +372,13 @@ final class Downloads {
             }
             guard due else { return }
             Task { @MainActor in
-                guard !job.state.isFinished else { return }
+                // Only a job that is still running may be told it is downloading.
+                // These readings are already in flight when the user pauses, and one
+                // landing afterwards used to flip `.paused` back to `.downloading` —
+                // which made the pause look like it failed, made `run` record a cancel
+                // instead of a pause, and left the half-written file to be appended to
+                // by the next attempt.
+                guard job.state == .downloading || job.state == .queued else { return }
                 job.state = .downloading
                 job.percent = reading.percent
                 job.speed = reading.speed

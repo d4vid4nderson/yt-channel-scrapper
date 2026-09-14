@@ -59,7 +59,7 @@ struct DownloadsView: View {
             if !model.downloads.jobs.isEmpty {
                 Section {
                     ForEach(model.downloads.jobs) { job in
-                        JobRow(job: job) { sharing = $0 }
+                        JobRow(job: job, onCancel: { model.downloads.cancel(job) }) { sharing = $0 }
                             .listRowBackground(Color.card)
                             .swipeActions(edge: .trailing) {
                                 Button(role: .destructive) {
@@ -116,6 +116,7 @@ struct DownloadsView: View {
 /// One job: what it is, how far along, and what it left on disk.
 struct JobRow: View {
     let job: DownloadJob
+    let onCancel: () -> Void
     let onShare: (URL) -> Void
 
     var body: some View {
@@ -141,6 +142,20 @@ struct JobRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
+            // Stopping a download should not require discovering that rows swipe.
+            // A running job is the one thing here a user urgently wants to act on —
+            // it is spending their battery and their cellular allowance.
+            if !job.state.isFinished {
+                Button(action: onCancel) {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 18))
+                        .foregroundStyle(Color.secondaryText)
+                        .tappable()
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("Cancel \(job.video.title)")
+            }
+
             // A finished file is only useful if you can get it somewhere. The share
             // sheet is how anything leaves an iOS app — a plain link would not work,
             // because the app cannot hand the system a file by pointing at it.
@@ -163,8 +178,11 @@ struct JobRow: View {
         // does, and the `.done` case needs statements rather than an expression.
         switch job.state {
         case .downloading:
-            let parts = [job.speedText, job.etaText].filter { !$0.isEmpty }
+            let parts = [job.sizeText, job.speedText, job.etaText].filter { !$0.isEmpty }
             return parts.isEmpty ? "Downloading…" : parts.joined(separator: "  ·  ")
+        case .paused:
+            let parts = ["Paused", job.sizeText].filter { !$0.isEmpty }
+            return parts.joined(separator: "  ·  ")
         case .processing:
             return "Combining video and audio…"
         case .done:

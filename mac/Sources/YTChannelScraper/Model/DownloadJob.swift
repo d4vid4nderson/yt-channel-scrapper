@@ -5,7 +5,7 @@ import Foundation
 @Observable
 final class DownloadJob: Identifiable {
     enum State: Equatable, Sendable {
-        case queued, downloading, retrying, processing, done, failed, cancelled
+        case queued, downloading, retrying, processing, paused, done, failed, cancelled
 
         var isFinished: Bool { self == .done || self == .failed || self == .cancelled }
 
@@ -13,6 +13,7 @@ final class DownloadJob: Identifiable {
             switch self {
             case .queued:      "Queued"
             case .downloading: "Downloading"
+            case .paused:      "Paused"
             case .retrying:    "Retrying"
             case .processing:  "Processing"
             case .done:        "Done"
@@ -33,6 +34,11 @@ final class DownloadJob: Identifiable {
     var speed: Double?          // bytes/sec
     var eta: Int?               // seconds
     var file: URL?
+    /// Combined bytes for the streams being fetched, once YouTube has said. The iOS
+    /// rows print it: a 1080p hour is over a gigabyte, and finding that out from the
+    /// clock is worse than being told up front. The Mac leaves it nil — yt-dlp reports
+    /// its own totals there.
+    var totalBytes: Int64?
     /// The mp3 taken out of `file`, once there is one.
     var audioFile: URL?
     var error: String?
@@ -52,6 +58,11 @@ final class DownloadJob: Identifiable {
 
     /// Everything this job put on disk, for revealing in Finder.
     var savedFiles: [URL] { [file, audioFile].compactMap(\.self) }
+
+    var sizeText: String {
+        guard let totalBytes, totalBytes > 0 else { return "" }
+        return ByteCountFormatter.string(fromByteCount: totalBytes, countStyle: .file)
+    }
 
     var speedText: String {
         guard let speed, speed > 0, state == .downloading else { return "" }

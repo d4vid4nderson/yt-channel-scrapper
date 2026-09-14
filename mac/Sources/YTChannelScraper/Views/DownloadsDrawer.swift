@@ -178,6 +178,7 @@ private struct JobRow: View {
         switch job.state {
         case .queued:      "clock"
         case .downloading: "arrow.down.circle"
+        case .paused:      "pause.circle"
         case .retrying:    "arrow.triangle.2.circlepath"
         case .processing:  "gearshape"
         case .done:        "checkmark.circle.fill"
