@@ -355,7 +355,7 @@ Diagnostics go to the unified log rather than stdout, since an app launched from
 has nowhere to print:
 
 ```bash
-log show --last 10m --predicate 'subsystem == "com.moregroup.ytchannelscraper"' --info
+log show --last 10m --predicate 'subsystem == "com.d4vid4nderson.ytchannelscraper"' --info
 ```
 
 ### The previous version

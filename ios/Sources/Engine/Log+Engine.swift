@@ -7,8 +7,8 @@ import os
 extension Log {
     /// Extraction: InnerTube calls, which client answered, player-script parsing.
     /// The one to read when a video will not resolve:
-    ///   log stream --predicate 'subsystem == "com.moregroup.ytchannelscraper"'
-    static let engine = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "engine")
+    ///   log stream --predicate 'subsystem == "com.d4vid4nderson.ytchannelscraper"'
+    static let engine = Logger(subsystem: "com.d4vid4nderson.ytchannelscraper", category: "engine")
     /// Downloading and muxing.
-    static let transfer = Logger(subsystem: "com.moregroup.ytchannelscraper", category: "transfer")
+    static let transfer = Logger(subsystem: "com.d4vid4nderson.ytchannelscraper", category: "transfer")
 }

@@ -20,7 +20,7 @@ actor Transfer {
 
     /// Must be stable across launches: the system matches a relaunched app to its
     /// outstanding background tasks by this identifier.
-    static let sessionIdentifier = "com.moregroup.ytchannelscraper.transfer"
+    static let sessionIdentifier = "com.d4vid4nderson.ytchannelscraper.transfer"
 
     private var session: URLSession!
     private let delegate = Delegate()

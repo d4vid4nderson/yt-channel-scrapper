@@ -64,7 +64,7 @@ app = BUNDLE(
     coll,
     name="YT Channel Scraper.app",
     icon="icon.icns",
-    bundle_identifier="com.moregroup.ytchannelscraper",
+    bundle_identifier="com.d4vid4nderson.ytchannelscraper",
     info_plist={
         "CFBundleName": "YT Channel Scraper",
         "CFBundleDisplayName": "YT Channel Scraper",
