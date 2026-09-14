@@ -30,7 +30,12 @@ final class AppModel {
     // MARK: - Input
 
     var urlText = ""
-    var quality: Quality = .p1080
+    /// 720p, where the Mac defaults to 1080p, and deliberately so. YouTube serves a
+    /// far higher bitrate at 1080p than at 720p — measured on one hour-long video,
+    /// 1.23 GB against 60 MB, a factor of twenty-one — and on a screen this size the
+    /// difference is close to invisible while the download is not. The picker still
+    /// offers 1080p and Best for anyone who wants them.
+    var quality: Quality = .p720
     /// Whether an m4a is wanted beside the video as well as the video itself.
     var alsoAudio = false
     var filterText = ""
@@ -42,6 +47,11 @@ final class AppModel {
 
     /// What the player sheet is showing, if anything — a stream or a file on disk.
     var playing: Playable?
+
+    /// Which tab is on screen. Bound rather than left to `TabView` so that finishing a
+    /// download can take you to it.
+    enum Tab: Hashable { case browse, saved, downloads }
+    var tab: Tab = .browse
 
     /// A message for the banner — an import result, an export path, a failure that is
     /// not attached to any one row.
@@ -106,6 +116,10 @@ final class AppModel {
         isSelecting = false
         library.markOpened(channel.id)
         listing.open(channel.id, known: channel)
+        // The listing is what BrowseView draws, so opening a channel from Saved has to
+        // go there to be seen. Without this the tap looked like it did nothing except
+        // reorder the saved list, which is `markOpened` above doing its job.
+        tab = .browse
     }
 
     func goHome() {

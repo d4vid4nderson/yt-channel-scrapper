@@ -11,16 +11,19 @@ struct RootView: View {
     @State private var model = AppModel()
 
     var body: some View {
-        TabView {
+        TabView(selection: $model.tab) {
             BrowseView(model: model)
                 .tabItem { Label("Browse", systemImage: "magnifyingglass") }
+                .tag(AppModel.Tab.browse)
 
             LibraryView(model: model)
                 .tabItem { Label("Saved", systemImage: "bookmark") }
+                .tag(AppModel.Tab.saved)
 
             DownloadsView(model: model)
                 .tabItem { Label("Downloads", systemImage: "arrow.down.circle") }
                 .badge(model.downloads.active)
+                .tag(AppModel.Tab.downloads)
         }
         .tint(Palette.accent)
         .sheet(item: $model.playing) { item in

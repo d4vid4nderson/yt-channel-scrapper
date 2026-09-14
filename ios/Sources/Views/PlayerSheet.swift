@@ -34,10 +34,8 @@ struct PlayerSheet: View {
                     Button("Close") { close() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    if let video = item.video {
-                        Button { model.download([video]) } label: {
-                            Label("Download", systemImage: "arrow.down.circle")
-                        }
+                    if item.video != nil {
+                        DownloadButton(job: job, action: downloadTapped)
                     } else if let file = item.file {
                         Button { sharing = file.url } label: {
                             Label("Share", systemImage: "square.and.arrow.up")
@@ -56,6 +54,38 @@ struct PlayerSheet: View {
     private func close() {
         model.playback.close()
         model.playing = nil
+    }
+
+    /// The job for this video, if one has been queued. The most recent, because a
+    /// failed attempt leaves its job in the list and a retry adds another.
+    private var job: DownloadJob? {
+        guard let id = item.video?.id else { return nil }
+        return model.downloads.jobs.last { $0.video.id == id }
+    }
+
+    /// One button, so the tap has to mean whatever the job needs next.
+    private func downloadTapped() {
+        guard let video = item.video else { return }
+        guard let job else {
+            model.download([video])
+            return
+        }
+        switch job.state {
+        case .downloading, .queued, .retrying:
+            model.downloads.pause(job)
+        case .paused:
+            model.downloads.resume(job)
+        case .done:
+            // "Open the downloads" means the app's own list of what is on the phone,
+            // not Files.app: it is one tap away, always works, and is the same folder.
+            model.playback.close()
+            model.playing = nil
+            model.tab = .downloads
+        case .failed, .cancelled:
+            model.download([video])
+        case .processing:
+            break   // mid-mux, and nothing useful can be done to it
+        }
     }
 
     @ViewBuilder
