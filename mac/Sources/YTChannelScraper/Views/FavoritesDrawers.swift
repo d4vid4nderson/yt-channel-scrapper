@@ -177,6 +177,12 @@ struct SavedChannelsDrawer: View {
                     open: { model.open(channel) },
                     remove: { model.library.remove(channel.id) }
                 )
+                // Drag a channel onto somebody in Dispatch to send it. The payload
+                // carries the title so the receiving device never has to ask YouTube.
+                .draggable(SendPayload(kind: .channel, id: channel.id,
+                                       title: channel.title, channelID: nil)) {
+                    DragChip(title: channel.title, icon: "person.crop.circle")
+                }
             }
         }
     }
@@ -199,6 +205,10 @@ struct SavedChannelsDrawer: View {
                     download: { model.download([video]) },
                     remove: { model.library.removeVideo(video.id) }
                 )
+                .draggable(SendPayload(kind: .video, id: video.id,
+                                       title: video.title, channelID: video.channelId)) {
+                    DragChip(title: video.title, icon: "play.rectangle")
+                }
             }
         }
     }
@@ -623,5 +633,22 @@ private struct LibraryMenu: View {
         .pointingHand()
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+}
+
+
+/// What follows the cursor while dragging something towards a person.
+private struct DragChip: View {
+    let title: String
+    let icon: String
+
+    var body: some View {
+        Label(title, systemImage: icon)
+            .font(.system(size: 11, weight: .medium))
+            .lineLimit(1)
+            .frame(maxWidth: 220)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 6)
+            .background(.black.opacity(0.75), in: Capsule())
     }
 }

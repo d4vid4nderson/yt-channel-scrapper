@@ -310,6 +310,34 @@ final class ShelfStore {
         return await write(member, as: guardian)
     }
 
+    /// Record what device somebody is expected to have.
+    ///
+    /// Nil clears it. Writes the whole member back, so the role and claimed state survive
+    /// — a partial write here would silently demote somebody.
+    @discardableResult
+    func setExpectedDevice(_ id: UUID, kind: DeviceRecord.Kind?,
+                           as guardian: Profiles.Guardian) async -> Bool {
+        let known = declared.first { $0.id == id }
+        let name = known?.name
+            ?? roster.first { $0.id == id }?.name
+            ?? guardians.first { $0.id == id }?.name
+        guard let name else { return false }
+
+        var member = FamilyMember(
+            id: id,
+            name: name,
+            isMinor: known?.isMinor ?? roster.contains { $0.id == id }
+        )
+        member.isClaimed = known?.isClaimed ?? false
+        member.expectedKind = kind?.rawValue
+        return await write(member, as: guardian)
+    }
+
+    /// What an admin said this person carries, if anything.
+    func expectedDevice(for id: UUID) -> DeviceRecord.Kind? {
+        declared.first { $0.id == id }?.expected
+    }
+
     /// Mark a person as claimed, so the list stops saying nobody is using that identity.
     func markClaimed(_ id: UUID, as guardian: Profiles.Guardian) async {
         guard var mine = peopleFiles.first(where: { $0.guardianID == guardian.id }),

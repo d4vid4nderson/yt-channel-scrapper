@@ -1,3 +1,4 @@
+import CoreTransferable
 import Foundation
 #if canImport(UIKit)
 import UIKit
@@ -346,7 +347,16 @@ struct FamilyMember: Codable, Hashable, Sendable, Identifiable {
     /// a removal.
     var isRemoved: Bool?
 
+    /// What device this person is expected to carry, recorded by an admin.
+    ///
+    /// Distinct from a `DeviceRecord`, which a device writes about itself. This is the
+    /// parent saying "Wyatt has a phone" before that phone has ever opened the app — so
+    /// the row can show a greyed phone and "not seen yet" rather than a blank. Once the
+    /// real device reports, it takes over and this is only a fallback.
+    var expectedKind: String?
+
     var removed: Bool { isRemoved == true }
+    var expected: DeviceRecord.Kind? { expectedKind.flatMap(DeviceRecord.Kind.init(rawValue:)) }
 }
 
 /// The people one guardian has added, in a file only that guardian writes.
@@ -374,4 +384,27 @@ struct PeopleFile: Codable, Sendable {
 
     static let prefix = "people-"
     var filename: String { "\(Self.prefix)\(guardianID.uuidString).json" }
+}
+
+
+// MARK: - Dragging something onto somebody
+
+/// A channel or a video, on its way from a drawer to a person.
+///
+/// Carries the title and the channel for the same reason a `ShelfEntry` does: the
+/// receiving device names its downloads from the first and a later channel veto reaches
+/// the video through the second. Nothing is looked up on the far side of the drop.
+///
+/// Transferred as JSON rather than as text, which is what keeps it apart from the other
+/// drag on this screen — a person's id travels as plain text, and two string payloads
+/// would land in each other's drop targets.
+struct SendPayload: Codable, Transferable, Sendable {
+    let kind: ShelfEntry.Kind
+    let id: String
+    let title: String
+    let channelID: String?
+
+    static var transferRepresentation: some TransferRepresentation {
+        CodableRepresentation(contentType: .json)
+    }
 }

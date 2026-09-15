@@ -21,7 +21,6 @@ struct FamilyDrawer: View {
     /// This admin's own display name — what signs approvals. Edited from your own row
     /// under Admins, because that is where it means something.
     @State private var name = ""
-    @State private var renamingSelf = false
     /// Which section the cursor is dragging over, so it can light up.
     @State private var dropTarget: Bool?
     @State private var newName = ""
@@ -46,11 +45,11 @@ struct FamilyDrawer: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
-                        you
-                        folder
+                        you.padding(.horizontal, 10)
+                        folder.padding(.horizontal, 10)
                         if profiles.guardian != nil, shelf.folder != nil { people }
                     }
-                    .padding(.horizontal, 16)
+                    .padding(.horizontal, 6)
                     .padding(.vertical, 18)
                 }
                 .scrollIndicators(.visible)
@@ -108,7 +107,6 @@ struct FamilyDrawer: View {
     private func saveName() {
         guard nameChanged else { return }
         _ = profiles.setGuardianName(name.trimmingCharacters(in: .whitespaces))
-        renamingSelf = false
         Task { await model.syncShelf() }
     }
 
@@ -203,7 +201,10 @@ struct FamilyDrawer: View {
                         unclaimed: shelf.isUnclaimed(guardian.id),
                         devices: shelf.devices.filter { $0.personID == guardian.id },
                         count: nil,
+                        expected: shelf.expectedDevice(for: guardian.id),
+                        setExpected: { setExpected(guardian.id, $0) },
                         claim: { claim(id: guardian.id, name: guardian.name) },
+                        rename: renameBinding(for: guardian.id),
                         remove: { removing = (guardian.id, guardian.name) }
                     )
                 }
@@ -220,6 +221,8 @@ struct FamilyDrawer: View {
                         unclaimed: false,
                         devices: shelf.devices.filter { $0.personID == minor.id },
                         count: shelf.approved(for: minor.id).count,
+                        expected: shelf.expectedDevice(for: minor.id),
+                        setExpected: { setExpected(minor.id, $0) },
                         claim: nil,
                         remove: { removing = (minor.id, minor.name) }
                     )
@@ -248,28 +251,6 @@ struct FamilyDrawer: View {
 
             rows()
 
-            // Your own name lives here rather than at the top of the panel: it is the
-            // thing that signs your approvals, so it belongs beside the other admins
-            // rather than above the whole family.
-            if !isMinor {
-                if renamingSelf {
-                    HStack(spacing: 8) {
-                        CapsuleField(text: $name, prompt: "Your name", onSubmit: saveName)
-                            .help("Shown against what you approve, so other admins can see who decided what")
-                        QuietButton(title: "Save", accent: true, action: saveName)
-                        QuietButton(title: "Cancel") {
-                            name = profiles.guardian?.name ?? ""
-                            renamingSelf = false
-                        }
-                    }
-                } else if profiles.guardian != nil {
-                    QuietButton(title: "Rename yourself") {
-                        name = profiles.guardian?.name ?? ""
-                        renamingSelf = true
-                    }
-                }
-            }
-
             // Not said while a field is open below it — that is already explaining itself.
             if isEmpty && addingMinor != isMinor {
                 Text(empty)
@@ -293,11 +274,18 @@ struct FamilyDrawer: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 4)
+        // Held at rest as well as when lit, so the rows do not jump sideways the moment
+        // a drag crosses them. The scroll view's own inset is reduced to match.
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
         .background(
             (dropTarget == isMinor ? Palette.accent.opacity(0.10) : .clear),
-            in: RoundedRectangle(cornerRadius: 8)
+            in: RoundedRectangle(cornerRadius: 10)
         )
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(dropTarget == isMinor ? Palette.accent.opacity(0.35) : .clear)
+        }
         .dropDestination(for: String.self) { items, _ in
             guard let raw = items.first, let id = UUID(uuidString: raw) else { return false }
             // Dropping somebody into the section they are already in is a no-op rather
@@ -327,6 +315,17 @@ struct FamilyDrawer: View {
             _ = await shelf.createPerson(named: wanted, isMinor: isMinor, as: guardian)
             working = false
         }
+    }
+
+    /// Your own row, and only yours, gets an editable name.
+    private func renameBinding(for id: UUID) -> PersonRow.Rename? {
+        guard id == profiles.guardian?.id else { return nil }
+        return PersonRow.Rename(text: $name, save: saveName)
+    }
+
+    private func setExpected(_ id: UUID, _ kind: DeviceRecord.Kind?) {
+        guard let guardian = profiles.guardian else { return }
+        Task { await shelf.setExpectedDevice(id, kind: kind, as: guardian) }
     }
 
     private func setRole(_ id: UUID, isMinor: Bool) {
@@ -430,7 +429,12 @@ private struct QuietButton: View {
     }
 }
 
-/// One person: who they are, what they hold it on, and how much they have.
+/// One person: their name, what they carry, and how much is waiting for them.
+///
+/// Two lines and three columns, aligned on a grid rather than by eye. What was here
+/// before put the role beside the name — which the section heading above already says —
+/// and let a menu set its own type size, so the second line came out larger than the
+/// name's own subtitle and nothing shared a baseline.
 private struct PersonRow: View {
     let id: UUID
     let name: String
@@ -439,81 +443,42 @@ private struct PersonRow: View {
     let unclaimed: Bool
     let devices: [DeviceRecord]
     let count: Int?
+    let expected: DeviceRecord.Kind?
+    let setExpected: (DeviceRecord.Kind?) -> Void
     let claim: (() -> Void)?
+    /// Only your own row gets one: the field is your display name, edited in place.
+    var rename: Rename?
     let remove: () -> Void
+
+    struct Rename {
+        let text: Binding<String>
+        let save: () -> Void
+    }
 
     @State private var hovering = false
 
     var body: some View {
-        HStack(spacing: 9) {
-            Circle()
-                .fill(Palette.accent.opacity(isMinor ? 0.22 : 0.32))
-                .frame(width: 26, height: 26)
-                .overlay {
-                    Text(String(name.prefix(1)).uppercased())
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.white.opacity(0.9))
-                }
+        HStack(spacing: 10) {
+            monogram
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(name)
-                    .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white)
-                    .lineLimit(1)
-                HStack(spacing: 5) {
-                    // The role is the control. Changing somebody from child to parent is
-                    // rare enough not to deserve a row of its own, and obvious enough
-                    // here that nobody has to look for it.
-                    // A label, not a control, and never a moving one. Changing somebody's
-                    // role is a drag between the two sections — see the drop targets on
-                    // `group`. The dropdown that used to be here grew a chevron on hover,
-                    // which shoved the rest of the line sideways every time the cursor
-                    // crossed a row.
-                    Text(isYou ? "you" : (isMinor ? "minor" : "admin"))
-                        .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.45))
-
-                    ForEach(devices) { device in
-                        Image(systemName: device.kind.icon)
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(.white.opacity(0.4))
-                            .help(help(for: device))
-                    }
-                    if devices.isEmpty && !isYou {
-                        Text("no device yet")
-                            .font(.system(size: 9.5))
-                            .foregroundStyle(.white.opacity(0.25))
-                    }
-                }
+                first
+                second
             }
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 8)
 
-            if unclaimed, let claim {
-                QuietButton(title: "This is me", action: claim)
-            } else if let count {
+            // Fixed widths so every row's right edge lines up, whatever is in it.
+            if let count {
                 Text("\(count)")
-                    .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.4))
+                    .font(.system(size: 11.5).monospacedDigit())
+                    .foregroundStyle(.white.opacity(count == 0 ? 0.25 : 0.55))
             }
 
-            // Only on hover, and never for yourself.
-            if hovering && !isYou {
-                Button(action: remove) {
-                    Image(systemName: "minus.circle")
-                        .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.35))
-                }
-                .buttonStyle(.plain)
-                .help("Remove \(name)")
-                .pointingHand()
-                .transition(.opacity)
-            }
+            removeButton
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 4)
         .contentShape(Rectangle())
-        // The id travels as a plain string: the drop target only needs to know who was
-        // dragged, and everything else about them is already on the other side.
         .draggable(id.uuidString) {
             Text(name)
                 .font(.system(size: 12, weight: .medium))
@@ -521,16 +486,125 @@ private struct PersonRow: View {
                 .background(.black.opacity(0.7), in: Capsule())
         }
         .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
+        // Claiming an identity somebody else created happens once, on one machine, ever.
+        // A button for it on every unclaimed row was permanent furniture for a one-off.
+        .contextMenu {
+            if unclaimed, !isYou, let claim {
+                Button("This is me — sign my approvals as \(name)", action: claim)
+            }
+        }
     }
 
-    private func help(for device: DeviceRecord) -> String {
-        var parts = ["\(device.name) — last seen "
-                     + device.lastSeen.formatted(date: .abbreviated, time: .shortened)]
-        if device.isMinor {
-            parts.append("\(device.downloaded) of \(device.approved) downloaded")
+    private var monogram: some View {
+        Circle()
+            .fill(Palette.accent.opacity(isMinor ? 0.22 : 0.32))
+            .frame(width: 28, height: 28)
+            .overlay {
+                Text(String(name.prefix(1)).uppercased())
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.9))
+            }
+    }
+
+    @ViewBuilder
+    private var first: some View {
+        if isYou, let rename {
+            TextField("Your name", text: rename.text)
+                .textFieldStyle(.plain)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.white)
+                .lineLimit(1)
+                .onSubmit(rename.save)
+                .help("Shown against what you approve, so other admins can see who decided what")
+        } else {
+            Text(name)
+                .font(.system(size: 12.5, weight: .medium))
+                .foregroundStyle(.white)
+                .lineLimit(1)
         }
-        return parts.joined(separator: ", ")
+    }
+
+    /// The device, and nothing else. The role used to live here and was redundant — the
+    /// section heading two rows up already says whether this is an admin or a minor.
+    @ViewBuilder
+    private var second: some View {
+        if let device = devices.first {
+            Label {
+                Text(device.kind.noun.capitalized + " · seen "
+                     + device.lastSeen.formatted(date: .omitted, time: .shortened))
+            } icon: {
+                Image(systemName: device.kind.icon)
+            }
+            .font(.system(size: 10.5))
+            .foregroundStyle(.white.opacity(0.38))
+            .labelStyle(.titleAndIcon)
+        } else {
+            DeviceMenu(expected: expected, set: setExpected)
+        }
+    }
+
+    private var removeButton: some View {
+        Group {
+            if isYou {
+                // A blank of the same width, so your row lines up with the others.
+                Color.clear.frame(width: 14, height: 14)
+            } else {
+                Button(action: remove) {
+                    Image(systemName: "minus.circle")
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(hovering ? 0.55 : 0.25))
+                }
+                .buttonStyle(.plain)
+                .help("Remove " + name)
+                .pointingHand()
+            }
+        }
+        .frame(width: 14)
+    }
+}
+
+/// What somebody is expected to carry, until a real device says otherwise.
+///
+/// No watch. The app has no watchOS target, so a watch could never report in and the row
+/// would say "not seen yet" for ever — an option that can only ever be wrong is worse
+/// than one that is missing. It is listed as disabled so its absence is explained rather
+/// than mysterious.
+private struct DeviceMenu: View {
+    let expected: DeviceRecord.Kind?
+    let set: (DeviceRecord.Kind?) -> Void
+
+    var body: some View {
+        Menu {
+            Button("Phone") { set(.phone) }
+            Button("Tablet") { set(.tablet) }
+            Button("Computer") { set(.computer) }
+            Divider()
+            Button("Watch — needs a watchOS app") {}.disabled(true)
+            if expected != nil {
+                Divider()
+                Button("Clear") { set(nil) }
+            }
+        } label: {
+            HStack(spacing: 4) {
+                if let expected {
+                    Image(systemName: expected.icon)
+                        .font(.system(size: 10.5))
+                    Text("Not seen yet")
+                        .font(.system(size: 10.5))
+                } else {
+                    Text("Set device")
+                        .font(.system(size: 10.5))
+                }
+            }
+            .foregroundStyle(.white.opacity(0.32))
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .controlSize(.small)
+        .fixedSize()
+        .help(expected == nil
+              ? "Record what this person carries — the device itself will confirm when it opens the app"
+              : "Expected, but this device has not opened the app yet")
     }
 }
 

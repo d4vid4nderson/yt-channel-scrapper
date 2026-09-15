@@ -212,9 +212,9 @@ struct RootView: View {
                         .frame(maxWidth: 680)
                         .padding(.top, 46)
                     statusLine
-                    // Who is on the other end, before anything has been typed. The point
-                    // of the landing screen in a command center.
-                    FamilyStrip(model: model)
+                    // What is going on, before anything has been typed. A search box with
+                    // a row of chips under it was not a command centre; this is.
+                    CommandBoard(model: model)
                     Spacer(minLength: 0)
                     Spacer(minLength: 0)   // sits the block a little above centre
                 }

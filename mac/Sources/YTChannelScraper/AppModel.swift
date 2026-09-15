@@ -103,6 +103,19 @@ final class AppModel {
         )], for: minor, as: guardian)
     }
 
+    /// Send whatever was dragged onto somebody.
+    @discardableResult
+    func send(_ item: SendPayload, to minor: Profiles.Minor) async -> Bool {
+        guard let guardian = profiles.guardian else { return false }
+        return await shelf.record([ShelfEntry(
+            kind: item.kind, id: item.id,
+            state: .approved,
+            guardian: guardian.name,
+            title: item.title,
+            channelID: item.channelID
+        )], for: minor, as: guardian)
+    }
+
     /// Whether this item is on that child's shelf right now.
     func isOnShelf(kind: ShelfEntry.Kind, id: String, for minor: Profiles.Minor) -> Bool {
         shelf.approved(for: minor.id).contains(ShelfEntry.Key(kind: kind, id: id))
