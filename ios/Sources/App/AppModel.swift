@@ -55,6 +55,10 @@ final class AppModel {
                                        shelf: shelf,
                                        downloads: downloads,
                                        localFiles: localFiles)
+            // The shelf is this device's library, so anything on it belongs on the
+            // shelves the child actually browses.
+            claimSent()
+
             let approved = shelf.approved(for: minor.id).count
             await shelf.announce(person: (minor.id, minor.name),
                                  isMinor: true,
@@ -156,6 +160,60 @@ final class AppModel {
         guard let id = video.channelId, !id.isEmpty else { return nil }
         if let saved = library.channels.first(where: { $0.id == id }) { return saved }
         return Channel(id: id, title: video.channelName ?? id)
+    }
+
+    // MARK: - What has been sent to this device
+
+    /// Everything currently on this device's own shelf, as library items.
+    ///
+    /// The shelf stores decisions, not objects: a `ShelfEntry` is an id, a title and —
+    /// for a video — its channel. That is deliberately all a receiving device needs, and
+    /// it is why this phone can draw what it was sent without asking YouTube anything.
+    /// Rebuilding a `Channel` or `Video` from those three fields is the last step.
+    var sent: (channels: [Channel], videos: [Video]) {
+        guard let me = profiles.minor.map({ ($0.id, $0.name) })
+                ?? profiles.guardian.map({ ($0.id, $0.name) })
+        else { return ([], []) }
+
+        let standing = ShelfMerge.resolve(shelf.entries(for: me.0)).values
+            .filter { $0.state == .approved }
+
+        let channels = standing
+            .filter { $0.kind == .channel }
+            .map { Channel(id: $0.id, title: $0.title ?? $0.id) }
+        let videos = standing
+            .filter { $0.kind == .video }
+            .compactMap { entry -> Video? in
+                var json: [String: Any] = ["id": entry.id, "title": entry.title ?? entry.id]
+                if let channelID = entry.channelID { json["channel_id"] = channelID }
+                return Video(json: json)
+            }
+        return (channels, videos)
+    }
+
+    /// What has been sent but is not in the library yet — the inbox's contents.
+    var unclaimedSent: (channels: [Channel], videos: [Video]) {
+        let all = sent
+        return (all.channels.filter { !library.contains($0.id) },
+                all.videos.filter { !library.containsVideo($0.id) })
+    }
+
+    var inboxCount: Int {
+        let waiting = unclaimedSent
+        return waiting.channels.count + waiting.videos.count
+    }
+
+    /// Put everything waiting into the library.
+    ///
+    /// Done automatically on a minor's device and offered as a choice on a guardian's.
+    /// A minor did not ask for any of it and has no use for an inbox — the shelf *is*
+    /// their library, and a screen asking them to accept what a parent already decided
+    /// would be ceremony. An adult being sent something by another adult is a suggestion,
+    /// and a suggestion you cannot decline is not one.
+    func claimSent() {
+        let waiting = unclaimedSent
+        for channel in waiting.channels { library.add(channel) }
+        for video in waiting.videos { library.toggleVideo(video, channel: nil) }
     }
 
     /// Set by a row's ⋯ menu when it has nothing to offer because the family has not

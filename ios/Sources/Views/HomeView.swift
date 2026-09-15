@@ -16,6 +16,7 @@ struct HomeView: View {
     @State private var exporting: URL?
     @State private var settingUpMinorMode = false
     @State private var settingUpFamily = false
+    @State private var showingInbox = false
     @State private var sendingToDevice = false
     @State private var unlocking = false
 
@@ -62,6 +63,7 @@ struct HomeView: View {
             .sheet(item: $exporting) { url in ShareSheet(items: [url]) }
             .sheet(isPresented: $settingUpMinorMode) { MinorModeView(model: model) }
             .sheet(isPresented: $settingUpFamily) { FamilyView(model: model) }
+            .sheet(isPresented: $showingInbox) { InboxView(model: model) }
             .onChange(of: model.wantsFamilySetup) { _, wants in
                 if wants {
                     model.wantsFamilySetup = false
@@ -167,6 +169,25 @@ struct HomeView: View {
     /// leave in plain sight.
     @ToolbarContentBuilder
     private var menu: some ToolbarContent {
+        ToolbarItem(placement: .topBarLeading) {
+            // Only a guardian, and only when something is waiting. A minor's device adds
+            // what it is sent automatically, so an inbox there would always be empty.
+            if !model.isMinor, model.inboxCount > 0 {
+                Button {
+                    showingInbox = true
+                } label: {
+                    // An HStack rather than a Label: a navigation bar collapses a Label
+                    // to its icon, and the count is the part worth seeing from here.
+                    HStack(spacing: 4) {
+                        Image(systemName: "tray.full")
+                        Text("\(model.inboxCount)")
+                            .font(.system(size: 13, weight: .semibold).monospacedDigit())
+                    }
+                }
+                .tint(Palette.accent)
+                .accessibilityLabel("\(model.inboxCount) sent to you")
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             if model.isMinor {
                 Button("Minor Mode is on", systemImage: "lock.fill") { unlocking = true }
