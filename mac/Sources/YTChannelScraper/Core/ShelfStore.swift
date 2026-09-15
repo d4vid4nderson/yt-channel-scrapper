@@ -56,6 +56,10 @@ final class ShelfStore {
     private(set) var problem: String?
 
     private(set) var lastRead: Date?
+    /// What the last successful read found, for the panel to show. A sync feature that
+    /// renders empty needs to be able to say whether it read nothing or derived nothing —
+    /// those are different faults and they look identical from outside.
+    private(set) var lastCounts: (shelves: Int, people: Int, devices: Int) = (0, 0, 0)
     private(set) var isReading = false
 
     /// Everything read on the last pass, from all guardians.
@@ -184,6 +188,14 @@ final class ShelfStore {
             recompute()
             problem = nil
             lastRead = Date()
+            lastCounts = (found.count, declaredPeople.count, reported.count)
+            // Worth keeping rather than deleting after the bug it was added for: when a
+            // sync feature shows the wrong thing, the first question is always whether
+            // the files were read, and this is the only place that can answer it.
+            Log.shelf.notice(
+                """
+                read \(folder.lastPathComponent, privacy: .public):                 \(found.count) shelf, \(declaredPeople.count) people, \(reported.count) device                 -> \(self.guardians.count) admins, \(self.roster.count) minors
+                """)
         case .failure(let error):
             Log.shelf.error("shelf read failed: \(error)")
             // Deliberately does not clear `files`. Losing the folder for a moment — a

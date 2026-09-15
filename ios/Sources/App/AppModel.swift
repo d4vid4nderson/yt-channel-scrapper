@@ -67,25 +67,24 @@ final class AppModel {
             return
         }
 
-        // A guardian's phone: appear on the family list even before a first approval,
-        // report this device, and fetch anything another admin has sent here.
+        // A guardian's phone: appear on the family list even before a first approval, and
+        // report this device.
         guard let guardian = profiles.guardian else { return }
         await shelf.announce(guardian: guardian)
 
-        // Never sweeping. On this device the local files are the guardian's own library,
-        // and the shelf is only a list of things other people addressed to them — so an
-        // absence from it means "nobody sent me that", not "delete it".
-        await reconciler.reconcile(for: Profiles.Minor(id: guardian.id, name: guardian.name),
-                                   shelf: shelf,
-                                   downloads: downloads,
-                                   localFiles: localFiles,
-                                   sweeping: false)
-
+        // Deliberately no reconcile. An admin's device used to fetch whatever was sent to
+        // it, which fought the inbox it was sent to: the inbox offers keep-or-ignore and
+        // the download had already happened either way — cancel it and the next sync
+        // fetched it again, because as far as the reconciler was concerned it was
+        // approved and missing.
+        //
+        // Nothing lands on an adult's disk without them asking. A minor's device is the
+        // opposite and reconciles on purpose: there the shelf *is* the contract.
         let approved = shelf.approved(for: guardian.id).count
         await shelf.announce(person: (guardian.id, guardian.name),
                              isMinor: false,
                              approved: approved,
-                             downloaded: max(0, approved - reconciler.awaiting))
+                             downloaded: approved - inboxCount)
     }
 
     // MARK: - Input
@@ -191,12 +190,38 @@ final class AppModel {
         return (channels, videos)
     }
 
-    /// What has been sent but is not in the library yet — the inbox's contents.
+    /// Keys this device has dismissed from its inbox.
+    ///
+    /// Per device, not shared: the shelf records what the family decided, and a decision
+    /// is not undone by one person tidying their own inbox. It also has to be persisted
+    /// or every relaunch would hand back everything already dealt with.
+    private(set) var dismissed: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "inbox.dismissed") ?? []) }
+        set { UserDefaults.standard.set(Array(newValue), forKey: "inbox.dismissed") }
+    }
+
+    private func key(_ kind: ShelfEntry.Kind, _ id: String) -> String { "\(kind.rawValue):\(id)" }
+
+    /// What is still in the inbox.
+    ///
+    /// Filtered by what has been dismissed, *not* by what is already in the library —
+    /// keeping something and clearing it off the list are two different acts, and
+    /// conflating them meant an item vanished the moment you saved it, before you had a
+    /// chance to download it too.
     var unclaimedSent: (channels: [Channel], videos: [Video]) {
         let all = sent
-        return (all.channels.filter { !library.contains($0.id) },
-                all.videos.filter { !library.containsVideo($0.id) })
+        let gone = dismissed
+        return (all.channels.filter { !gone.contains(key(.channel, $0.id)) },
+                all.videos.filter { !gone.contains(key(.video, $0.id)) })
     }
+
+    /// Take one thing off this device's inbox. Nothing about the family's decision
+    /// changes — the sender still sent it, and it stays on the shelf.
+    func dismiss(channel: Channel) { dismissed.insert(key(.channel, channel.id)) }
+    func dismiss(video: Video) { dismissed.insert(key(.video, video.id)) }
+
+    func isKept(_ channel: Channel) -> Bool { library.contains(channel.id) }
+    func isKept(_ video: Video) -> Bool { library.containsVideo(video.id) }
 
     var inboxCount: Int {
         let waiting = unclaimedSent
@@ -212,8 +237,15 @@ final class AppModel {
     /// and a suggestion you cannot decline is not one.
     func claimSent() {
         let waiting = unclaimedSent
-        for channel in waiting.channels { library.add(channel) }
-        for video in waiting.videos { library.toggleVideo(video, channel: nil) }
+        for channel in waiting.channels where !library.contains(channel.id) {
+            library.add(channel)
+        }
+        for video in waiting.videos where !library.containsVideo(video.id) {
+            library.toggleVideo(video, channel: nil)
+        }
+        // "Keep All" means the list is dealt with, so it also clears.
+        for channel in waiting.channels { dismiss(channel: channel) }
+        for video in waiting.videos { dismiss(video: video) }
     }
 
     /// Set by a row's ⋯ menu when it has nothing to offer because the family has not

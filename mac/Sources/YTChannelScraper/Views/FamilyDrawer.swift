@@ -139,9 +139,16 @@ struct FamilyDrawer: View {
                     .foregroundStyle(Palette.accent.opacity(0.85))
                     .fixedSize(horizontal: false, vertical: true)
             } else if let read = shelf.lastRead, shelf.folder != nil {
-                Text("Last read \(read.formatted(date: .omitted, time: .shortened))")
+                // What the read found, not merely that it happened. An empty family can
+                // mean "read nothing" or "derived nothing from what it read", and those
+                // look identical from outside — this is the only place that tells them
+                // apart, since the Mac's own logs do not reach the unified log.
+                let counts = shelf.lastCounts
+                Text("Last read \(read.formatted(date: .omitted, time: .shortened)) · "
+                     + "\(counts.shelves) shelf · \(counts.people) people · \(counts.devices) device")
                     .font(.system(size: 10.5))
                     .foregroundStyle(.white.opacity(0.3))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -530,19 +537,26 @@ private struct PersonRow: View {
     /// section heading two rows up already says whether this is an admin or a minor.
     @ViewBuilder
     private var second: some View {
-        if let device = devices.first {
-            Label {
-                Text(device.kind.noun.capitalized + " · seen "
-                     + device.lastSeen.formatted(date: .omitted, time: .shortened))
-            } icon: {
-                Image(systemName: device.kind.icon)
+        HStack(spacing: 8) {
+            // Devices that have checked in, then the picker — always, not only when
+            // nothing has. A reported device is a fact about a machine; an expected one
+            // is a fact about the person, and somebody whose Mac has checked in still
+            // needs to be able to say they also carry a phone.
+            ForEach(devices) { device in
+                // The string is built outside the view builder: inlining the
+                // concatenation here put the whole HStack past the type checker's budget.
+                Label(Self.caption(for: device), systemImage: device.kind.icon)
+                    .labelStyle(.titleAndIcon)
+                    .help(Self.tooltip(for: device))
             }
-            .font(.system(size: 10.5))
-            .foregroundStyle(.white.opacity(0.38))
-            .labelStyle(.titleAndIcon)
-        } else {
-            DeviceMenu(expected: expected, set: setExpected)
+
+            if expected == nil || !devices.contains(where: { $0.kind == expected }) {
+                DeviceMenu(expected: expected, set: setExpected,
+                           hasReported: !devices.isEmpty)
+            }
         }
+        .font(.system(size: 10.5))
+        .foregroundStyle(.white.opacity(0.38))
     }
 
     private var removeButton: some View {
@@ -563,6 +577,24 @@ private struct PersonRow: View {
         }
         .frame(width: 14)
     }
+
+    /// "Computer · seen 18:33". Built outside the view builder: inlining the
+    /// concatenation put the whole row past the type checker's budget.
+    private static func caption(for device: DeviceRecord) -> String {
+        let seen = device.lastSeen.formatted(date: .omitted, time: .shortened)
+        return device.kind.noun.capitalized + " · seen " + seen
+    }
+
+    /// The fuller version, for the tooltip. Named `tooltip` rather than `help` because
+    /// `help(for:)` is shadowed by SwiftUI's own `.help(_:)` modifier inside a builder.
+    private static func tooltip(for device: DeviceRecord) -> String {
+        var parts = [device.name + " — last seen "
+                     + device.lastSeen.formatted(date: .abbreviated, time: .shortened)]
+        if device.isMinor {
+            parts.append("\(device.downloaded) of \(device.approved) downloaded")
+        }
+        return parts.joined(separator: ", ")
+    }
 }
 
 /// What somebody is expected to carry, until a real device says otherwise.
@@ -574,6 +606,9 @@ private struct PersonRow: View {
 private struct DeviceMenu: View {
     let expected: DeviceRecord.Kind?
     let set: (DeviceRecord.Kind?) -> Void
+    /// Whether anything has already checked in for this person. Changes the wording only:
+    /// alongside a real device this reads as "add", on its own it is the whole story.
+    var hasReported = false
 
     var body: some View {
         Menu {
@@ -594,7 +629,7 @@ private struct DeviceMenu: View {
                     Text("Not seen yet")
                         .font(.system(size: 10.5))
                 } else {
-                    Text("Set device")
+                    Text(hasReported ? "Add device" : "Set device")
                         .font(.system(size: 10.5))
                 }
             }

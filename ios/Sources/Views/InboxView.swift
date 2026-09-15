@@ -32,8 +32,8 @@ struct InboxView: View {
                     Placeholder(
                         icon: "tray",
                         title: "Nothing new",
-                        detail: "When another admin sends you a channel or a video, it "
-                            + "waits here until you keep it."
+                        detail: "When another admin sends you a channel or a video it waits "
+                            + "here until you deal with it. Nothing downloads by itself."
                     )
                 } else {
                     adminList
@@ -100,42 +100,65 @@ struct InboxView: View {
             if !waiting.channels.isEmpty {
                 Section {
                     ForEach(waiting.channels) { channel in
-                        row(ChannelRow(channel: channel)) { model.library.add(channel) }
+                        ChannelRow(channel: channel, isSaved: model.isKept(channel))
+                            .listRowBackground(Color.card)
+                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                                Button(role: .destructive) {
+                                    model.dismiss(channel: channel)
+                                } label: { Label("Remove", systemImage: "xmark") }
+
+                                if !model.isKept(channel) {
+                                    Button { model.library.add(channel) } label: {
+                                        Label("Save", systemImage: "bookmark")
+                                    }
+                                    .tint(Palette.accent)
+                                }
+                            }
                     }
                 } header: {
                     header("Channels")
                 } footer: {
-                    Text("Keeping a channel puts it on your Home shelf. It does not "
-                         + "download anything.")
+                    Text("Saving puts a channel on your Home shelf. Removing takes it off "
+                         + "this list without changing anything for anybody else.")
                 }
             }
 
             if !waiting.videos.isEmpty {
                 Section {
                     ForEach(waiting.videos) { video in
-                        row(VideoRow(video: video, showChannel: true)) {
-                            model.library.toggleVideo(video, channel: nil)
+                        Button { model.play(video) } label: {
+                            VideoRow(video: video, isSaved: model.isKept(video),
+                                     showChannel: true)
+                        }
+                        .listRowBackground(Color.card)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                model.dismiss(video: video)
+                            } label: { Label("Remove", systemImage: "xmark") }
+
+                            Button { model.download([video]) } label: {
+                                Label("Download", systemImage: "arrow.down.circle")
+                            }
+                            .tint(.indigo)
+
+                            if !model.isKept(video) {
+                                Button { model.library.toggleVideo(video, channel: nil) } label: {
+                                    Label("Save", systemImage: "bookmark")
+                                }
+                                .tint(Palette.accent)
+                            }
                         }
                     }
-                } header: { header("Videos") }
+                } header: {
+                    header("Videos")
+                } footer: {
+                    Text("Nothing downloads on its own here — that is the difference "
+                         + "between your phone and a minor's.")
+                }
             }
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
-    }
-
-    /// One row, with the single action it supports. Swipe rather than a button on every
-    /// row: the list is read first and acted on second, and a column of Keep buttons
-    /// would make it look like a form.
-    private func row(_ content: some View, keep: @escaping () -> Void) -> some View {
-        content
-            .listRowBackground(Color.card)
-            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                Button(action: keep) {
-                    Label("Keep", systemImage: "bookmark")
-                }
-                .tint(Palette.accent)
-            }
     }
 
     private func header(_ text: String) -> some View {
