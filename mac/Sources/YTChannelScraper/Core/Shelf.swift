@@ -1,4 +1,3 @@
-import CoreTransferable
 import Foundation
 #if canImport(UIKit)
 import UIKit
@@ -398,13 +397,37 @@ struct PeopleFile: Codable, Sendable {
 /// Transferred as JSON rather than as text, which is what keeps it apart from the other
 /// drag on this screen — a person's id travels as plain text, and two string payloads
 /// would land in each other's drop targets.
-struct SendPayload: Codable, Transferable, Sendable {
+struct SendPayload: Codable, Sendable {
     let kind: ShelfEntry.Kind
     let id: String
     let title: String
     let channelID: String?
 
-    static var transferRepresentation: some TransferRepresentation {
-        CodableRepresentation(contentType: .json)
+    /// Carried as a JSON string rather than through `Transferable`.
+    ///
+    /// The rows being dragged are `Button`s, and on macOS a button consumes the press, so
+    /// `.draggable` never starts a drag from one — `.onDrag` does, and it deals in
+    /// `NSItemProvider`. A string is the one thing that reliably survives that trip.
+    ///
+    /// The other drag on this screen — a person, between the family sections — is a bare
+    /// UUID string. Each drop target tells them apart by shape: a UUID parses as a UUID
+    /// and an item parses as JSON, and neither parses as the other.
+    var encoded: String {
+        guard let data = try? JSONEncoder().encode(self) else { return "" }
+        return String(data: data, encoding: .utf8) ?? ""
+    }
+
+    init(kind: ShelfEntry.Kind, id: String, title: String, channelID: String?) {
+        self.kind = kind
+        self.id = id
+        self.title = title
+        self.channelID = channelID
+    }
+
+    init?(encoded: String) {
+        guard let data = encoded.data(using: .utf8),
+              let decoded = try? JSONDecoder().decode(SendPayload.self, from: data)
+        else { return nil }
+        self = decoded
     }
 }

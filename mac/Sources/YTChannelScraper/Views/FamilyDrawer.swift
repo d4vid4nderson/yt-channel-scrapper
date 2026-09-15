@@ -287,6 +287,8 @@ struct FamilyDrawer: View {
                 .strokeBorder(dropTarget == isMinor ? Palette.accent.opacity(0.35) : .clear)
         }
         .dropDestination(for: String.self) { items, _ in
+            // Only a person. A dragged channel or video arrives as JSON and is not
+            // this target's business.
             guard let raw = items.first, let id = UUID(uuidString: raw) else { return false }
             // Dropping somebody into the section they are already in is a no-op rather
             // than a write — every write lands in a file the other admin reads.

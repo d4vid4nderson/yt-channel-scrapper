@@ -115,8 +115,11 @@ struct CommandBoard: View {
                         sent: justSent?.minor == minor.id ? justSent?.title : nil,
                         isOver: over == minor.id
                     )
-                    .dropDestination(for: SendPayload.self) { items, _ in
-                        guard let item = items.first else { return false }
+                    .dropDestination(for: String.self) { items, _ in
+                        // A person's id would arrive here as a bare UUID; only an item
+                        // decodes, so anything else is declined rather than acted on.
+                        guard let raw = items.first,
+                              let item = SendPayload(encoded: raw) else { return false }
                         send(item, to: minor)
                         return true
                     } isTargeted: { targeted in
