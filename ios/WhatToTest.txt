@@ -1,5 +1,16 @@
 This is the build that can receive things sent from the Mac.
 
+If you already set this phone up and saw no inbox: two reasons, both fixed or explained
+here. The inbox only ever showed a badge when something was waiting, so an empty one
+looked like a missing feature — there is now a permanent "Sent to you" row under Family,
+at zero as well. And if you had already been sending from a Mac, this phone could not
+claim the identity doing the sending: "this is me" was offered only for identities nobody
+had used yet, which is exactly backwards for somebody adding their own second device.
+Any admin but yourself can be claimed now.
+
+Claim before you send yourself anything, or the phone will be a different person with the
+same name and nothing addressed to the Mac's David will arrive here.
+
 Set it up first — Home -> ... -> Family:
 1. Type your name. It is what your approvals get signed with, so the other admin can see
    who decided what.
