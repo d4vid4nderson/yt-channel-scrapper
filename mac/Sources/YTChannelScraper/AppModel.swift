@@ -17,11 +17,15 @@ final class AppModel {
     /// The two favourites drawers. Held here rather than in the view so the menu bar can
     /// reach them, and so each can close the others — three panels over one page at once
     /// would be two too many.
-    /// Whether the family setup sheet is up. Set from a row's ⋯ when it has nothing to
-    /// offer yet, and from the app menu.
-    var showFamily = false
+    /// Asking for the family panel. Set from a row's ⋯ when it has nothing to offer
+    /// yet, and from the landing strip; both are several levels down from the drawer and
+    /// have nothing to open it with directly.
+    var showFamily: Bool {
+        get { showFamilyDrawer }
+        set { newValue ? openFamilyDrawer() : (showFamilyDrawer = false) }
+    }
     var showChannelsDrawer = false
-    var showVideosDrawer = false
+    var showFamilyDrawer = false
     /// Whether the results area is listing a channel's videos or a search's channels.
     /// Held rather than derived, so it flips on submit instead of when results land —
     /// otherwise the old list is still on screen while the new one is being fetched.
@@ -361,21 +365,21 @@ extension AppModel {
     /// The two side panels are the exception: they take width from the same page, and at
     /// the window's minimum size both at once would leave the list too narrow to read.
     func openChannelsDrawer() {
-        showVideosDrawer = false
+        showFamilyDrawer = false
         showChannelsDrawer = true
     }
 
-    func openVideosDrawer() {
+    func openFamilyDrawer() {
         showChannelsDrawer = false
-        showVideosDrawer = true
+        showFamilyDrawer = true
     }
 
     func toggleChannelsDrawer() {
         if showChannelsDrawer { showChannelsDrawer = false } else { openChannelsDrawer() }
     }
 
-    func toggleVideosDrawer() {
-        if showVideosDrawer { showVideosDrawer = false } else { openVideosDrawer() }
+    func toggleFamilyDrawer() {
+        if showFamilyDrawer { showFamilyDrawer = false } else { openFamilyDrawer() }
     }
 
     func openDownloads() {

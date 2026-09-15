@@ -1,6 +1,11 @@
 import SwiftUI
 
-/// The two things you keep, on the two edges: channels on the left, videos on the right.
+/// What you keep, on the left; who you keep it for, on the right.
+///
+/// Channels and saved videos share the left panel as two collapsible sections — they are
+/// both "things I have kept" and they were never big enough to need an edge each. That
+/// freed the right edge for the family panel, which is the half of a command center that
+/// says who is on the other end.
 ///
 /// The landing screen's shelf already shows six saved channels, but it is a landing-screen
 /// thing — it goes with the hero the moment a list is on screen, and it was never going to
@@ -10,6 +15,11 @@ import SwiftUI
 // MARK: - Channels, on the left
 
 struct SavedChannelsDrawer: View {
+    /// Remembered across launches: whichever half somebody actually uses should be the
+    /// one open when the panel comes back.
+    @AppStorage("drawer.channels.open") private var channelsOpen = true
+    @AppStorage("drawer.videos.open") private var videosOpen = true
+
     @Bindable var model: AppModel
 
     @State private var filter = ""
@@ -55,8 +65,8 @@ struct SavedChannelsDrawer: View {
         SideDrawer(side: .leading, isPresented: $model.showChannelsDrawer) {
             VStack(spacing: 0) {
                 DrawerHead(
-                    title: "Saved channels",
-                    count: model.library.channels.count,
+                    title: "Saved",
+                    count: model.library.channels.count + model.library.videos.count,
                     close: close
                 )
                 // Below a handful there is nothing to search for, and the field would
@@ -111,131 +121,134 @@ struct SavedChannelsDrawer: View {
         }
     }
 
+    /// Both halves of the library in one panel, each able to fold away.
+    ///
+    /// They were two drawers on two edges, which gave each a whole screen edge for a list
+    /// that is usually a dozen rows. Folding one shows more of the other, and the state
+    /// sticks, so whichever half you actually use stays open.
     @ViewBuilder
     private var list: some View {
-        if model.library.channels.isEmpty {
+        if model.library.channels.isEmpty && model.library.videos.isEmpty {
             DrawerEmpty(
                 icon: "bookmark",
-                title: "No saved channels yet",
+                title: "Nothing saved yet",
                 detail: "Bookmark a channel — in a search result, or above its video list — and it lands here."
             )
-        } else if matches.isEmpty {
-            DrawerEmpty(
-                icon: "magnifyingglass",
-                title: "Nothing matches",
-                detail: "No saved channel is called “\(filter)”."
-            )
         } else {
             ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(matches) { channel in
-                        DrawerChannelRow(
-                            channel: channel,
-                            // The panel stays where it is. Opening a channel is rarely the
-                            // last thing you do in here — you came to look through what you
-                            // have kept — and a list that shuts itself the moment you touch
-                            // it makes you fetch it back for every channel you try.
-                            open: { model.open(channel) },
-                            remove: { model.library.remove(channel.id) }
-                        )
+                LazyVStack(spacing: 8, pinnedViews: [.sectionHeaders]) {
+                    Section {
+                        if channelsOpen { channelRows }
+                    } header: {
+                        SectionBar(title: "Channels",
+                                   count: model.library.channels.count,
+                                   isOpen: $channelsOpen)
+                    }
+
+                    Section {
+                        if videosOpen { videoRows }
+                    } header: {
+                        SectionBar(title: "Videos",
+                                   count: model.library.videos.count,
+                                   isOpen: $videosOpen)
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+                .padding(.bottom, 14)
             }
             .scrollIndicators(.visible)
         }
     }
-}
 
-// MARK: - Videos, on the right
-
-struct SavedVideosDrawer: View {
-    @Bindable var model: AppModel
-
-    @State private var filter = ""
-
-    private func close() { model.showVideosDrawer = false }
-
-    /// Newest first, the order the library keeps them in: a saved video is something you
-    /// meant to come back to shortly.
-    private var matches: [Video] {
-        let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let all = model.library.videos
-        guard !needle.isEmpty else { return all }
-        return all.filter {
-            $0.title.lowercased().contains(needle)
-                || ($0.channelName?.lowercased().contains(needle) ?? false)
-        }
-    }
-
-    var body: some View {
-        SideDrawer(side: .trailing, isPresented: $model.showVideosDrawer) {
-            VStack(spacing: 0) {
-                DrawerHead(
-                    title: "Saved videos",
-                    count: model.library.videos.count,
-                    close: close
+    @ViewBuilder
+    private var channelRows: some View {
+        if model.library.channels.isEmpty {
+            SectionEmpty(text: "No saved channels.")
+        } else if matches.isEmpty {
+            SectionEmpty(text: "No saved channel is called “\(filter)”.")
+        } else {
+            ForEach(matches) { channel in
+                DrawerChannelRow(
+                    channel: channel,
+                    // The panel stays where it is. Opening a channel is rarely the last
+                    // thing you do in here — you came to look through what you have kept
+                    // — and a list that shuts itself the moment you touch it makes you
+                    // fetch it back for every channel you try.
+                    open: { model.open(channel) },
+                    remove: { model.library.remove(channel.id) }
                 )
-                if model.library.videos.count > 6 {
-                    DrawerFilterField(text: $filter, prompt: "Filter videos…")
-                }
-                Divider().overlay(.white.opacity(0.09))
-                list
-                Divider().overlay(.white.opacity(0.09))
-                // Watching and fetching one at a time is what the drawer is for; ticking
-                // a dozen of them is what the main list is for, so that is one click away
-                // rather than a second selection model in here.
-                DrawerFooterButton(
-                    icon: "list.bullet",
-                    title: "Open as a list",
-                    hint: "to pick several"
-                ) {
-                    model.showSavedVideos()
-                    close()
-                }
-                .disabled(model.library.videos.isEmpty)
-                .opacity(model.library.videos.isEmpty ? 0.4 : 1)
-                .help("Show the saved videos in the main list, where they can be ticked and downloaded together")
             }
         }
     }
 
     @ViewBuilder
-    private var list: some View {
-        if model.library.videos.isEmpty {
-            DrawerEmpty(
-                icon: "bookmark",
-                title: "No saved videos yet",
-                detail: "Bookmark a video in any channel's list to keep it here — it stays after the scrape is gone."
-            )
-        } else if matches.isEmpty {
-            DrawerEmpty(
-                icon: "magnifyingglass",
-                title: "Nothing matches",
-                detail: "No saved video is called “\(filter)”."
-            )
+    private var videoRows: some View {
+        let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
+        let videos = needle.isEmpty
+            ? model.library.videos
+            : model.library.videos.filter { $0.title.lowercased().contains(needle) }
+        if videos.isEmpty {
+            SectionEmpty(text: needle.isEmpty
+                         ? "No saved videos."
+                         : "No saved video matches “\(filter)”.")
         } else {
-            ScrollView {
-                LazyVStack(spacing: 8) {
-                    ForEach(matches) { video in
-                        DrawerVideoRow(
-                            video: video,
-                            preview: { model.preview.open(video) },
-                            download: { model.download([video]) },
-                            remove: { model.library.removeVideo(video.id) }
-                        )
-                    }
-                }
-                .padding(.horizontal, 14)
-                .padding(.vertical, 14)
+            ForEach(videos) { video in
+                DrawerVideoRow(
+                    video: video,
+                    preview: { model.preview.open(video) },
+                    download: { model.download([video]) },
+                    remove: { model.library.removeVideo(video.id) }
+                )
             }
-            .scrollIndicators(.visible)
         }
     }
 }
 
-// MARK: - Rows
+/// A section's title line, and the thing that folds it.
+///
+/// Pinned, so the heading you are under stays on screen while its list scrolls past —
+/// which is the only way to know which half you are looking at once both are long.
+private struct SectionBar: View {
+    let title: String
+    let count: Int
+    @Binding var isOpen: Bool
+
+    var body: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.16)) { isOpen.toggle() }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .bold))
+                    .rotationEffect(.degrees(isOpen ? 90 : 0))
+                Text(title)
+                    .font(.system(size: 11, weight: .semibold))
+                Text("\(count)")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.35))
+                Spacer()
+            }
+            .foregroundStyle(.white.opacity(0.55))
+            .padding(.vertical, 8)
+            .padding(.top, 6)
+            .contentShape(Rectangle())
+            .background(Palette.ground)
+        }
+        .buttonStyle(.plain)
+        .pointingHand()
+    }
+}
+
+private struct SectionEmpty: View {
+    let text: String
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(.white.opacity(0.35))
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.vertical, 6)
+    }
+}
 
 private struct DrawerChannelRow: View {
     let channel: Channel
@@ -422,9 +435,9 @@ private struct DownloadDot: View {
 
 // MARK: - Shared furniture
 
-/// The panel's title line. Just the name and how many — which panel you are looking at is
+/// The panel's title line, used by every drawer. Just the name and how many — which panel you are looking at is
 /// already said by which edge it came in from, and by the lit button that opened it.
-private struct DrawerHead: View {
+struct DrawerHead: View {
     let title: String
     let count: Int
     let close: () -> Void
@@ -561,7 +574,7 @@ private struct DrawerFooterButton: View {
 /// The landing shelf used to carry this line and went with it; without somewhere to say
 /// "imported 184 channels", an import is a file dialog closing and nothing else visibly
 /// happening, which reads as failure.
-private struct DrawerNote: View {
+struct DrawerNote: View {
     let text: String
     let dismiss: () -> Void
 

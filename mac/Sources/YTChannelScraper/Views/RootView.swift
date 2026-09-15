@@ -38,15 +38,15 @@ struct RootView: View {
                     .bottomDrawerSlot(open: model.showDownloads)
                 }
 
-                SavedVideosDrawer(model: model)
-                    .drawerSlot(open: model.showVideosDrawer, side: .trailing)
+                FamilyDrawer(model: model)
+                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
             }
 
             VersionFooter(updater: model.appUpdater)
         }
         .frame(minWidth: 860, minHeight: 560)
         .animation(Layout.drawerEase, value: model.showChannelsDrawer)
-        .animation(Layout.drawerEase, value: model.showVideosDrawer)
+        .animation(Layout.drawerEase, value: model.showFamilyDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
         .toolbar { chrome }
         // Dismissal goes through the model rather than straight at the flag, so closing
@@ -56,9 +56,6 @@ struct RootView: View {
             set: { if !$0 { model.appUpdater.dismissResult() } }
         )) {
             AppUpdateSheet(updater: model.appUpdater)
-        }
-        .sheet(isPresented: $model.showFamily) {
-            FamilySheet(model: model)
         }
         // The other guardian writes into the shared folder and nothing here is told, so
         // the honest moment to re-read is whenever this window comes back to the front.
@@ -154,11 +151,11 @@ struct RootView: View {
                 toggle: model.toggleDownloads
             )
             PanelToggle(
-                icon: "rectangle.trailingthird.inset.filled",
-                title: "Saved videos",
-                isOn: model.showVideosDrawer,
-                help: "The videos you have saved  (⌘3)",
-                toggle: model.toggleVideosDrawer
+                icon: "person.2.fill",
+                title: "Family",
+                isOn: model.showFamilyDrawer,
+                help: "Who you can send videos to  (⌘3)",
+                toggle: model.toggleFamilyDrawer
             )
         }
     }
