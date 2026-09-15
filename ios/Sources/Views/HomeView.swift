@@ -15,6 +15,7 @@ struct HomeView: View {
     @State private var importing: UTType?
     @State private var exporting: URL?
     @State private var settingUpMinorMode = false
+    @State private var settingUpFamily = false
     @State private var sendingToDevice = false
     @State private var unlocking = false
 
@@ -60,6 +61,13 @@ struct HomeView: View {
             }
             .sheet(item: $exporting) { url in ShareSheet(items: [url]) }
             .sheet(isPresented: $settingUpMinorMode) { MinorModeView(model: model) }
+            .sheet(isPresented: $settingUpFamily) { FamilyView(model: model) }
+            .onChange(of: model.wantsFamilySetup) { _, wants in
+                if wants {
+                    model.wantsFamilySetup = false
+                    settingUpFamily = true
+                }
+            }
             .sheet(isPresented: $sendingToDevice) { SendSheet(model: model) }
             // Full screen rather than a sheet: a sheet can be swiped away, and a lock
             // you dismiss by flicking it downwards is not one. Cancel is the way out.
@@ -83,8 +91,11 @@ struct HomeView: View {
             } else {
                 List {
                     ForEach(model.library.recent) { channel in
-                        NavigationLink(value: channel) {
-                            ChannelRow(channel: channel, isSaved: true)
+                        HStack(spacing: 0) {
+                            NavigationLink(value: channel) {
+                                ChannelRow(channel: channel, isSaved: true)
+                            }
+                            ShelfMenu(model: model, channel: channel)
                         }
                         .listRowBackground(Color.card)
                     }
@@ -122,8 +133,12 @@ struct HomeView: View {
             } else {
                 List {
                     ForEach(model.library.videos) { video in
-                        Button { model.play(video) } label: {
-                            VideoRow(video: video, isSaved: true, showChannel: true)
+                        HStack(spacing: 0) {
+                            Button { model.play(video) } label: {
+                                VideoRow(video: video, isSaved: true, showChannel: true)
+                            }
+                            .buttonStyle(.plain)
+                            ShelfMenu(model: model, video: video)
                         }
                         .listRowBackground(Color.card)
                         .swipeActions(edge: .trailing) {
@@ -190,6 +205,9 @@ struct HomeView: View {
 
                     Divider()
 
+                    Button("Family…", systemImage: "person.2") {
+                        settingUpFamily = true
+                    }
                     Button("Minor Mode…", systemImage: "lock.shield") {
                         settingUpMinorMode = true
                     }

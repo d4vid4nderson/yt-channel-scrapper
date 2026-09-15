@@ -127,6 +127,11 @@ final class AppModel {
         return Channel(id: id, title: video.channelName ?? id)
     }
 
+    /// Set by a row's ⋯ menu when it has nothing to offer because the family has not
+    /// been set up. `HomeView` watches it and opens the screen — the menu itself is
+    /// several levels down and has no sheet of its own to present from.
+    var wantsFamilySetup = false
+
     /// A message for the banner — an import result, an export path, a failure that is
     /// not attached to any one row.
     var banner: String?

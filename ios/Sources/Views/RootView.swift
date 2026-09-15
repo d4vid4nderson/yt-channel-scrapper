@@ -11,6 +11,7 @@ import SwiftUI
 /// thing you leave and come back to.
 struct RootView: View {
     @State private var model = AppModel()
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
         ZStack(alignment: .bottom) {
@@ -34,6 +35,15 @@ struct RootView: View {
         }
         .task {
             if model.isMinor && model.tab == .search { model.tab = .home }
+            await model.syncShelf()
+        }
+        // The shelf is a folder other devices write to, so the only honest time to read
+        // it is when this one comes back to the front. A minor's device reconciles on the
+        // same beat: coming back from the lock screen is when a withdrawn video should
+        // stop being there.
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active else { return }
+            Task { await model.syncShelf() }
         }
     }
 

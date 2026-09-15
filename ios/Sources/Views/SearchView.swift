@@ -85,8 +85,11 @@ struct SearchView: View {
                 loadingRow
             }
             ForEach(model.search.results) { channel in
-                NavigationLink(value: channel) {
-                    ChannelRow(channel: channel, isSaved: model.library.contains(channel.id))
+                HStack(spacing: 0) {
+                    NavigationLink(value: channel) {
+                        ChannelRow(channel: channel, isSaved: model.library.contains(channel.id))
+                    }
+                    ShelfMenu(model: model, channel: channel)
                 }
                 .listRowBackground(Color.card)
                 .swipeActions(edge: .trailing) {
@@ -120,8 +123,12 @@ struct SearchView: View {
                 loadingRow
             }
             ForEach(model.search.videos) { video in
-                Button { model.play(video) } label: {
-                    VideoRow(video: video, isSaved: model.isSaved(video), showChannel: true)
+                HStack(spacing: 0) {
+                    Button { model.play(video) } label: {
+                        VideoRow(video: video, isSaved: model.isSaved(video), showChannel: true)
+                    }
+                    .buttonStyle(.plain)
+                    ShelfMenu(model: model, video: video)
                 }
                 .listRowBackground(Color.card)
                 .swipeActions(edge: .leading) {

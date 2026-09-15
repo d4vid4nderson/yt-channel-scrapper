@@ -72,22 +72,31 @@ struct ChannelView: View {
     }
 
     private func row(for video: Video) -> some View {
-        Button {
-            if model.isSelecting {
-                model.toggle(video)
-            } else {
-                model.play(video)
+        HStack(spacing: 0) {
+            Button {
+                if model.isSelecting {
+                    model.toggle(video)
+                } else {
+                    model.play(video)
+                }
+            } label: {
+                VideoRow(
+                    video: video,
+                    isPicked: model.picked.contains(video.id),
+                    isSelecting: model.isSelecting,
+                    isSaved: model.isSaved(video),
+                    // Every row here belongs to the channel named in the header above, so
+                    // repeating it on each row would be noise.
+                    showChannel: false
+                )
             }
-        } label: {
-            VideoRow(
-                video: video,
-                isPicked: model.picked.contains(video.id),
-                isSelecting: model.isSelecting,
-                isSaved: model.isSaved(video),
-                // Every row here belongs to the channel named in the header above, so
-                // repeating it on each row would be noise.
-                showChannel: false
-            )
+            .buttonStyle(.plain)
+            // Hidden while selecting: the row's job is then the tick, and a menu that
+            // acts on one video in the middle of choosing several is a mis-tap waiting
+            // to happen.
+            if !model.isSelecting {
+                ShelfMenu(model: model, video: video)
+            }
         }
         .listRowBackground(Color.card)
         .swipeActions(edge: .trailing) {
