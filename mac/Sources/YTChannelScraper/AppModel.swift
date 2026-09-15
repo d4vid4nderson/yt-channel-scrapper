@@ -60,6 +60,14 @@ final class AppModel {
     /// that folder and nothing here is notified.
     func syncShelf() async {
         await shelf.refresh()
+        guard let guardian = profiles.guardian else { return }
+        // Put this guardian on the family list even before their first approval, so the
+        // other parent sees them appear as soon as they are set up rather than whenever
+        // they happen to approve something.
+        await shelf.announce(guardian: guardian)
+        // And say this machine exists. Every refresh, not once: `lastSeen` is the field
+        // that makes the row worth showing, and one written at setup would go stale.
+        await shelf.announce(person: (guardian.id, guardian.name), isMinor: false)
     }
 
     /// Put an approval — or its withdrawal — in this guardian's file.

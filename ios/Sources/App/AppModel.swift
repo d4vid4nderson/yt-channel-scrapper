@@ -46,11 +46,28 @@ final class AppModel {
     /// foreground.
     func syncShelf() async {
         await shelf.refresh()
-        guard let minor = profiles.minor else { return }
-        await reconciler.reconcile(for: minor,
-                                   shelf: shelf,
-                                   downloads: downloads,
-                                   localFiles: localFiles)
+
+        // A minor's phone: reconcile, then say what it actually holds. The gap between
+        // approved and downloaded is the number a parent wants — it is the download that
+        // has not finished — and this device is the only thing that can report it.
+        if let minor = profiles.minor {
+            await reconciler.reconcile(for: minor,
+                                       shelf: shelf,
+                                       downloads: downloads,
+                                       localFiles: localFiles)
+            let approved = shelf.approved(for: minor.id).count
+            await shelf.announce(person: (minor.id, minor.name),
+                                 isMinor: true,
+                                 approved: approved,
+                                 downloaded: max(0, approved - reconciler.awaiting))
+            return
+        }
+
+        // A guardian's phone: appear on the family list even before a first approval,
+        // and report this device.
+        guard let guardian = profiles.guardian else { return }
+        await shelf.announce(guardian: guardian)
+        await shelf.announce(person: (guardian.id, guardian.name), isMinor: false)
     }
 
     // MARK: - Input

@@ -132,18 +132,26 @@ struct FamilySheet: View {
     // MARK: - Children
 
     private var children: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("Children")
+        VStack(alignment: .leading, spacing: 10) {
+            Text("People")
                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
 
+            // Adults are listed, not added. A guardian's identity is made on their own
+            // device when they name themselves — there is no way to create it for them —
+            // so they appear here as soon as they have picked this folder, and the note
+            // below says so instead of offering a button that cannot work.
+            ForEach(shelf.guardians, id: \.id) { guardian in
+                person(name: guardian.name,
+                       role: guardian.id == profiles.guardian?.id ? "you" : "parent",
+                       detail: nil,
+                       id: guardian.id)
+            }
+
             ForEach(shelf.roster, id: \.id) { minor in
-                HStack {
-                    Image(systemName: "person.crop.circle").foregroundStyle(Palette.accent)
-                    Text(minor.name)
-                    Spacer()
-                    Text("\(shelf.approved(for: minor.id).count) approved")
-                        .font(.system(size: 11)).foregroundStyle(.secondary)
-                }
+                person(name: minor.name,
+                       role: "child",
+                       detail: "\(shelf.approved(for: minor.id).count) approved",
+                       id: minor.id)
             }
 
             HStack {
@@ -152,6 +160,46 @@ struct FamilySheet: View {
                     .onSubmit(addChild)
                 Button("Add", action: addChild)
                     .disabled(working || childName.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            Text("Another parent appears here once they open the app, name themselves and "
+                 + "pick this same folder. There is nothing to invite or accept — and no "
+                 + "way to create their identity from this machine.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    /// One person, with whatever devices have announced themselves as theirs.
+    ///
+    /// Only devices running this app can ever be listed: Apple publishes no way to read
+    /// the devices on an Apple ID. A person with none shows nothing rather than a
+    /// placeholder, because "no device yet" is a real and temporary state.
+    private func person(name: String, role: String, detail: String?, id: UUID) -> some View {
+        let theirs = shelf.devices.filter { $0.personID == id }
+        return HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Image(systemName: role == "child" ? "person.crop.circle" : "person.crop.circle.badge.checkmark")
+                .foregroundStyle(Palette.accent)
+            Text(name)
+            Text(role)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 6).padding(.vertical, 2)
+                .background(.white.opacity(0.08), in: Capsule())
+
+            ForEach(theirs) { device in
+                Label(device.name, systemImage: device.kind.icon)
+                    .labelStyle(.iconOnly)
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .help("\(device.name) — last seen \(device.lastSeen.formatted(date: .abbreviated, time: .shortened))"
+                          + (device.isMinor ? ", \(device.downloaded) of \(device.approved) downloaded" : ""))
+            }
+
+            Spacer()
+            if let detail {
+                Text(detail).font(.system(size: 11)).foregroundStyle(.secondary)
             }
         }
     }

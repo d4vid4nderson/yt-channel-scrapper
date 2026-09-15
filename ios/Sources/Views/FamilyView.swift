@@ -151,6 +151,24 @@ struct FamilyView: View {
 
     private var children: some View {
         Section {
+            // Adults are listed, not added: a guardian's identity is created on their own
+            // device when they name themselves, so there is nothing to create from here.
+            ForEach(shelf.guardians, id: \.id) { guardian in
+                HStack {
+                    Image(systemName: "person.crop.circle.badge.checkmark")
+                        .foregroundStyle(Palette.accent)
+                    Text(guardian.name).foregroundStyle(Color.primaryText)
+                    Text(guardian.id == profiles.guardian?.id ? "you" : "parent")
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(Color.secondaryText)
+                        .padding(.horizontal, 6).padding(.vertical, 2)
+                        .background(Color.white.opacity(0.08), in: Capsule())
+                    Spacer()
+                    devices(for: guardian.id)
+                }
+                .listRowBackground(Color.card)
+            }
+
             ForEach(shelf.roster, id: \.id) { minor in
                 HStack {
                     Image(systemName: "person.crop.circle")
@@ -158,6 +176,7 @@ struct FamilyView: View {
                     Text(minor.name)
                         .foregroundStyle(Color.primaryText)
                     Spacer()
+                    devices(for: minor.id)
                     Text("\(shelf.approved(for: minor.id).count) approved")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.secondaryText)
@@ -174,10 +193,22 @@ struct FamilyView: View {
         } header: {
             header("Children")
         } footer: {
-            Text(shelf.roster.isEmpty
-                 ? "Add a child and they appear on both parents' devices as soon as "
-                    + "iCloud catches up. There is nothing to invite or accept."
-                 : "To hand a phone over, set it up as that child under Minor Mode.")
+            Text("Another parent appears here once they open the app, name themselves and "
+                 + "pick this same folder — nothing to invite or accept. Device icons show "
+                 + "only devices running this app; there is no way to read the devices on "
+                 + "an Apple ID.")
+        }
+    }
+
+    /// One glyph per device that has announced itself as this person's. Only devices
+    /// running this app can appear — Apple publishes no way to read the devices on an
+    /// Apple ID — so somebody with none shows nothing rather than a placeholder.
+    @ViewBuilder
+    private func devices(for person: UUID) -> some View {
+        ForEach(shelf.devices.filter { $0.personID == person }) { device in
+            Image(systemName: device.kind.icon)
+                .font(.system(size: 12))
+                .foregroundStyle(Color.secondaryText)
         }
     }
 

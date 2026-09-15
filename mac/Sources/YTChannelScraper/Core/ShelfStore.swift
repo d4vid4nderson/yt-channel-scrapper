@@ -44,6 +44,14 @@ final class ShelfStore {
     /// rather than stored, so adding a child needs no coordination either.
     private(set) var roster: [Profiles.Minor] = []
 
+    /// Every adult who has written anything into this folder, derived the same way and
+    /// for the same reason. There is no roster file for guardians and there must not be:
+    /// a second file two devices write to is exactly what this layout avoids.
+    private(set) var guardians: [Profiles.Guardian] = []
+
+    /// Every device that has the app and has announced itself, newest report per device.
+    private(set) var devices: [DeviceRecord] = []
+
     /// What the user should be told, if anything. Nil when it is quietly working.
     private(set) var problem: String?
 
@@ -129,10 +137,15 @@ final class ShelfStore {
         defer { isReading = false }
 
         let read = await Task.detached { Self.readAll(in: folder) }.value
+        // Read regardless of how the shelf read went: the device list is a nice-to-have
+        // and must never be the reason a shelf read counts as failed.
+        let reported = await Task.detached { Self.readDevices(in: folder) }.value
         switch read {
         case .success(let found):
             files = found
             roster = Self.roster(from: found)
+            guardians = Self.guardians(from: found)
+            devices = reported
             problem = nil
             lastRead = Date()
         case .failure(let error):
@@ -170,9 +183,10 @@ final class ShelfStore {
     func record(
         _ decisions: [ShelfEntry],
         for minor: Profiles.Minor,
-        as guardian: Profiles.Guardian
+        as guardian: Profiles.Guardian,
+        evenIfEmpty: Bool = false
     ) async -> Bool {
-        guard !decisions.isEmpty else { return true }
+        guard !decisions.isEmpty || evenIfEmpty else { return true }
         guard let folder else {
             problem = "No shared folder is set up yet."
             return false
@@ -203,6 +217,7 @@ final class ShelfStore {
         files.removeAll { $0.minorID == minor.id && $0.guardianID == guardian.id }
         files.append(file)
         roster = Self.roster(from: files)
+        guardians = Self.guardians(from: files)
         problem = nil
         return true
     }
@@ -247,6 +262,7 @@ final class ShelfStore {
         }
         files.append(file)
         roster = Self.roster(from: files)
+        guardians = Self.guardians(from: files)
         return minor
     }
 
@@ -257,6 +273,19 @@ final class ShelfStore {
     /// A rename is therefore last-writer-wins, which is the one place in this design that
     /// rule is still the right one: a name is cosmetic, both guardians see the same one
     /// within a sync, and the id it hangs off never moves.
+    /// Newest name per guardian id, so renaming yourself renames you everywhere rather
+    /// than adding a second person.
+    private static func guardians(from files: [ShelfFile]) -> [Profiles.Guardian] {
+        var newest: [UUID: ShelfFile] = [:]
+        for file in files {
+            if let standing = newest[file.guardianID], standing.writtenAt >= file.writtenAt { continue }
+            newest[file.guardianID] = file
+        }
+        return newest.values
+            .map { Profiles.Guardian(id: $0.guardianID, name: $0.guardianName) }
+            .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
     private static func roster(from files: [ShelfFile]) -> [Profiles.Minor] {
         var newest: [UUID: ShelfFile] = [:]
         for file in files {
@@ -266,6 +295,87 @@ final class ShelfStore {
         return newest.values
             .map { Profiles.Minor(id: $0.minorID, name: $0.minorName) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    // MARK: - Devices
+
+    /// This install's own id, made once and kept. Not derived from anything the system
+    /// offers: `identifierForVendor` changes when the last app from a vendor is deleted,
+    /// and a device that came back with a new id would appear as a second device.
+    private var deviceID: UUID {
+        let key = "shelf.device.id"
+        if let raw = UserDefaults.standard.string(forKey: key), let id = UUID(uuidString: raw) {
+            return id
+        }
+        let made = UUID()
+        UserDefaults.standard.set(made.uuidString, forKey: key)
+        return made
+    }
+
+    /// The name this device shows in the family list, until somebody renames it.
+    var suggestedDeviceName: String {
+        let kind = DeviceRecord.Kind.current.noun
+        guard let person = personName else { return kind.capitalized }
+        return "\(person)'s \(kind)"
+    }
+
+    private var personName: String?
+    private var personID: UUID?
+
+    /// Say that this device exists, who is holding it, and how far along it is.
+    ///
+    /// Called on every refresh rather than once at setup: the interesting fields are
+    /// `lastSeen` and the gap between `approved` and `downloaded`, and a record written
+    /// once would be a row that goes stale and lies.
+    @discardableResult
+    func announce(
+        name: String? = nil,
+        person: (id: UUID, name: String)?,
+        isMinor: Bool,
+        approved: Int = 0,
+        downloaded: Int = 0
+    ) async -> Bool {
+        guard let folder else { return false }
+        personID = person?.id
+        personName = person?.name
+
+        let id = deviceID
+        let existing = devices.first { $0.deviceID == id }
+        let record = DeviceRecord(
+            deviceID: id,
+            // A name already chosen wins over a freshly suggested one, so renaming a
+            // device is not undone by the next refresh.
+            name: name ?? existing?.name ?? suggestedDeviceName,
+            kind: .current,
+            personID: person?.id,
+            personName: person?.name,
+            isMinor: isMinor,
+            lastSeen: Date(),
+            approved: approved,
+            downloaded: downloaded
+        )
+
+        let wrote = await Task.detached { Self.write(record, in: folder) }.value
+        guard wrote else { return false }
+        devices.removeAll { $0.deviceID == id }
+        devices.append(record)
+        devices.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return true
+    }
+
+    /// Put this guardian on the family list without waiting for their first approval.
+    ///
+    /// Writes an empty shelf for each child they do not already have one for. That is
+    /// what makes "the other parent appears once they are set up" true — until a guardian
+    /// has written *something*, there is nothing in the folder with their name on it and
+    /// no honest way to know they exist.
+    func announce(guardian: Profiles.Guardian) async {
+        guard folder != nil else { return }
+        for minor in roster where !files.contains(where: {
+            $0.minorID == minor.id && $0.guardianID == guardian.id
+        }) {
+            await record([], for: minor, as: guardian, evenIfEmpty: true)
+        }
     }
 
     // MARK: - File I/O
@@ -283,7 +393,8 @@ final class ShelfStore {
             )
 
             var found: [ShelfFile] = []
-            for url in names where url.pathExtension.lowercased() == "json" {
+            for url in names where url.pathExtension.lowercased() == "json"
+                && !url.lastPathComponent.hasPrefix(DeviceRecord.prefix) {
                 // A file the other guardian wrote may still be a placeholder on this
                 // device. Asking for it is not the same as having it — a file that is
                 // still arriving is skipped this pass and picked up by the next refresh,
@@ -301,6 +412,40 @@ final class ShelfStore {
         } catch {
             return .failure(error)
         }
+    }
+
+    private nonisolated static func readDevices(in folder: URL) -> [DeviceRecord] {
+        let opened = folder.startAccessingSecurityScopedResource()
+        defer { if opened { folder.stopAccessingSecurityScopedResource() } }
+
+        guard let names = try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var found: [DeviceRecord] = []
+        for url in names where url.lastPathComponent.hasPrefix(DeviceRecord.prefix) {
+            guard materialise(url),
+                  let data = try? Data(contentsOf: url),
+                  let record = try? decoder.decode(DeviceRecord.self, from: data)
+            else { continue }
+            found.append(record)
+        }
+        return found.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+    }
+
+    private nonisolated static func write(_ record: DeviceRecord, in folder: URL) -> Bool {
+        let opened = folder.startAccessingSecurityScopedResource()
+        defer { if opened { folder.stopAccessingSecurityScopedResource() } }
+        guard let data = try? encoder.encode(record) else { return false }
+        let url = folder.appendingPathComponent(record.filename)
+        var failure: NSError?
+        var wrote = false
+        NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &failure) { destination in
+            wrote = (try? data.write(to: destination, options: .atomic)) != nil
+        }
+        return wrote && failure == nil
     }
 
     /// Ensure a file's contents are actually here, rather than a stub iCloud will fetch

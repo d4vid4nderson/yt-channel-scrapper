@@ -73,6 +73,16 @@ struct FamilyStrip: View {
                     .font(.system(size: 19))
                     .foregroundStyle(Palette.accent.opacity(0.9))
 
+                // One glyph per device that has announced itself as theirs. Nothing is
+                // drawn for a child with no device, which is the truthful state until
+                // their phone has opened the app at least once.
+                ForEach(model.shelf.devices.filter { $0.personID == minor.id }) { device in
+                    Image(systemName: device.kind.icon)
+                        .font(.system(size: 12))
+                        .foregroundStyle(.white.opacity(0.55))
+                        .help("\(device.name) — last seen \(device.lastSeen.formatted(date: .abbreviated, time: .shortened))")
+                }
+
                 VStack(alignment: .leading, spacing: 1) {
                     Text(minor.name)
                         .font(.system(size: 13, weight: .medium))
@@ -95,8 +105,13 @@ struct FamilyStrip: View {
         .help("\(minor.name)'s shelf — send with the ⋯ on any video")
     }
 
+    /// What this child has, and on what. The device line is the honest one — it only
+    /// names devices that are running the app and have said so.
     private func countText(for minor: Profiles.Minor) -> String {
         let count = model.shelf.approved(for: minor.id).count
-        return count == 0 ? "nothing yet" : "\(count) item\(count == 1 ? "" : "s")"
+        let items = count == 0 ? "nothing yet" : "\(count) item\(count == 1 ? "" : "s")"
+        let theirs = model.shelf.devices.filter { $0.personID == minor.id }
+        guard !theirs.isEmpty else { return items + " · no device yet" }
+        return items + " · " + theirs.map(\.kind.noun).joined(separator: ", ")
     }
 }

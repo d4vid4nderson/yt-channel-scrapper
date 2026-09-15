@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(UIKit)
+import UIKit
+#endif
 
 /// What a minor is allowed to see, and the record of who decided it.
 ///
@@ -227,4 +230,89 @@ struct ShelfFile: Codable, Sendable {
     }
 
     var filename: String { Self.filename(minorID: minorID, guardianID: guardianID) }
+}
+
+// MARK: - Devices
+
+/// One device that has the app, as it describes itself.
+///
+/// Apple publishes no way to enumerate the devices on an Apple ID — Find My is not open
+/// to third-party apps, CloudKit has no device roster, and `DeviceCheck` only attests the
+/// device it is running on. MDM can do it and needs a management server and supervised
+/// hardware, which is not a thing a family installs. So the only devices this app can
+/// ever show are the ones running it, and the only way they get listed is by saying so.
+///
+/// Each device writes exactly one of these, named for its own id, and reads all of them.
+/// Same rule as `ShelfFile` and for the same reason: no file has two writers, so there is
+/// nothing to coordinate and no way for one device to overwrite another's report.
+struct DeviceRecord: Codable, Sendable, Identifiable {
+
+    /// What sort of thing it is. Self-reported, because a device knows and nothing else
+    /// does.
+    ///
+    /// No `watch` case: there is no watchOS target, so a watch cannot run this and would
+    /// never write a record. Adding the case would put a row in the UI that can never
+    /// appear, which reads as a bug rather than as a gap.
+    enum Kind: String, Codable, Sendable {
+        case phone
+        case tablet
+        case computer
+
+        var icon: String {
+            switch self {
+            case .phone:    "iphone"
+            case .tablet:   "ipad"
+            case .computer: "desktopcomputer"
+            }
+        }
+
+        var noun: String {
+            switch self {
+            case .phone:    "phone"
+            case .tablet:   "tablet"
+            case .computer: "computer"
+            }
+        }
+
+        /// What this device is, decided at compile time on the Mac and at runtime on iOS,
+        /// where the same binary is both a phone and a tablet.
+        static var current: Kind {
+            #if os(macOS)
+            return .computer
+            #else
+            return UIDevice.current.userInterfaceIdiom == .pad ? .tablet : .phone
+            #endif
+        }
+    }
+
+    let deviceID: UUID
+    /// Typed by whoever set the device up.
+    ///
+    /// Not read from the system: since iOS 16 `UIDevice.name` returns the model — plain
+    /// "iPhone" — for anyone without a special entitlement, so "Wyatt's iPhone" is not
+    /// something the device can discover about itself. A default of "<person>'s <kind>"
+    /// is assembled from what the app already knows instead.
+    var name: String
+    var kind: Kind
+
+    /// Who holds it, as the app understands people. Nil until the device has been set up
+    /// as somebody — a fresh install that has not been through Family yet.
+    var personID: UUID?
+    var personName: String?
+    /// Whether that person is a child. Decides which half of the list it appears under,
+    /// and is worth storing rather than inferring: a guardian's id is not in the roster.
+    var isMinor: Bool
+
+    var lastSeen: Date
+    /// What its shelf says it should have, and what it actually has on disk. The gap is
+    /// the interesting number — it is the download that has not finished.
+    var approved: Int
+    var downloaded: Int
+
+    var id: UUID { deviceID }
+
+    /// The prefix is what keeps these out of the shelf reader, which decodes every other
+    /// `.json` in the folder as a `ShelfFile`.
+    static let prefix = "device-"
+    var filename: String { "\(Self.prefix)\(deviceID.uuidString).json" }
 }
