@@ -169,13 +169,73 @@ cat > "$APP/Contents/Info.plist" <<PLIST
 </plist>
 PLIST
 
-# Ad-hoc signing, inner binaries first — an unsigned nested executable invalidates the
-# outer signature, and macOS refuses to launch a bundle whose signature does not match.
-echo "==> signing (ad-hoc)"
+# Signing. Inner binaries first — an unsigned nested executable invalidates the outer
+# signature, and macOS refuses to launch a bundle whose signature does not match.
+#
+# Two modes, because they buy different things:
+#
+#   ad-hoc (the default)  builds and runs on this Mac, no account needed, no iCloud.
+#   real identity         the library syncs with the iPhone app through iCloud.
+#
+# iCloud is the whole reason the second exists. The key-value store is gated on an
+# entitlement, an entitlement is only honoured when the signature chains to a team, and
+# outside the App Store it also needs a provisioning profile inside the bundle saying the
+# App ID is allowed to use iCloud. Ad-hoc satisfies none of that, so it does not even ask
+# — an app carrying an entitlement it cannot use is worse than one that admits it has none.
+#
+#   YTCS_MAC_IDENTITY   e.g. "Apple Development: Your Name (XXXXXXXXXX)"
+#                       list them with: security find-identity -v -p codesigning
+#   YTCS_MAC_PROFILE    path to a macOS .provisionprofile for this bundle id with the
+#                       iCloud capability enabled. Made at developer.apple.com ->
+#                       Certificates, Identifiers & Profiles -> Profiles.
+IDENTITY="${YTCS_MAC_IDENTITY:--}"
+
+# The team id lives in ios/Local.xcconfig, which is gitignored, rather than being written
+# down a second time here.
+TEAM_ID="${YTCS_TEAM_ID:-$(sed -n 's|^[[:space:]]*DEVELOPMENT_TEAM[[:space:]]*=[[:space:]]*||p' \
+  ios/Local.xcconfig 2>/dev/null | sed 's|//.*||' | tr -d '[:space:]' | head -1)}"
+
 for bin in "${VENDORED[@]}"; do
-  codesign --force --sign - --timestamp=none "$APP/Contents/Resources/vendor/$bin" 2>/dev/null
+  codesign --force --sign "$IDENTITY" --timestamp=none "$APP/Contents/Resources/vendor/$bin" 2>/dev/null
 done
-codesign --force --sign - --timestamp=none "$APP"
+
+if [ "$IDENTITY" = "-" ]; then
+  echo "==> signing (ad-hoc — no iCloud; set YTCS_MAC_IDENTITY to sync with the phone)"
+  codesign --force --sign - --timestamp=none "$APP"
+else
+  [ -n "$TEAM_ID" ] || { echo "build-mac-app.sh: no DEVELOPMENT_TEAM found; set YTCS_TEAM_ID" >&2; exit 1; }
+
+  if [ -n "${YTCS_MAC_PROFILE:-}" ]; then
+    cp "$YTCS_MAC_PROFILE" "$APP/Contents/embedded.provisionprofile"
+    echo "==> embedded $(basename "$YTCS_MAC_PROFILE")"
+  else
+    echo "    no YTCS_MAC_PROFILE — iCloud will be refused at runtime without one"
+  fi
+
+  # Matches the iOS target's entitlement exactly, which is what puts both apps in one
+  # container: same team prefix, same bundle id, same store.
+  ENTITLEMENTS="$OUT/YTChannelScraper.entitlements"
+  cat > "$ENTITLEMENTS" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>com.apple.developer.ubiquity-kvstore-identifier</key>
+  <string>$TEAM_ID.$BUNDLE_ID</string>
+  <key>com.apple.application-identifier</key>
+  <string>$TEAM_ID.$BUNDLE_ID</string>
+  <key>com.apple.developer.team-identifier</key>
+  <string>$TEAM_ID</string>
+</dict>
+PLIST
+  echo "</plist>" >> "$ENTITLEMENTS"
+
+  echo "==> signing as $IDENTITY (iCloud enabled)"
+  codesign --force --sign "$IDENTITY" --timestamp=none \
+    --entitlements "$ENTITLEMENTS" --options runtime "$APP"
+  rm -f "$ENTITLEMENTS"
+fi
+
 codesign --verify --verbose=1 "$APP" 2>&1 | sed 's/^/    /'
 
 SIZE=$(du -sh "$APP" | cut -f1)

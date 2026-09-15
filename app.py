@@ -719,6 +719,21 @@ for _ in range(int(os.environ.get("WORKERS", "3"))):
 PORT_FILE = os.path.join(SUPPORT_DIR, "port")
 
 
+def _lan_ip():
+    """This machine's address on the local network, for the phone to open.
+
+    Nothing is sent: connecting a UDP socket only picks the route, and TEST-NET-1 is
+    reserved precisely so it goes nowhere. It beats a hostname lookup, which on a Mac
+    tends to answer with the loopback address.
+    """
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+        try:
+            sock.connect(("192.0.2.1", 1))
+            return sock.getsockname()[0]
+        except OSError:
+            return "127.0.0.1"
+
+
 def _free_port():
     """A hardcoded port collides with a leftover copy of ourselves or an unrelated app."""
     with socket.socket() as sock:
@@ -746,6 +761,10 @@ if __name__ == "__main__":
         webbrowser.open(f"http://127.0.0.1:{running}/")
         sys.exit(0)
 
+    # Localhost by default. YTCS_HOST=0.0.0.0 opens it to the local network, which is
+    # what a phone needs — deliberately opt-in, because there is no authentication here
+    # and anyone on the same wifi can then drive it.
+    host = os.environ.get("YTCS_HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 0)) or (_free_port() if FROZEN else 5005)
     os.makedirs(SUPPORT_DIR, exist_ok=True)
     with open(PORT_FILE, "w") as fh:
@@ -753,10 +772,12 @@ if __name__ == "__main__":
 
     pending = _pending_version()
     print(f"\n  {APP_NAME} -> http://127.0.0.1:{port}")
+    if host == "0.0.0.0":
+        print(f"  On your phone   -> http://{_lan_ip()}:{port}   (same wifi)")
     print(f"  Saving to {DOWNLOAD_DIR}")
     print(f"  yt-dlp {YTDLP_VERSION}" + (f" (restart to load {pending})" if pending else ""))
     print()
     if FROZEN:
         # There is no terminal to read the URL from, so the browser has to be handed it.
         threading.Timer(0.7, webbrowser.open, args=(f"http://127.0.0.1:{port}/",)).start()
-    app.run(host="127.0.0.1", port=port, debug=False, threaded=True)
+    app.run(host=host, port=port, debug=False, threaded=True)

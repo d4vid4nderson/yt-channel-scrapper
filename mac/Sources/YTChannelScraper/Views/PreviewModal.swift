@@ -10,6 +10,9 @@ struct PreviewModal: View {
     let session: PreviewSession
     let download: (Video) -> Void
     let popOut: () -> Void
+    /// Every way out of the card. Not `session.close()` directly: leaving the card is not
+    /// asking for silence, so what is playing goes up to the island rather than stopping.
+    let dismiss: () -> Void
 
     var body: some View {
         // Every observable read happens here, in this view's own body. The
@@ -25,7 +28,7 @@ struct PreviewModal: View {
                     .fill(.black.opacity(0.62))
                     .background(.ultraThinMaterial)
                     .ignoresSafeArea()
-                    .onTapGesture { session.close() }
+                    .onTapGesture(perform: dismiss)
                     .transition(.opacity)
 
                 GeometryReader { geo in
@@ -38,7 +41,7 @@ struct PreviewModal: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .allowsHitTesting(video != nil)
         .animation(.easeOut(duration: 0.2), value: video?.id)
-        .onExitCommand { session.close() }
+        .onExitCommand(perform: dismiss)
     }
 
     private func card(
@@ -68,7 +71,11 @@ struct PreviewModal: View {
                         .foregroundStyle(Color(white: 0.6))
                 }
                 Spacer(minLength: 8)
-                CircleButton(icon: "xmark", title: "Close preview") { session.close() }
+                CircleButton(
+                    icon: "xmark",
+                    title: "Put the card away — it keeps playing in the notch",
+                    action: dismiss
+                )
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 16)
@@ -84,8 +91,10 @@ struct PreviewModal: View {
 
             HStack(spacing: 10) {
                 Button {
+                    // The card goes; the video does not. `download` hands it up to the
+                    // island on its way out, so the downloads panel opens over a page
+                    // that is still playing.
                     download(video)
-                    session.close()
                 } label: {
                     Label("Download this", systemImage: "arrow.down.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
@@ -95,7 +104,7 @@ struct PreviewModal: View {
                         .background(Palette.accent, in: Capsule())
                 }
                 .buttonStyle(.plain)
-                .help("Queue this video for download at the chosen quality")
+                .help("Queue this video at the chosen quality, and keep it playing in the notch")
                 .pointingHand()
 
                 Link(destination: video.url) {

@@ -144,6 +144,8 @@ enum YouTubeAPI {
     /// `sp=EgIQAg%3D%3D` the Mac app puts in its search URL — same filter, passed as a
     /// parameter instead of smuggled through a URL.
     static let channelSearchParams = "EgIQAg=="
+    /// YouTube's own "Videos" filter chip.
+    static let videoSearchParams = "EgIQAQ=="
 
     static func searchChannels(query: String) async throws -> [Channel] {
         let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -154,6 +156,23 @@ enum YouTubeAPI {
             payload: ["query": trimmed, "params": channelSearchParams]
         )
         return Renderers.channels(in: response)
+    }
+
+    /// Search YouTube for videos rather than channels.
+    ///
+    /// The same endpoint and the same client as `searchChannels`; only `params` differs,
+    /// and it is the filter chip YouTube's own UI sets. `Renderers.videos` already knew
+    /// this shape — `videoRenderer` is in `classicVideoRenderers`, and `classicVideo`
+    /// reads the owner off the row, which a channel tab never needed.
+    static func searchVideos(query: String) async throws -> [Video] {
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return [] }
+        let response = try await InnerTube.post(
+            "search",
+            client: InnerTube.webClient,
+            payload: ["query": trimmed, "params": videoSearchParams]
+        )
+        return Renderers.videos(in: response, channel: nil)
     }
 
     /// Fill in a channel's avatar and subscriber count. Used for channels that arrived

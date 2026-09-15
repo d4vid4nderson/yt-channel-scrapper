@@ -33,11 +33,44 @@ final class Library {
         let details: Channel.Details?
     }
 
+    /// The copy that outlives this Mac, and the one the phone reads.
+    ///
+    /// Both apps share a bundle identifier and a team, so both resolve to the same
+    /// key-value container without either knowing the other exists. Saving a channel
+    /// here puts it on the phone, and vice versa.
+    let cloud = CloudMirror()
+
     init() {
         channels = Self.read([Channel].self, from: Self.channelsFile) ?? []
         videos = Self.read([Video].self, from: Self.videosFile) ?? []
+
+        // Set before `start()`, because the first read can hand something back
+        // synchronously and there would be nothing listening.
+        cloud.didReceive = { [weak self] incoming in self?.adopt(incoming) }
+        cloud.start()
+        // Seeds iCloud from a library that predates it. Harmless when iCloud is already
+        // newer: `start()` will have adopted that first, and this pushes the same thing
+        // back.
+        if !channels.isEmpty || !videos.isEmpty { mirror() }
+
         fillInAvatars()
     }
+
+    /// Take iCloud's copy wholesale — see `CloudMirror` for why this replaces rather
+    /// than merges. Written straight to disk without pushing back: this *is* what iCloud
+    /// already holds, so echoing it would be a write for nothing.
+    private func adopt(_ incoming: LibraryArchive) {
+        channels = incoming.channels
+        videos = incoming.videos
+        sortChannels()
+        write(channels, to: Self.channelsFile)
+        write(videos, to: Self.videosFile)
+        fillInAvatars()
+    }
+
+    /// Hand the current state to iCloud. Called from both persist paths, so every change
+    /// that reaches disk reaches the mirror too.
+    private func mirror() { cloud.push(archive) }
 
     var isEmpty: Bool { channels.isEmpty }
 
@@ -277,8 +310,15 @@ final class Library {
         return try? JSONDecoder().decode(type, from: data)
     }
 
-    private func persistChannels() { write(channels, to: Self.channelsFile) }
-    private func persistVideos() { write(videos, to: Self.videosFile) }
+    private func persistChannels() {
+        write(channels, to: Self.channelsFile)
+        mirror()
+    }
+
+    private func persistVideos() {
+        write(videos, to: Self.videosFile)
+        mirror()
+    }
 
     private func write<T: Encodable>(_ value: T, to file: URL) {
         do {

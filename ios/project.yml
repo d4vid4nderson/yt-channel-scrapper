@@ -17,6 +17,12 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
+    # The build number, as a setting rather than a literal in the Info.plist below, so
+    # `release.sh` can hand a fresh one to xcodebuild on every run — App Store Connect
+    # refuses a number it has seen before, and remembering to bump it by hand is the step
+    # that gets forgotten. Archiving from Xcode instead uses this default, which is only
+    # ever right once.
+    CURRENT_PROJECT_VERSION: "1"
     SWIFT_STRICT_CONCURRENCY: complete
     ENABLE_USER_SCRIPT_SANDBOXING: YES
     # Personal/internal distribution: set DEVELOPMENT_TEAM in ios/Local.xcconfig (gitignored)
@@ -48,6 +54,11 @@ targets:
         name: Shared-Archive
       - path: ../mac/Sources/YTChannelScraper/Views/Palette.swift
         name: Shared-Palette
+      # The iCloud mirror, shared for the same reason as the archive above: both apps
+      # write the same library to the same key-value container, and one implementation
+      # is the only way that stays true.
+      - path: ../mac/Sources/YTChannelScraper/Core/CloudMirror.swift
+        name: Shared-Cloud
     info:
       path: Support/Info.plist
       properties:
@@ -59,18 +70,38 @@ targets:
         # reads unset. Stating it here is the whole fix.
         CFBundleIconName: AppIcon
         CFBundleShortVersionString: "1.0.0"
-        # Bump for every TestFlight upload — App Store Connect refuses a build number it
-        # has already seen, and a TestFlight build expires 90 days after upload, so this
-        # gets bumped roughly quarterly for the life of the app.
-        CFBundleVersion: "1"
+        # Set by `release.sh` on every run, from the clock — App Store Connect refuses a
+        # build number it has already seen, and a TestFlight build expires 90 days after
+        # upload, so this gets bumped for the life of the app. See CURRENT_PROJECT_VERSION
+        # above for what an Xcode-side archive gets instead.
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
         # Answers the export-compliance question up front. The app talks HTTPS and
         # nothing else, which is the exempt case. Without this key App Store Connect
         # asks on every single upload and holds the build until someone answers.
         ITSAppUsesNonExemptEncryption: false
+        # Minor Mode's PIN can optionally be answered with Face ID instead. Required the
+        # moment LocalAuthentication is linked and asked to evaluate a biometric policy
+        # — the system kills the app rather than prompting if the key is absent, and
+        # only at the point someone actually taps the button.
+        NSFaceIDUsageDescription: Unlock Minor Mode without typing your PIN.
         UILaunchScreen:
           UIColorName: LaunchBackground
+        # The phone gets three: upside-down is not a thing a Face ID iPhone honours
+        # anyway, and declaring it would only matter on the few that do.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # The iPad gets all four, and has to. An iPad app that supports multitasking must
+        # declare every orientation — App Store Connect *rejects the upload* otherwise
+        # (ITMS, "to support iPad multitasking"), which is a validation failure after the
+        # archive rather than a build error, so nothing catches it until you upload. The
+        # alternative, UIRequiresFullScreen, is on its way out: from the iOS 26 SDK
+        # windows are resizable regardless, so opting out is no longer an option worth
+        # building on.
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
           - UIInterfaceOrientationLandscapeLeft
           - UIInterfaceOrientationLandscapeRight
         # Downloads land in Documents/ and are meant to be reachable without the app:
@@ -89,7 +120,20 @@ targets:
             UTTypeDescription: YT Channel Scraper Library
             UTTypeConformsTo: [public.json]
             UTTypeTagSpecification:
-              public.filename-extension: [ytcslib]
+              public.filename-extension: [ytcslibrary]
+    # The iCloud key-value store, which is what makes the library survive the app being
+    # deleted. `$(TeamIdentifierPrefix)$(CFBundleIdentifier)` is the conventional
+    # container name and keeps this working if the bundle id is overridden in
+    # Local.xcconfig — a literal here would break for anyone signing with another team.
+    #
+    # Adding this changes the App ID's capabilities, so the first archive after it has to
+    # regenerate the provisioning profile. `release.sh` already passes
+    # -allowProvisioningUpdates, which is what lets that happen without a dialog.
+    entitlements:
+      path: Support/YTChannelScraper.entitlements
+      properties:
+        com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+
     settings:
       base:
         # Overridable from Local.xcconfig. A plain value here would silently beat
@@ -100,3 +144,37 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad
+
+  # Unit tests for the parts that have to be right and do not need a device: the shelf
+  # merge rules, and anything else that is pure. Deliberately a *logic* test bundle with
+  # no host application — it never launches the app, so it runs in a couple of seconds
+  # and cannot be broken by a signing problem, which is what makes it worth running.
+  #
+  #   xcodebuild test -scheme YTChannelScraperTests -destination 'platform=iOS Simulator,name=iPhone 16'
+  YTChannelScraperTests:
+    type: bundle.unit-test
+    platform: iOS
+    sources:
+      - path: Tests
+    dependencies:
+      - target: YTChannelScraper
+    settings:
+      base:
+        # @testable needs the app built without optimisation stripping its internals.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: DEBUG
+        GENERATE_INFOPLIST_FILE: YES
+        PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper).tests
+
+schemes:
+  YTChannelScraper:
+    build:
+      targets:
+        YTChannelScraper: all
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - YTChannelScraperTests
+    archive:
+      config: Release

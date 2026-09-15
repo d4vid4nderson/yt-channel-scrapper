@@ -29,11 +29,41 @@ final class Library {
     private var resolving: Set<String> = []
     private var resolver: Task<Void, Never>?
 
+    /// The copy that outlives the app. Deleting an app takes Application Support with
+    /// it, so without this a reinstall starts empty — which is exactly what happened.
+    let cloud = CloudMirror()
+
     init() {
         channels = Self.read([Channel].self, from: Self.channelsFile) ?? []
         videos = Self.read([Video].self, from: Self.videosFile) ?? []
+
+        // Set before `start()`, because the first read can hand something back
+        // synchronously and there would be nothing listening.
+        cloud.didReceive = { [weak self] incoming in self?.adopt(incoming) }
+        cloud.start()
+        // Seeds iCloud from a library that predates it. Harmless when iCloud is already
+        // newer: `start()` will have adopted that first, and this then pushes the same
+        // thing back.
+        if !isEmpty || !videos.isEmpty { mirror() }
+
         fillInAvatars()
     }
+
+    /// Take iCloud's copy wholesale — see `CloudMirror` for why this replaces rather
+    /// than merges. Written straight to disk without pushing back: this *is* what iCloud
+    /// already holds, so echoing it would be a write for nothing.
+    private func adopt(_ archive: LibraryArchive) {
+        channels = archive.channels
+        videos = archive.videos
+        sortChannels()
+        write(channels, to: Self.channelsFile)
+        write(videos, to: Self.videosFile)
+        fillInAvatars()
+    }
+
+    /// Hand the current state to iCloud. Called from both persist paths, so every change
+    /// that reaches disk reaches the mirror too.
+    private func mirror() { cloud.push(archive(.both)) }
 
     var isEmpty: Bool { channels.isEmpty }
 
@@ -239,47 +269,132 @@ final class Library {
 
     // MARK: - Transfer
 
-    var archive: LibraryArchive {
-        LibraryArchive(channels: channels, videos: videos)
+    /// Which halves of the library a transfer carries.
+    ///
+    /// The two lists answer different questions — the channels are the shelf somebody
+    /// browses, the videos are a specific set of things to watch — and there are real
+    /// reasons to move one without the other. Sending a minor's phone a handful of
+    /// approved videos should not also hand them two hundred channels to roam.
+    enum Contents: String, CaseIterable, Identifiable, Sendable {
+        case both
+        case channels
+        case videos
+
+        var id: String { rawValue }
+
+        var hasChannels: Bool { self != .videos }
+        var hasVideos: Bool { self != .channels }
+
+        /// For the segmented picker, where the column is narrow.
+        var short: String {
+            switch self {
+            case .both:     "Both"
+            case .channels: "Channels"
+            case .videos:   "Videos"
+            }
+        }
+
+        /// For a menu, where it has to say what it will do on its own.
+        var menuLabel: String {
+            switch self {
+            case .both:     "Channels and Videos"
+            case .channels: "Channels Only"
+            case .videos:   "Videos Only"
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .both:     "square.stack"
+            case .channels: "person.2"
+            case .videos:   "play.rectangle"
+            }
+        }
     }
 
-    func export(to url: URL) throws {
-        let (encoder, _) = LibraryArchive.coders()
-        try encoder.encode(archive).write(to: url, options: .atomic)
-        note = "Exported \(channels.count) channels and \(videos.count) videos."
+    /// An archive of exactly these entries, for handing somebody a chosen subset rather
+    /// than the whole shelf.
+    ///
+    /// Channels and videos are picked independently and neither drags the other in. That
+    /// is the point: a channel grants everything in it, including whatever it uploads
+    /// next, while a video grants one video and nothing else — so quietly adding a
+    /// video's channel alongside it would hand over far more than was ticked.
+    func archive(channelIDs: Set<String>, videoIDs: Set<String>) -> LibraryArchive {
+        LibraryArchive(channels: channels.filter { channelIDs.contains($0.id) },
+                       videos: videos.filter { videoIDs.contains($0.id) })
     }
 
-    @discardableResult
-    func importArchive(from url: URL) throws -> String {
+    func archive(_ contents: Contents) -> LibraryArchive {
+        LibraryArchive(channels: contents.hasChannels ? channels : [],
+                       videos: contents.hasVideos ? videos : [])
+    }
+
+    /// Whether there is anything to send under that choice. An export that would write
+    /// two empty lists is a file that does nothing on the far side.
+    func canExport(_ contents: Contents) -> Bool {
+        (contents.hasChannels && !channels.isEmpty) || (contents.hasVideos && !videos.isEmpty)
+    }
+
+    func export(_ contents: Contents, to url: URL) throws {
+        let written = archive(contents)
+        try written.write(to: url)
+        note = "Exported \(Self.summary(of: written))."
+    }
+
+    /// Read one without changing anything, so the import sheet can say what is in the
+    /// file before any of it is taken.
+    ///
+    /// A file handed over by the document picker lives outside the sandbox and has to be
+    /// opened under a security scope, which the Mac's version has no need of. The whole
+    /// archive comes back in memory, which also means the merge that follows needs no
+    /// second visit to a URL whose scope may since have lapsed.
+    static func read(from url: URL) throws -> LibraryArchive {
         let scoped = url.startAccessingSecurityScopedResource()
         defer { if scoped { url.stopAccessingSecurityScopedResource() } }
-
-        let (_, decoder) = LibraryArchive.coders()
-        let incoming = try decoder.decode(LibraryArchive.self, from: Data(contentsOf: url))
-        guard incoming.format <= LibraryArchive.currentFormat else {
-            throw ImportFailure.tooNew
-        }
-
-        let channelsBefore = channels.count
-        let videosBefore = videos.count
-        for channel in incoming.channels { add(channel) }
-        for video in incoming.videos where !containsVideo(video.id) {
-            videos.append(video)
-        }
-        videos.sort { ($0.channelName ?? "") < ($1.channelName ?? "") }
-        persistVideos()
-
-        let message = "Added \(channels.count - channelsBefore) channels "
-            + "and \(videos.count - videosBefore) videos."
-        note = message
-        return message
+        return try LibraryArchive.read(from: url)
     }
 
-    enum ImportFailure: LocalizedError {
-        case tooNew
-        var errorDescription: String? {
-            "That library was written by a newer version of the app."
+    /// Take some or all of an archive into this library.
+    ///
+    /// Channels merge through `add`, so a richer incoming record refreshes a thinner
+    /// saved one rather than duplicating it. Videos are appended in the order they
+    /// arrive, **after** what is already here: the shelf is newest-first and somebody
+    /// else's export is not news, so it should not push its way to the top. Re-importing
+    /// the same file therefore changes nothing, which is what makes "send an updated one
+    /// later" a safe thing to tell people to do.
+    @discardableResult
+    func merge(_ incoming: LibraryArchive, contents: Contents) -> String {
+        let channelsBefore = channels.count
+        let videosBefore = videos.count
+
+        if contents.hasChannels {
+            for channel in incoming.channels { add(channel) }
         }
+        if contents.hasVideos {
+            for video in incoming.videos where !containsVideo(video.id) {
+                videos.append(video)
+            }
+            persistVideos()
+        }
+
+        let message = Self.summary(channels: channels.count - channelsBefore,
+                                   videos: videos.count - videosBefore)
+        note = message.isEmpty ? "Nothing new — it is all here already." : "Added \(message)."
+        return note ?? ""
+    }
+
+    /// "12 channels and 3 videos", with the half that is empty left out entirely rather
+    /// than written as a zero. Empty when both are.
+    static func summary(channels: Int, videos: Int) -> String {
+        var parts: [String] = []
+        if channels > 0 { parts.append("\(channels) channel\(channels == 1 ? "" : "s")") }
+        if videos > 0 { parts.append("\(videos) video\(videos == 1 ? "" : "s")") }
+        return parts.joined(separator: " and ")
+    }
+
+    static func summary(of archive: LibraryArchive) -> String {
+        let text = summary(channels: archive.channels.count, videos: archive.videos.count)
+        return text.isEmpty ? "nothing" : text
     }
 
     // MARK: - Disk
@@ -293,8 +408,15 @@ final class Library {
         return try? JSONDecoder().decode(type, from: data)
     }
 
-    private func persistChannels() { write(channels, to: Self.channelsFile) }
-    private func persistVideos() { write(videos, to: Self.videosFile) }
+    private func persistChannels() {
+        write(channels, to: Self.channelsFile)
+        mirror()
+    }
+
+    private func persistVideos() {
+        write(videos, to: Self.videosFile)
+        mirror()
+    }
 
     private func write<T: Encodable>(_ value: T, to file: URL) {
         do {

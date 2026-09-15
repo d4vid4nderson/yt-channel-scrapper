@@ -18,6 +18,8 @@ dist-mac/
 
 # iOS
 ios/Local.xcconfig
+ios/Local.release.env
+ios/.last-release
 ios/*.xcodeproj/
 ios/build/
 ios/DerivedData/

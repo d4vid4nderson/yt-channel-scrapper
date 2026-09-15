@@ -1,0 +1,39 @@
+Your library now lives in iCloud, so deleting the app no longer loses it.
+
+The saved channels and videos are mirrored to iCloud on every change. Delete the app,
+reinstall it, and the shelf comes back on first launch with nothing to restore by hand.
+Home -> the ... menu says which state it is in: "Saved to iCloud", or the reason it is not.
+
+It is last-writer-wins on the whole library rather than a merge, which means deleting a
+channel actually deletes it instead of reappearing from the other copy. The trade is that
+edits made on two devices between syncs can lose one side.
+
+Minor Mode, which did not reach anyone on the last build.
+
+Home -> ... -> Minor Mode. Set a four-digit PIN, then turn it on. The Search tab
+disappears, downloading goes with it, and what is left is the channels and videos you
+saved plus anything already downloaded. The lock button top right is the way back out and
+it costs the PIN. It survives a restart and a reinstall — the PIN lives in the Keychain.
+
+Face ID is offered but starts switched off on purpose: on a child's own phone the enrolled
+face is theirs, not yours.
+
+Exporting and importing now ask what you want. Export Library offers channels, videos or
+both. Import Library reads the file first and tells you what is in it before you choose.
+
+Worth trying:
+- Save a few channels. Delete the app. Reinstall from TestFlight. They should come back.
+- Turn Minor Mode on, force-quit, reopen. Still locked.
+- Four wrong PINs is free; the fifth starts making you wait.
+- Export videos only, import it somewhere else. No channels should arrive.
+- Import the same file twice — the second time should say there is nothing new.
+- Sign out of iCloud and open the app. The menu should say so rather than claiming a
+  backup that is not happening.
+
+Known limits: Minor Mode is a switch inside this app. It does not stop anyone opening
+Safari or the real YouTube — that is Screen Time's job. And the iCloud copy is capped at
+1MB, which is thousands of channels; a library past that says so rather than silently
+failing.
+
+Also fixed: Import Library could not see files this app had exported (the bundle declared
+the wrong filename extension), and importing no longer reshuffles videos you had saved.

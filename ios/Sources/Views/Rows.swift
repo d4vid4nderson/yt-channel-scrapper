@@ -55,10 +55,21 @@ struct VideoRow: View {
 /// One channel: a search hit, or a saved favourite.
 struct ChannelRow: View {
     let channel: Channel
+    var isPicked = false
+    var isSelecting = false
     var isSaved = false
 
     var body: some View {
         HStack(spacing: 12) {
+            // Matches `VideoRow` above rather than inventing a second look for the same
+            // idea — the two appear in one list when choosing what to send.
+            if isSelecting {
+                Image(systemName: isPicked ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 21))
+                    .foregroundStyle(isPicked ? Palette.accent : Color.secondaryText)
+                    .transition(.scale.combined(with: .opacity))
+            }
+
             Avatar(channel: channel, size: 44)
 
             VStack(alignment: .leading, spacing: 2) {

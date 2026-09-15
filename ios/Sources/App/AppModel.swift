@@ -15,6 +15,17 @@ final class AppModel {
     let listing = Listing()
     let search = ChannelSearch()
     let library = Library()
+    /// Whether this is the parent's phone or a minor's. Read by nearly every screen —
+    /// it decides which tabs exist and which buttons are on them.
+    let profiles = Profiles()
+    /// The shared folder both guardians write to: the roster of children, and what each
+    /// of them is allowed to see. Separate from `library` on purpose — `library` is what
+    /// *you* saved and is nobody else's business, `shelf` is what the two of you have
+    /// agreed a child may have.
+    let shelf = ShelfStore()
+    /// Keeps a minor's phone matching its shelf. Idle on a guardian's phone — there is
+    /// nothing to reconcile until the device belongs to a child.
+    let reconciler = ShelfReconciler()
     let downloads = Downloads()
     let playback = Playback()
     /// What is already on the phone. `Downloads` only knows about this run's jobs; this
@@ -25,6 +36,21 @@ final class AppModel {
         // A finished job leaves a new file in Documents, and the on-disk list is a scan
         // rather than an index — so it has to be told to look again.
         downloads.didSave = { [weak self] in self?.localFiles.reload() }
+    }
+
+    /// Re-read the shared folder and, on a minor's phone, make the disk match it.
+    ///
+    /// One call for both halves because they are never wanted apart: a refresh that did
+    /// not reconcile would show a child a shelf the phone cannot play, and a reconcile
+    /// on a stale read would act on decisions that have since changed. Called on every
+    /// foreground.
+    func syncShelf() async {
+        await shelf.refresh()
+        guard let minor = profiles.minor else { return }
+        await reconciler.reconcile(for: minor,
+                                   shelf: shelf,
+                                   downloads: downloads,
+                                   localFiles: localFiles)
     }
 
     // MARK: - Input
@@ -48,10 +74,58 @@ final class AppModel {
     /// What the player sheet is showing, if anything — a stream or a file on disk.
     var playing: Playable?
 
+    /// Whether the minor is holding it. The screens ask this rather than `profiles`
+    /// directly, because "is this the minor" is the question every one of them has and
+    /// which profile it is is not.
+    var isMinor: Bool { profiles.isMinor }
+
     /// Which tab is on screen. Bound rather than left to `TabView` so that finishing a
     /// download can take you to it.
-    enum Tab: Hashable { case browse, saved, downloads }
-    var tab: Tab = .browse
+    ///
+    /// `.search` stays in the enum in Minor Mode even though the tab is not offered —
+    /// removing the case would mean every switch over it needing a minor-only shape.
+    /// `enterMinorMode()` makes sure nothing is left pointing at it.
+    enum Tab: Hashable { case home, search, downloads }
+    var tab: Tab = .home
+
+    /// The pushed channel stack for each tab that has one. Held here rather than in the
+    /// views so that a video can send you to the channel it came from, from anywhere —
+    /// including the player sheet, which sits above every tab and has no stack of its
+    /// own to push onto.
+    var homePath: [Channel] = []
+    var searchPath: [Channel] = []
+
+    /// Show a channel, on whichever stack is currently in front.
+    func show(_ channel: Channel) {
+        switch tab {
+        case .home:      homePath.append(channel)
+        case .search where !isMinor: searchPath.append(channel)
+        default:         tab = .home; homePath.append(channel)
+        }
+    }
+
+    /// Hand the phone over. The mode is already switched by the time this runs; what is
+    /// left is making sure nothing the parent had open is still on screen underneath —
+    /// a search results list, a half-made selection, or the Search tab itself, which is
+    /// about to stop existing.
+    func enterMinorMode() {
+        tab = .home
+        searchPath = []
+        clearSearch()
+        picked = []
+        isSelecting = false
+    }
+
+    /// The channel a video came from, as much of one as a row knows.
+    ///
+    /// A saved copy is preferred when there is one — it carries the avatar and the
+    /// subscriber count, which a search result's byline does not. Otherwise the id and
+    /// name are enough to open it, and `Listing` fills in the rest.
+    func channel(of video: Video) -> Channel? {
+        guard let id = video.channelId, !id.isEmpty else { return nil }
+        if let saved = library.channels.first(where: { $0.id == id }) { return saved }
+        return Channel(id: id, title: video.channelName ?? id)
+    }
 
     /// A message for the banner — an import result, an export path, a failure that is
     /// not attached to any one row.
@@ -109,26 +183,27 @@ final class AppModel {
         }
     }
 
-    func open(_ channel: Channel) {
-        search.reset()
-        urlText = ""
+    /// Point the shared `Listing` at a channel, for the screen about to show it.
+    ///
+    /// It no longer resets the search or changes tabs the way `open` did. Under push
+    /// navigation the list you came from is still underneath you and should be exactly
+    /// as you left it — clearing it was only ever necessary because the listing had to
+    /// take over the screen the search was using.
+    func beginListing(_ channel: Channel) {
+        guard listing.channel?.id != channel.id else { return }
         picked = []
         isSelecting = false
+        filterText = ""
         library.markOpened(channel.id)
         listing.open(channel.id, known: channel)
-        // The listing is what BrowseView draws, so opening a channel from Saved has to
-        // go there to be seen. Without this the tap looked like it did nothing except
-        // reorder the saved list, which is `markOpened` above doing its job.
-        tab = .browse
     }
 
-    func goHome() {
-        listing.reset()
+    /// Empty the search and its results. Was `goHome`, which it stopped being when
+    /// Home became a tab of its own.
+    func clearSearch() {
         search.reset()
         urlText = ""
         filterText = ""
-        picked = []
-        isSelecting = false
     }
 
     // MARK: - Selection
@@ -157,6 +232,10 @@ final class AppModel {
     }
 
     func download(_ videos: [Video]) {
+        // Every button that calls this is already hidden in Minor Mode. The guard is here
+        // anyway: one missed swipe action in a future edit would otherwise be a silent
+        // hole, and this is the single place they all funnel through.
+        guard !isMinor else { return }
         downloads.enqueue(videos, quality: quality, alsoAudio: alsoAudio)
         banner = videos.count == 1
             ? "Downloading \(videos[0].title)."
@@ -186,14 +265,59 @@ final class AppModel {
     func play(_ video: Video) { playing = .stream(video) }
     func play(_ file: LocalFile) { playing = .local(file) }
 
+    /// What the sheet asks for when it appears.
+    ///
+    /// Not always an open: coming back to a video you left playing should find it where
+    /// it got to, not start it again from the top. Anything else — a different video, or
+    /// the same one after it failed — is a real open.
+    func resume(_ item: Playable) {
+        if case .ready = playback.state, playback.item?.id == item.id { return }
+        playback.open(item)
+    }
+
+    /// Leave the player, and let it play on. The bar above the tabs is where it goes.
+    func leavePlayer() {
+        playback.leave()
+        playing = nil
+    }
+
+    /// Stop it for good — the bar's own X, and the only thing in the app that means
+    /// silence now.
+    func stopPlaying() {
+        playback.close()
+        playing = nil
+    }
+
     // MARK: - Transfer
 
-    func importLibrary(from url: URL) {
+    /// A picked library file, read but not yet taken.
+    ///
+    /// Held between the document picker closing and the import sheet's button, so the
+    /// sheet can say what is actually in the file rather than asking anyone to choose
+    /// blind. The archive travels in memory: the URL's security scope belongs to the
+    /// picker's callback and is not something to still be holding a minute later.
+    struct PendingImport: Identifiable {
+        let id = UUID()
+        let archive: LibraryArchive
+        let filename: String
+    }
+
+    var pendingImport: PendingImport?
+
+    /// Read a picked file and put the choice of what to take from it on screen.
+    func offerImport(from url: URL) {
         do {
-            banner = try library.importArchive(from: url)
+            pendingImport = PendingImport(archive: try Library.read(from: url),
+                                          filename: url.lastPathComponent)
         } catch {
             banner = error.localizedDescription
         }
+    }
+
+    func takeImport(_ contents: Library.Contents) {
+        guard let pending = pendingImport else { return }
+        banner = library.merge(pending.archive, contents: contents)
+        pendingImport = nil
     }
 
     func importTakeout(from url: URL) {
@@ -205,11 +329,31 @@ final class AppModel {
         }
     }
 
-    /// Write the library somewhere the export sheet can hand off from.
-    func exportLibrary() throws -> URL {
-        let name = "\(Paths.appName).\(LibraryArchive.fileExtension)"
+    /// Write a hand-picked subset out for sending on.
+    ///
+    /// Named for what it holds rather than dated like a full export: this file is aimed
+    /// at one person, and "3 channels" tells whoever receives it what they are about to
+    /// import where a timestamp would not.
+    func exportSelection(channelIDs: Set<String>, videoIDs: Set<String>) throws -> URL {
+        let picked = library.archive(channelIDs: channelIDs, videoIDs: videoIDs)
+        let what = Library.summary(of: picked)
+        let name = "\(Paths.appName) — \(what).\(LibraryArchive.fileExtension)"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
-        try library.export(to: url)
+        try picked.write(to: url)
+        return url
+    }
+
+    /// Write some or all of the library somewhere the share sheet can hand off from.
+    ///
+    /// The filename says which halves are in it — a phone's share sheet shows the name
+    /// and nothing else, and "Library" twice in a row is no help to whoever is picking
+    /// one to send on.
+    func exportLibrary(_ contents: Library.Contents) throws -> URL {
+        let what = contents == .both ? "Library" : contents.short
+        let stamp = Date().formatted(.iso8601.year().month().day().dateSeparator(.dash))
+        let name = "\(Paths.appName) \(what) \(stamp).\(LibraryArchive.fileExtension)"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
+        try library.export(contents, to: url)
         return url
     }
 }

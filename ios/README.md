@@ -132,22 +132,90 @@ you want the longest-lived install.
 
 ### Each release
 
-1. **Once, at the start:** App Store Connect → Apps → **+** → New App. Pick the bundle
-   id, give it a name and an SKU. Do not submit it for review, then or ever — the record
-   sits in "Prepare for Submission" indefinitely and that is fine.
-2. Bump `CFBundleVersion` in `project.yml`. App Store Connect rejects a build number it
-   has seen before, and this is the step everyone forgets.
-3. `xcodegen generate` if you changed `project.yml`.
-4. Xcode → any iOS device as the destination → Product → **Archive**.
-5. Organizer → **Distribute App** → **TestFlight & App Store** → Upload. The wording
-   mentions the App Store; uploading is not submitting, and nothing is sent for review.
-6. Wait a few minutes for processing, then App Store Connect → TestFlight → **Internal
-   Testing** → add testers.
+Two things to do once, and then one command forever.
+
+1. **App Store Connect → Apps → + → New App.** Pick the bundle id, give it a name and an
+   SKU. Do not submit it for review, then or ever — the record sits in "Prepare for
+   Submission" indefinitely and that is fine.
+2. **An API key**, which is what lets the upload happen with nobody at the keyboard:
+   App Store Connect → Users and Access → Integrations → App Store Connect API → generate
+   one with the **App Manager** role. Then `cp Local.release.env.example Local.release.env`
+   and put the Key ID and Issuer ID in it; the `.p8` downloads once, and Apple's tools
+   look for it at `~/.appstoreconnect/private_keys/AuthKey_<KEY_ID>.p8`.
+
+```sh
+./release.sh --check      # says what is missing, if anything
+./release.sh              # xcodegen, archive, export, upload. That is the whole release.
+```
+
+The build number comes off the clock, so there is nothing to bump and nothing to forget —
+App Store Connect refuses a number it has seen before, and that was the step that always
+got missed. Processing takes a few minutes, after which the build is in TestFlight →
+Internal Testing, with no Beta App Review in the way. Testers with automatic updates on
+get it without doing anything at all.
+
+### What testers are told
+
+`WhatToTest.txt` rides along inside the archive, so a build arrives in App Store Connect
+with its notes already on it — there is no web form to remember. Edit the file when a
+build is worth explaining; leave it alone and the commit subjects since the last upload
+stand in. A monthly keep-alive build with no commits behind it says exactly that, rather
+than showing testers the same notes for the third time.
+
+### What App Store Connect actually needs
+
+Almost nothing. Internal testing skips the entire store listing, and the only button in
+there worth being careful about is the one that submits for review.
+
+| Do | Skip |
+|---|---|
+| **Users and Access → People** — every internal tester has to be a user on the team | Description, keywords, screenshots, subtitle, promo text |
+| **TestFlight → Internal Testing** — a group, the testers, and **Enable automatic distribution** | Pricing, Age Rating, Category, Privacy Policy URL |
+| Tell testers to turn on automatic updates in the TestFlight app | App Privacy questionnaire, Test Information, External Testing |
+
+Automatic distribution is the one that matters for the scheduled release: without it every
+upload sits in Builds waiting for a human to attach it to the group, which is the manual
+step the whole arrangement exists to remove. The yellow "incomplete" warnings on the App
+Store tab are permanent and mean nothing here — the record stays in *Prepare for
+Submission* for the life of the app.
+
+### Keeping it alive
+
+The 90-day expiry is the thing that bites, because it bites everyone at once and with no
+warning: the day it lands, every tester's app refuses to open. So the release runs itself.
+
+```sh
+./release.sh --schedule       # 1st of every month, 03:15, via launchd
+./release.sh --unschedule     # stop
+```
+
+Monthly rather than quarterly on purpose. Every upload resets the 90 days, so running
+three times more often than strictly necessary means two missed runs — a closed laptop, a
+machine away being repaired — still leave the window open. A calendar job missed because
+the Mac was asleep runs at the next wake rather than being skipped, and the log is at
+`~/Library/Logs/ytcs-release.log`. Check it occasionally: a release that has been failing
+quietly since March is the one failure mode this setup has.
+
+It needs the Mac, though. If that is not dependable, the same script runs on any macOS CI
+runner given the key and a signing certificate.
+
+### Ad hoc, if you would rather not use TestFlight at all
+
+```sh
+YTCS_MANIFEST_BASE_URL=https://downloads.example.com/ytcs ./release.sh --adhoc
+```
+
+Exports a signed `.ipa` and the `manifest.plist` beside it into `build/export/`. Serve
+both over HTTPS and the install link is
+`itms-services://?action=download-manifest&url=<base>/manifest.plist`. Nothing goes near
+Apple, which is the appeal; what it costs is that every phone's UDID has to be registered
+in the portal first (100 per year, and the slots only come back at renewal), the profile
+dies after a year rather than 90 days, and each person reinstalls by hand when it does.
 
 Export compliance is answered in advance: `ITSAppUsesNonExemptEncryption` is set to
 `false` in the Info.plist because the app uses nothing but HTTPS. Without it App Store
 Connect asks the same encryption question on every single upload and holds the build
-until you answer.
+until you answer — which an unattended release would never notice.
 
 ---
 

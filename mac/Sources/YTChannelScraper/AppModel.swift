@@ -23,6 +23,12 @@ final class AppModel {
     /// Held rather than derived, so it flips on submit instead of when results land —
     /// otherwise the old list is still on screen while the new one is being fetched.
     private(set) var mode: Mode = .videos
+    /// Whether the run that is going was started from inside the results area. Read only
+    /// while something is running, to decide whether the wait belongs there or in the hero.
+    private var startedFromResults = false
+    /// The channel a scrape was started *for*, when it was started by name rather than by
+    /// typing a URL. Kept only for what the wait says while the first page is fetched.
+    private(set) var openingChannel: Channel?
     /// What the island is playing, so it can be put back where it came from.
     var islandVideo: Video?
 
@@ -115,6 +121,36 @@ final class AppModel {
         }
     }
 
+    /// Whether the page is showing the results area rather than the hero.
+    ///
+    /// Deliberately not just `hasResults`. Starting a scrape empties the list a second or
+    /// two before the next one arrives, and a page that fell back to the hero for that
+    /// gap would throw away where you were every time you opened another channel from the
+    /// panel — you asked for a channel and got the landing screen back. So once you are in
+    /// the results you stay in them, and the wait is drawn there instead, as the shape of
+    /// the list that is coming.
+    var showsResults: Bool { hasResults || (isBusy && startedFromResults) }
+
+    /// A list on its way with nothing of it on screen yet — what the skeleton rows stand
+    /// in for. Loading *more* of a list is not this: that has rows above it already, and
+    /// a spinner at the foot is the honest thing there.
+    var isLoadingList: Bool {
+        switch mode {
+        case .videos:   scraper.isBusy && scraper.videos.isEmpty
+        case .channels: search.isBusy && search.results.isEmpty
+        case .saved:    false
+        }
+    }
+
+    /// Whose videos are being read, while they are being read. The scraper does not know
+    /// the channel's name until the first page answers, so a scrape started from a saved
+    /// channel or a search hit carries the name in with it — the wait can then say which
+    /// channel you are waiting for rather than sitting on "0 videos".
+    var loadingChannelName: String? {
+        guard mode == .videos, isLoadingList else { return nil }
+        return scraper.channel.isEmpty ? openingChannel?.title : scraper.channel
+    }
+
     var statusError: String? {
         switch mode {
         case .videos:   scraper.error
@@ -147,8 +183,11 @@ final class AppModel {
         mode == .channels ? search.stop() : scraper.stop()
     }
 
-    func scrape() {
+    func scrape(opening channel: Channel? = nil) {
         guard canScrape else { return }
+        // Both read the state the last run left behind, so they are taken before it goes.
+        startedFromResults = hasResults
+        openingChannel = channel
         mode = .videos
         search.reset()
         picked = []
@@ -157,6 +196,8 @@ final class AppModel {
     }
 
     func searchChannels() {
+        startedFromResults = hasResults
+        openingChannel = nil
         mode = .channels
         scraper.reset()
         picked = []
@@ -167,6 +208,8 @@ final class AppModel {
     /// Show the saved videos in place of a channel's, so they can be ticked, previewed
     /// and downloaded with exactly the machinery a scrape's list uses.
     func showSavedVideos() {
+        startedFromResults = false
+        openingChannel = nil
         mode = .saved
         scraper.reset()
         search.reset()
@@ -180,13 +223,15 @@ final class AppModel {
     func open(_ channel: Channel) {
         library.markOpened(channel.id)
         urlText = channel.url
-        scrape()
+        scrape(opening: channel)
     }
 
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
         scraper.reset()
         search.reset()
+        startedFromResults = false
+        openingChannel = nil
         mode = .videos
         picked = []
         filterText = ""
@@ -222,6 +267,28 @@ final class AppModel {
         guard !videos.isEmpty else { return }
         downloader.enqueue(videos, quality: quality, alsoAudio: alsoAudio)
         openDownloads()
+    }
+
+    /// Put the preview card away without stopping what it was playing.
+    ///
+    /// Every way out of the card comes through here — the X, Escape, a click on the
+    /// backdrop, and queueing a download. Closing a window is not the same as saying
+    /// stop: a three-hour mix cut off mid-bar because you wanted the list back is the
+    /// app taking something away for no reason. So the picture moves up to the island,
+    /// which is where a video that has outlived its window already goes, and the sound
+    /// carries on until you pull it back down or press the island's own X.
+    ///
+    /// Nothing to hand over if the stream never started — there this is just a close.
+    func dismissPreview() {
+        popOutToIsland()
+        preview.close()
+    }
+
+    /// Queue what the preview is playing, and leave it playing. The downloads panel the
+    /// queueing opens is then something to watch the fetch in, not an interruption.
+    func downloadPreviewed(_ video: Video) {
+        download([video])
+        dismissPreview()
     }
 }
 

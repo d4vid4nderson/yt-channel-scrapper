@@ -19,23 +19,26 @@ struct DownloadsView: View {
     var body: some View {
         NavigationStack {
             Group {
-                if model.downloads.jobs.isEmpty && model.localFiles.isEmpty {
+                if visibleJobs.isEmpty && model.localFiles.isEmpty {
                     Placeholder(
                         icon: "arrow.down.circle",
                         title: "Nothing downloaded yet",
-                        detail: "Swipe a video left, or select several and download them "
-                            + "together. Finished files land here, and in Files under "
-                            + "On My iPhone → YT Scraper."
+                        detail: model.isMinor
+                            ? "Videos saved to this phone will be here, and they play "
+                                + "without a connection."
+                            : "Swipe a video left, or select several and download them "
+                                + "together. Finished files land here, and in Files under "
+                                + "On My iPhone → YT Scraper."
                     )
                 } else {
                     lists
                 }
             }
             .ground()
-            .navigationTitle("Downloads")
+            .navigationTitle(model.isMinor ? "Downloaded" : "Downloads")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                if model.downloads.hasFinished {
+                if model.downloads.hasFinished && !model.isMinor {
                     Button("Clear") { model.downloads.clearFinished() }
                 }
             }
@@ -54,11 +57,19 @@ struct DownloadsView: View {
         }
     }
 
+    /// In Minor Mode this is empty and the Transfers section with it. A minor cannot start
+    /// a job, but the parent may have left one running when they handed the phone over —
+    /// showing a half-finished transfer they can neither speed up nor stop is just
+    /// a progress bar to poke at.
+    private var visibleJobs: [DownloadJob] {
+        model.isMinor ? [] : model.downloads.jobs
+    }
+
     private var lists: some View {
         List {
-            if !model.downloads.jobs.isEmpty {
+            if !visibleJobs.isEmpty {
                 Section {
-                    ForEach(model.downloads.jobs) { job in
+                    ForEach(visibleJobs) { job in
                         JobRow(job: job, onCancel: { model.downloads.cancel(job) }) { sharing = $0 }
                             .listRowBackground(Color.card)
                             .swipeActions(edge: .trailing) {
@@ -82,18 +93,23 @@ struct DownloadsView: View {
                             .listRowBackground(Color.card)
                             .contentShape(Rectangle())
                             .onTapGesture { model.play(file) }
+                            // Play only, in Minor Mode. Delete would let them empty the
+                            // folder the parent filled, and Share is a way for a file to
+                            // leave the phone.
                             .swipeActions(edge: .trailing) {
-                                Button(role: .destructive) {
-                                    model.localFiles.delete(file)
-                                } label: {
-                                    Label("Delete", systemImage: "trash")
+                                if !model.isMinor {
+                                    Button(role: .destructive) {
+                                        model.localFiles.delete(file)
+                                    } label: {
+                                        Label("Delete", systemImage: "trash")
+                                    }
+                                    Button {
+                                        sharing = file.url
+                                    } label: {
+                                        Label("Share", systemImage: "square.and.arrow.up")
+                                    }
+                                    .tint(Color.secondaryText)
                                 }
-                                Button {
-                                    sharing = file.url
-                                } label: {
-                                    Label("Share", systemImage: "square.and.arrow.up")
-                                }
-                                .tint(Color.secondaryText)
                             }
                     }
                 } header: {

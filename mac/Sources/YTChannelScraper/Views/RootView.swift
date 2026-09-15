@@ -9,7 +9,11 @@ struct RootView: View {
     /// The hero holds the whole window until there is something to show, then collapses
     /// to a header — the same move the web app made, and for the same reason: the search
     /// is the whole app until it isn't.
-    private var collapsed: Bool { model.hasResults }
+    ///
+    /// Once collapsed it stays collapsed through the next scrape as well: `showsResults`
+    /// counts a list on its way as a list, so opening a channel from the panel loads in
+    /// front of you instead of putting the hero back over the page you were reading.
+    private var collapsed: Bool { model.showsResults }
 
     /// One easing for the entire landing -> app transition, matching the web app's
     /// `cubic-bezier(.4, 0, .2, 1)` over .65s.
@@ -58,8 +62,9 @@ struct RootView: View {
         .overlay {
             PreviewModal(
                 session: model.preview,
-                download: { model.download([$0]) },
-                popOut: { model.popOutToIsland(tuckingWindowAway: true) }
+                download: { model.downloadPreviewed($0) },
+                popOut: { model.popOutToIsland(tuckingWindowAway: true) },
+                dismiss: model.dismissPreview
             )
         }
     }
@@ -154,7 +159,7 @@ struct RootView: View {
     private var resultsArea: some View {
         VStack(spacing: 0) {
             Divider()
-            if let error = model.statusError, model.hasResults {
+            if let error = model.statusError, model.showsResults {
                 ErrorBanner(message: error) { model.goHome() }
                 Divider()
             }
@@ -399,54 +404,14 @@ private struct ResultsList: View {
             ScrollView {
                 // Cards, not list rows — they need the gap to read as separate surfaces.
                 LazyVStack(spacing: 10) {
-                    // Kept first, under a heading — a row that jumps the queue should
-                    // say why it is there rather than leave you wondering whether the
-                    // channel's order is broken.
-                    if !model.keptVisible.isEmpty {
-                        GroupLabel(text: "Kept from this channel", accented: true)
-                        ForEach(model.keptVisible) { row($0) }
-                        if !model.restVisible.isEmpty {
-                            GroupLabel(text: "All videos")
-                        }
-                    }
-                    ForEach(model.restVisible) { row($0) }
-
-                    if model.mode == .saved {
-                        if model.visible.isEmpty {
-                            Text(model.filterText.isEmpty
-                                 ? "No saved videos yet — star one in any channel's list."
-                                 : "Nothing matches “\(model.filterText)”.")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                                .padding(.vertical, 40)
-                        }
-                    } else if model.scraper.isBusy {
-                        // Checked before the button, because the button unmounts the
-                        // moment the scrape restarts — leaving the foot of the list
-                        // blank for the whole fetch if nothing takes its place.
-                        HStack(spacing: 8) {
-                            ProgressView().controlSize(.small)
-                            Text(model.scraper.videos.isEmpty
-                                 ? "Reading the channel…"
-                                 : "Reading the next \(Scraper.pageSize)…")
-                                .font(.system(size: 12))
-                                .foregroundStyle(.secondary)
-                        }
-                        .padding(.vertical, 18)
-                    } else if model.scraper.canLoadMore && model.filterText.isEmpty {
-                        Button("Load 25 more") {
-                            nextPageAnchor = model.scraper.videos.count
-                            model.scraper.loadMore()
-                        }
-                        .controlSize(.large)
-                        .padding(.vertical, 10)
-                        .help("Read the next 25 videos from this channel")
-                        .pointingHand()
-                    } else if model.visible.isEmpty {
-                        Text("Nothing matches “\(model.filterText)”.")
-                            .font(.system(size: 12))
-                            .foregroundStyle(.secondary)
-                            .padding(.vertical, 40)
+                    // Nothing of the new list has landed yet, so its shape stands in for
+                    // it. The alternative — an empty page — is the landing screen, and
+                    // being sent back there is not what asking for a channel meant.
+                    if model.isLoadingList {
+                        VideoListSkeleton()
+                    } else {
+                        rows
+                        foot
                     }
                 }
                 .padding(.horizontal, 16)
@@ -467,6 +432,61 @@ private struct ResultsList: View {
                 }
             }
             }
+        }
+    }
+
+    /// Kept first, under a heading — a row that jumps the queue should say why it is
+    /// there rather than leave you wondering whether the channel's order is broken.
+    @ViewBuilder
+    private var rows: some View {
+        if !model.keptVisible.isEmpty {
+            GroupLabel(text: "Kept from this channel", accented: true)
+            ForEach(model.keptVisible) { row($0) }
+            if !model.restVisible.isEmpty {
+                GroupLabel(text: "All videos")
+            }
+        }
+        ForEach(model.restVisible) { row($0) }
+    }
+
+    /// What the foot of the list offers: the next page, or the reason there isn't one.
+    @ViewBuilder
+    private var foot: some View {
+        if model.mode == .saved {
+            if model.visible.isEmpty {
+                Text(model.filterText.isEmpty
+                     ? "No saved videos yet — star one in any channel's list."
+                     : "Nothing matches “\(model.filterText)”.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .padding(.vertical, 40)
+            }
+        } else if model.scraper.isBusy {
+            // Checked before the button, because the button unmounts the moment the next
+            // page starts — leaving the foot of the list blank for the whole fetch if
+            // nothing takes its place. Only ever the next page: a scrape with nothing on
+            // screen yet is the skeleton's, not this line's.
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Reading the next \(Scraper.pageSize)…")
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+            }
+            .padding(.vertical, 18)
+        } else if model.scraper.canLoadMore && model.filterText.isEmpty {
+            Button("Load 25 more") {
+                nextPageAnchor = model.scraper.videos.count
+                model.scraper.loadMore()
+            }
+            .controlSize(.large)
+            .padding(.vertical, 10)
+            .help("Read the next 25 videos from this channel")
+            .pointingHand()
+        } else if model.visible.isEmpty {
+            Text("Nothing matches “\(model.filterText)”.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .padding(.vertical, 40)
         }
     }
 
@@ -573,6 +593,13 @@ private struct ResultsList: View {
     }
 
     private var countText: String {
+        // While the list is still coming there is nothing to count, and "0 videos" over a
+        // page of skeletons reads as an answer rather than a wait. The channel's name is
+        // the useful thing to hold there — it is what you clicked.
+        if model.isLoadingList {
+            guard let name = model.loadingChannelName else { return "Reading the channel…" }
+            return "\(name)  ·  Reading the channel…"
+        }
         let total = model.listedVideos.count
         let shown = model.visible.count
         var parts: [String] = []
@@ -606,6 +633,9 @@ private struct ChannelResults: View {
             Divider()
             ScrollView {
                 LazyVStack(spacing: 10) {
+                    if model.isLoadingList {
+                        ChannelListSkeleton()
+                    }
                     ForEach(model.search.results) { channel in
                         ChannelRow(
                             channel: channel,
@@ -627,7 +657,7 @@ private struct ChannelResults: View {
         HStack(spacing: 10) {
             Text("Channels matching “\(model.search.query)”")
                 .font(.system(size: 12.5, weight: .medium))
-            Text("\(model.search.results.count)")
+            Text(model.isLoadingList ? "Searching…" : "\(model.search.results.count)")
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(.secondary)
 

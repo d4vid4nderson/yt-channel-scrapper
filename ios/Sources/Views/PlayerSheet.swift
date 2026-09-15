@@ -31,10 +31,16 @@ struct PlayerSheet: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
+                    // Closes the screen, not the sound — the bar above the tabs keeps
+                    // playing and is the way back in.
                     Button("Close") { close() }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    if item.video != nil {
+                    // Both of these are ways for a file to start or leave — neither is
+                    // the minor's, so in Minor Mode the corner is simply empty.
+                    if model.isMinor {
+                        EmptyView()
+                    } else if item.video != nil {
                         DownloadButton(job: job, action: downloadTapped)
                     } else if let file = item.file {
                         Button { sharing = file.url } label: {
@@ -47,13 +53,18 @@ struct PlayerSheet: View {
                 ShareSheet(items: [url])
             }
         }
-        .onAppear { model.playback.open(item) }
-        .onDisappear { model.playback.close() }
+        .onAppear { model.resume(item) }
+        // Also the swipe down, which is how most people close a sheet. Leaving is not
+        // stopping: what is playing carries on in the bar above the tabs.
+        .onDisappear { model.playback.leave() }
     }
 
-    private func close() {
-        model.playback.close()
-        model.playing = nil
+    private func close() { model.leavePlayer() }
+
+    /// Leave the player and push the channel onto whichever tab is in front.
+    private func open(_ channel: Channel) {
+        model.leavePlayer()
+        model.show(channel)
     }
 
     /// The job for this video, if one has been queued. The most recent, because a
@@ -78,8 +89,8 @@ struct PlayerSheet: View {
         case .done:
             // "Open the downloads" means the app's own list of what is on the phone,
             // not Files.app: it is one tap away, always works, and is the same folder.
-            model.playback.close()
-            model.playing = nil
+            // The video comes with you, playing, in the bar above the tabs.
+            model.leavePlayer()
             model.tab = .downloads
         case .failed, .cancelled:
             model.download([video])
@@ -128,7 +139,29 @@ struct PlayerSheet: View {
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(Color.primaryText)
 
-            if !item.subtitle.isEmpty {
+            // The channel is a way in, not just a label: finding a video is often how
+            // you find the channel worth keeping, and this is where you are when you
+            // decide that.
+            if let video = item.video, let channel = model.channel(of: video) {
+                HStack(spacing: 6) {
+                    Button { open(channel) } label: {
+                        HStack(spacing: 3) {
+                            Text(channel.title)
+                            Image(systemName: "chevron.right")
+                                .font(.system(size: 9, weight: .bold))
+                        }
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Palette.accent)
+                    }
+                    .buttonStyle(.plain)
+
+                    if !video.viewsText.isEmpty {
+                        Text("·  \(video.viewsText)")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.secondaryText)
+                    }
+                }
+            } else if !item.subtitle.isEmpty {
                 Text(item.subtitle)
                     .font(.system(size: 12))
                     .foregroundStyle(Color.secondaryText)
@@ -144,6 +177,8 @@ struct PlayerSheet: View {
     @ViewBuilder
     private var actions: some View {
         if let video = item.video {
+            // Bookmarking is the one thing a minor can add to the library, and it is
+            // theirs to undo: the same button takes it off again.
             Button {
                 model.toggleSaved(video)
             } label: {
@@ -154,23 +189,27 @@ struct PlayerSheet: View {
             .buttonStyle(.bordered)
             .tint(model.isSaved(video) ? Palette.accent : Color.secondaryText)
 
-            Button {
-                model.download([video])
-            } label: {
-                Label(model.formatLabel, systemImage: "arrow.down.circle")
-                    .font(.system(size: 13, weight: .medium))
+            if !model.isMinor {
+                Button {
+                    model.download([video])
+                } label: {
+                    Label(model.formatLabel, systemImage: "arrow.down.circle")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.accent)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Palette.accent)
         } else if let file = item.file {
-            Button {
-                sharing = file.url
-            } label: {
-                Label("Share", systemImage: "square.and.arrow.up")
-                    .font(.system(size: 13, weight: .medium))
+            if !model.isMinor {
+                Button {
+                    sharing = file.url
+                } label: {
+                    Label("Share", systemImage: "square.and.arrow.up")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Palette.accent)
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Palette.accent)
 
             Text("On this phone")
                 .font(.system(size: 12))

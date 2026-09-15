@@ -2,7 +2,13 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- Added to the home screen on an iPhone this needs a real PNG: the data: favicon below
+     is what a tab uses, and iOS ignores it for the icon. Deliberately *not*
+     apple-mobile-web-app-capable — standalone mode drops Safari's download handling, and
+     downloading is the entire point here. -->
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-title" content="YT Scraper">
 <title>YT Channel Scraper</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 176 124'%3E%3Cpath fill='%23ff0000' d='M172.32,19.36c-2-7.6-8-13.6-15.6-15.6C143.12,0,88,0,88,0S32.88,0,19.28,3.76c-7.6,2-13.6,8-15.6,15.6C0,32.96,0,62,0,62s0,29.04,3.68,42.64c2,7.6,8,13.6,15.6,15.6C32.88,124,88,124,88,124s55.12,0,68.72-3.76c7.6-2,13.6-8,15.6-15.6C176,91.04,176,62,176,62S176,32.96,172.32,19.36Z'/%3E%3Ccircle cx='88' cy='62' r='31' fill='none' stroke='%23fff' stroke-width='9'/%3E%3Cpath d='M88 45v23M88 68l11-11M88 68l-11-11M75 80h26' fill='none' stroke='%23fff' stroke-width='9' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -18,9 +24,10 @@
   * { box-sizing: border-box; }
   /* The canvas behind the page is dark, so a reload paints black rather than flashing
      white before the hero renders. Body still covers the viewport in the app state. */
-  html { background: #0f0f0f; }
+  html { background: #0f0f0f; overflow-x: hidden; }
   body {
-    margin: 0; min-height: 100vh; background: var(--bg); color: var(--fg);
+    margin: 0; min-height: 100vh; max-width: 100%; overflow-x: hidden;
+    background: var(--bg); color: var(--fg);
     font: 15px/1.5 Roboto, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   }
   /* One dark surface serves both states: full-viewport landing, then it collapses
@@ -214,7 +221,7 @@
   /* The controls read as one elevated search pill rather than a line of default
      browser widgets: borderless input, hairline separators, controls as chips. */
   .searchbar {
-    display: flex; align-items: center; gap: 10px; flex: 1; min-width: 340px;
+    display: flex; align-items: center; gap: 10px; flex: 1; min-width: min(340px, 100%);
     background: rgba(255,255,255,.86); border: 1px solid var(--line); border-radius: 999px;
     backdrop-filter: blur(14px) saturate(140%); -webkit-backdrop-filter: blur(14px) saturate(140%);
     padding: 5px 5px 5px 20px;
@@ -286,7 +293,7 @@
   .dd-menu li[aria-selected="true"] { font-weight: 500; }
 
   #filter {
-    width: 220px; padding-left: 40px; background-repeat: no-repeat;
+    width: min(220px, 100%); padding-left: 40px; background-repeat: no-repeat;
     background-position: left 14px center;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14'%3E%3Ccircle cx='6' cy='6' r='4.6' stroke='%23808080' stroke-width='1.6' fill='none'/%3E%3Cpath d='M9.6 9.6 13 13' stroke='%23808080' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E");
   }
@@ -573,6 +580,43 @@
      the page is held back until fonts settle rather than letting it re-centre visibly. */
   html.booting body { opacity: 0; }
   body { opacity: 1; transition: opacity .2s ease; }
+
+  /* Phones. Everything above was laid out for a desktop window, and two numbers in it
+     are wider than a phone: the brand is scaled 2.15x, and the search pill carries a
+     340px floor while its container is only calc(100vw - 48px). So the wordmark was
+     clipped at both edges and Scrape sat off the right of the screen.
+     The pill becomes two rows here — the URL on its own line, the controls beneath —
+     which is the only way all four controls fit without shrinking the tap targets. */
+  @media (max-width: 560px) {
+    /* svh, not vh: Safari's toolbars are inside 100vh, so the landing scrolled. */
+    .hero { height: 100svh; }
+    .brand { transform: translate(calc(50vw - 50%), calc(30vh - 50%)) scale(1.3); }
+    body.app .brand { transform: translate(16px, calc(33px - 50%)) scale(1); }
+
+    .searchwrap { width: calc(100vw - 24px); transform: translate(calc(50vw - 50%), 42vh); }
+    /* body.app .searchwrap is more specific than .searchwrap, so the results state needs
+       saying again here or it keeps the desktop width. */
+    body.app .searchwrap {
+      width: calc(100vw - 24px); transform: translate(calc(50vw - 50%), 84px);
+    }
+    body.app main { padding-top: 150px; }
+    #filter { width: 100%; }
+    .bar > .chip, .bar > select, .bar > button { flex: 0 1 auto; }
+    .searchbar {
+      flex-wrap: wrap; min-width: 0; gap: 8px;
+      border-radius: 24px; padding: 10px 10px 10px 18px;
+    }
+    #url { flex: 1 1 100%; min-width: 0; padding: 8px 0; font-size: 16px; }
+    /* The hairline divided input from controls on one line; there is no such line now. */
+    .searchbar .sep { display: none; }
+    .dd { flex: 1 1 auto; }
+    .dd-btn { width: 100%; justify-content: space-between; }
+    #scrape { flex: 1 1 auto; min-width: 0; }
+
+    main { padding: 0 16px 64px; }
+    .bar { margin: 18px 0 12px; }
+    .thumb img { width: 96px; }
+  }
 </style>
 <script>
   document.documentElement.classList.add('booting');

@@ -105,6 +105,38 @@ final class Playback {
 
     var isOpen: Bool { item != nil }
 
+    /// What is playing and the player playing it, once there is one. The bar above the
+    /// tab bar stands on this: something is going, and the screen it started on is gone.
+    var current: (item: Playable, player: AVPlayer)? {
+        guard let item, case .ready(let player) = state else { return nil }
+        return (item, player)
+    }
+
+    /// Leave the player's screen without stopping it.
+    ///
+    /// Closing the sheet is not asking for silence — an hour of ambient music does not
+    /// stop being what you wanted because you went to look at the downloads. So a running
+    /// player is left alone, with the lock screen controls and the audio session it
+    /// already has, and the bar above the tabs becomes where it lives.
+    ///
+    /// A stream that has not started yet is the exception: leaving while it is still
+    /// being found *is* giving up, and a resolve nobody is waiting on would only come
+    /// back with a surprise four seconds later.
+    func leave() {
+        guard case .ready(let player) = state else { return close() }
+        // AVKit owns the controller the stage is made of, and a controller whose view has
+        // just been torn out of the hierarchy can take the player down with it. Nothing
+        // to undo if it does not — the check below finds it still playing and leaves it
+        // alone — but when it does, this is the difference between "the sheet closed" and
+        // "the music stopped".
+        guard player.timeControlStatus != .paused else { return }
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(150))
+            guard let self, case .ready(let player) = self.state else { return }
+            if player.timeControlStatus == .paused { player.play() }
+        }
+    }
+
     func open(_ item: Playable) {
         close()
         self.item = item

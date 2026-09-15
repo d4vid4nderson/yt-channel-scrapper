@@ -14,6 +14,12 @@ struct SavedChannelsDrawer: View {
 
     @State private var filter = ""
     @State private var targeted = false
+    /// The order the list had when the panel opened. Opening a channel makes it the most
+    /// recent one, which would otherwise slide it to the top from under the cursor — and
+    /// now that the panel stays open, that would happen on every click, with a different
+    /// channel landing under your hand each time. So the order is taken once, on opening,
+    /// and held until you close it and come back.
+    @State private var order: [String] = []
 
     private func close() { model.showChannelsDrawer = false }
 
@@ -21,12 +27,28 @@ struct SavedChannelsDrawer: View {
     /// you scan is better led by what you actually use than by the alphabet.
     private var matches: [Channel] {
         let needle = filter.trimmingCharacters(in: .whitespaces).lowercased()
-        let all = model.library.recent
+        let all = held(model.library.recent)
         guard !needle.isEmpty else { return all }
         return all.filter {
             $0.title.lowercased().contains(needle)
                 || ($0.handle?.lowercased().contains(needle) ?? false)
         }
+    }
+
+    /// Recency, as it stood when the panel opened. Anything that has arrived since — a
+    /// channel just bookmarked, an import — is not in the held order and goes to the top,
+    /// which is where recency would have put it anyway.
+    private func held(_ channels: [Channel]) -> [Channel] {
+        guard !order.isEmpty else { return channels }
+        var rank: [String: Int] = [:]
+        for (index, id) in order.enumerated() { rank[id] = index }
+        return channels.enumerated()
+            .sorted { lhs, rhs in
+                let left = rank[lhs.element.id] ?? -1
+                let right = rank[rhs.element.id] ?? -1
+                return left == right ? lhs.offset < rhs.offset : left < right
+            }
+            .map(\.element)
     }
 
     var body: some View {
@@ -83,6 +105,9 @@ struct SavedChannelsDrawer: View {
                 }
             }
             .animation(.easeOut(duration: 0.14), value: targeted)
+            .onChange(of: model.showChannelsDrawer, initial: true) { _, open in
+                if open { order = model.library.recent.map(\.id) }
+            }
         }
     }
 
@@ -106,9 +131,11 @@ struct SavedChannelsDrawer: View {
                     ForEach(matches) { channel in
                         DrawerChannelRow(
                             channel: channel,
-                            // Straight to its videos, and out of the way — the panel is
-                            // over the list it just asked for.
-                            open: { model.open(channel); close() },
+                            // The panel stays where it is. Opening a channel is rarely the
+                            // last thing you do in here — you came to look through what you
+                            // have kept — and a list that shuts itself the moment you touch
+                            // it makes you fetch it back for every channel you try.
+                            open: { model.open(channel) },
                             remove: { model.library.remove(channel.id) }
                         )
                     }
