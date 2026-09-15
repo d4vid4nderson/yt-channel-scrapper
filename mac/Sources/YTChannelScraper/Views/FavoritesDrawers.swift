@@ -177,6 +177,16 @@ struct SavedChannelsDrawer: View {
                     open: { model.open(channel) },
                     remove: { model.library.remove(channel.id) }
                 )
+                // Drag onto somebody in Dispatch to send it. The payload carries the
+                // title so the receiving device never has to ask YouTube anything.
+                .onDrag {
+                    NSItemProvider(object: SendPayload(
+                        kind: .channel, id: channel.id,
+                        title: channel.title, channelID: nil
+                    ).encoded as NSString)
+                } preview: {
+                    DragChip(title: channel.title, icon: "person.crop.circle")
+                }
                 // Drag a channel onto somebody in Dispatch to send it. The payload
                 // carries the title so the receiving device never has to ask YouTube.
                 .onDrag {
@@ -209,6 +219,14 @@ struct SavedChannelsDrawer: View {
                     download: { model.download([video]) },
                     remove: { model.library.removeVideo(video.id) }
                 )
+                .onDrag {
+                    NSItemProvider(object: SendPayload(
+                        kind: .video, id: video.id,
+                        title: video.title, channelID: video.channelId
+                    ).encoded as NSString)
+                } preview: {
+                    DragChip(title: video.title, icon: "play.rectangle")
+                }
                 .onDrag {
                     NSItemProvider(object: SendPayload(
                         kind: .video, id: video.id,
@@ -275,9 +293,31 @@ private struct DrawerChannelRow: View {
 
     @State private var hovering = false
 
+    // Not a `Button`. On macOS a button consumes the press, so a drag started on one
+    // never fires — these rows could be clicked but not dragged, which is now half of
+    // what they are for. A tap gesture coexists with a drag; a button does not. The
+    // nested buttons in the hover overlay still take their own clicks, because a real
+    // Button outranks a parent's tap gesture.
     var body: some View {
-        Button(action: open) {
-            HStack(spacing: 10) {
+        card
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .onTapGesture(perform: open)
+            .help("List \(channel.title)'s videos")
+            .pointingHand()
+            .overlay(alignment: .trailing) {
+                if hovering {
+                    RemoveButton(action: remove)
+                        .help("Remove \(channel.title) from your saved channels")
+                        .padding(.trailing, 8)
+                        .transition(.opacity)
+                }
+            }
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+
+    private var card: some View {
+        HStack(spacing: 10) {
                 ChannelAvatar(channel: channel, size: 34)
                     .overlay {
                         Circle().strokeBorder(
@@ -312,22 +352,6 @@ private struct DrawerChannelRow: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(.white.opacity(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-        }
-        .buttonStyle(.plain)
-        .help("List \(channel.title)'s videos")
-        .pointingHand()
-        // Outside the label, not inside it: a button nested in another button's label
-        // does not reliably get the click.
-        .overlay(alignment: .trailing) {
-            if hovering {
-                RemoveButton(action: remove)
-                    .help("Remove \(channel.title) from your saved channels")
-                    .padding(.trailing, 8)
-                    .transition(.opacity)
-            }
-        }
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.14), value: hovering)
     }
 }
 
@@ -339,10 +363,36 @@ private struct DrawerVideoRow: View {
 
     @State private var hovering = false
 
+    // Not a `Button`. On macOS a button consumes the press, so a drag started on one
+    // never fires — these rows could be clicked but not dragged, which is now half of
+    // what they are for. A tap gesture coexists with a drag; a button does not. The
+    // nested buttons in the hover overlay still take their own clicks, because a real
+    // Button outranks a parent's tap gesture.
     var body: some View {
-        Button(action: preview) {
-            HStack(spacing: 10) {
-                thumbnail
+        card
+            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .onTapGesture(perform: preview)
+            .help("Preview “\(video.title)”")
+            .pointingHand()
+            .overlay(alignment: .trailing) {
+                if hovering {
+                    HStack(spacing: 6) {
+                        DownloadDot(action: download)
+                            .help("Download just this video")
+                        RemoveButton(action: remove)
+                            .help("Remove this video from your saved videos")
+                    }
+                    .padding(.trailing, 8)
+                    .transition(.opacity)
+                }
+            }
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+
+    private var card: some View {
+        HStack(spacing: 10) {
+            thumbnail
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(video.title)
@@ -370,23 +420,6 @@ private struct DrawerVideoRow: View {
                 RoundedRectangle(cornerRadius: 12, style: .continuous)
                     .strokeBorder(.white.opacity(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-        }
-        .buttonStyle(.plain)
-        .help("Preview “\(video.title)”")
-        .pointingHand()
-        .overlay(alignment: .trailing) {
-            if hovering {
-                HStack(spacing: 6) {
-                    DownloadDot(action: download)
-                        .help("Download just this video")
-                    RemoveButton(action: remove)
-                        .help("Remove this video from your saved videos")
-                }
-                .padding(.trailing, 8)
-                .transition(.opacity)
-            }
-        }
-        .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.14), value: hovering)
     }
 
