@@ -363,6 +363,15 @@ struct PeopleFile: Codable, Sendable {
     var writtenAt: Date
     var people: [FamilyMember]
 
+    /// What this household calls itself — "Anderson". Cosmetic, and deliberately not the
+    /// same thing as an admin's own name: that one signs approvals, and two admins
+    /// signing as "Anderson" would make "who decided what" unanswerable.
+    ///
+    /// Carried here rather than in a file of its own so it follows the same
+    /// one-writer-per-file rule as everything else; last writer wins, which is right for
+    /// a label everybody sees the same way.
+    var familyName: String?
+
     static let prefix = "people-"
     var filename: String { "\(Self.prefix)\(guardianID.uuidString).json" }
 }

@@ -16,9 +16,18 @@ import SwiftUI
 struct FamilyDrawer: View {
     @Bindable var model: AppModel
 
+    /// The household's label. Cosmetic and shared.
+    @State private var family = ""
+    /// This admin's own display name — what signs approvals. Edited from your own row
+    /// under Admins, because that is where it means something.
     @State private var name = ""
+    @State private var renamingSelf = false
+    /// Which section the cursor is dragging over, so it can light up.
+    @State private var dropTarget: Bool?
     @State private var newName = ""
-    @State private var newIsMinor = true
+    /// Which section is accepting a name, if any. Replaces the role toggle: the section
+    /// you clicked + on *is* the role, so there is nothing left to choose.
+    @State private var addingMinor: Bool?
     @State private var working = false
     @State private var removing: (id: UUID, name: String)?
 
@@ -54,6 +63,7 @@ struct FamilyDrawer: View {
             .task {
                 name = profiles.guardian?.name ?? ""
                 await model.syncShelf()
+                family = shelf.familyName
             }
             .alert("Remove \(removing?.name ?? "")?",
                    isPresented: Binding(get: { removing != nil },
@@ -71,13 +81,23 @@ struct FamilyDrawer: View {
     // MARK: - You
 
     private var you: some View {
-        section("You") {
-            CapsuleField(text: $name, prompt: "Your name", onSubmit: saveName)
-                .help("Shown against what you approve, so other admins can see who decided what")
-            if nameChanged {
-                QuietButton(title: "Save", accent: true, action: saveName)
+        section("Family name") {
+            CapsuleField(text: $family, prompt: "Anderson", onSubmit: saveFamily)
+                .help("What this household is called. A label everybody sees — it is not "
+                      + "the name your approvals are signed with.")
+            if familyChanged {
+                QuietButton(title: "Save", accent: true, action: saveFamily)
             }
         }
+    }
+
+    private var familyChanged: Bool {
+        family.trimmingCharacters(in: .whitespaces) != shelf.familyName
+    }
+
+    private func saveFamily() {
+        guard familyChanged, let guardian = profiles.guardian else { return }
+        Task { await shelf.setFamilyName(family, as: guardian) }
     }
 
     private var nameChanged: Bool {
@@ -88,6 +108,7 @@ struct FamilyDrawer: View {
     private func saveName() {
         guard nameChanged else { return }
         _ = profiles.setGuardianName(name.trimmingCharacters(in: .whitespaces))
+        renamingSelf = false
         Task { await model.syncShelf() }
     }
 
@@ -163,73 +184,144 @@ struct FamilyDrawer: View {
 
     // MARK: - People
 
+    /// Two groups, not one list.
+    ///
+    /// Admins and minors are read for different reasons — one is "who else can decide",
+    /// the other is "who am I sending to, and have they got it" — and the second grows
+    /// while the first stays at two. A single list made you read every row to find out
+    /// which kind each person was.
     private var people: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            heading("Manage family")
-
-            ForEach(shelf.guardians, id: \.id) { guardian in
-                PersonRow(
-                    name: guardian.name,
-                    isMinor: false,
-                    isYou: guardian.id == profiles.guardian?.id,
-                    unclaimed: shelf.isUnclaimed(guardian.id),
-                    devices: shelf.devices.filter { $0.personID == guardian.id },
-                    count: nil,
-                    setRole: { setRole(guardian.id, isMinor: $0) },
-                    claim: { claim(id: guardian.id, name: guardian.name) },
-                    remove: { removing = (guardian.id, guardian.name) }
-                )
+        VStack(alignment: .leading, spacing: 18) {
+            group("Admins", isMinor: false,
+                  isEmpty: shelf.guardians.isEmpty, empty: "No admins yet.") {
+                ForEach(shelf.guardians, id: \.id) { guardian in
+                    PersonRow(
+                        id: guardian.id,
+                        name: guardian.name,
+                        isMinor: false,
+                        isYou: guardian.id == profiles.guardian?.id,
+                        unclaimed: shelf.isUnclaimed(guardian.id),
+                        devices: shelf.devices.filter { $0.personID == guardian.id },
+                        count: nil,
+                        claim: { claim(id: guardian.id, name: guardian.name) },
+                        remove: { removing = (guardian.id, guardian.name) }
+                    )
+                }
             }
 
-            ForEach(shelf.roster, id: \.id) { minor in
-                PersonRow(
-                    name: minor.name,
-                    isMinor: true,
-                    isYou: false,
-                    unclaimed: false,
-                    devices: shelf.devices.filter { $0.personID == minor.id },
-                    count: shelf.approved(for: minor.id).count,
-                    setRole: { setRole(minor.id, isMinor: $0) },
-                    claim: nil,
-                    remove: { removing = (minor.id, minor.name) }
-                )
-            }
-
-            addRow
-        }
-    }
-
-    /// Adding is one line: a role, a name, a button that only exists once there is
-    /// something to add.
-    private var addRow: some View {
-        // Two lines, not one. Sharing a row with the toggle left the name field about
-        // eight characters wide in a 330pt drawer — the field is the part being typed
-        // into and should get the width.
-        VStack(alignment: .leading, spacing: 7) {
-            RoleToggle(isMinor: $newIsMinor)
-            HStack(spacing: 8) {
-                CapsuleField(text: $newName,
-                             prompt: newIsMinor ? "Minor's name" : "Admin's name",
-                             onSubmit: addPerson)
-                if !newName.trimmingCharacters(in: .whitespaces).isEmpty {
-                    QuietButton(title: "Add", accent: true, action: addPerson)
-                        .disabled(working)
+            group("Minors", isMinor: true,
+                  isEmpty: shelf.roster.isEmpty, empty: "Nobody to send to yet.") {
+                ForEach(shelf.roster, id: \.id) { minor in
+                    PersonRow(
+                        id: minor.id,
+                        name: minor.name,
+                        isMinor: true,
+                        isYou: false,
+                        unclaimed: false,
+                        devices: shelf.devices.filter { $0.personID == minor.id },
+                        count: shelf.approved(for: minor.id).count,
+                        claim: nil,
+                        remove: { removing = (minor.id, minor.name) }
+                    )
                 }
             }
         }
-        .padding(.top, 6)
-        .help(newIsMinor
-              ? "A minor appears on every admin's device as soon as iCloud catches up"
-              : "Creates the identity their approvals are signed with — on their own device they claim it")
+    }
+
+    /// A headed group with its own add button.
+    ///
+    /// The button is the role: clicking + on Minors adds a minor. One fewer decision than
+    /// a shared field with a toggle, and it puts the new person where you were looking.
+    private func group(_ title: String, isMinor: Bool, isEmpty: Bool, empty: String,
+                       @ViewBuilder rows: () -> some View) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                heading(title)
+                Spacer(minLength: 4)
+                AddButton(help: isMinor
+                          ? "Add a minor — or drag somebody here to make them one"
+                          : "Add an admin — or drag somebody here to make them one") {
+                    newName = ""
+                    addingMinor = (addingMinor == isMinor) ? nil : isMinor
+                }
+            }
+
+            rows()
+
+            // Your own name lives here rather than at the top of the panel: it is the
+            // thing that signs your approvals, so it belongs beside the other admins
+            // rather than above the whole family.
+            if !isMinor {
+                if renamingSelf {
+                    HStack(spacing: 8) {
+                        CapsuleField(text: $name, prompt: "Your name", onSubmit: saveName)
+                            .help("Shown against what you approve, so other admins can see who decided what")
+                        QuietButton(title: "Save", accent: true, action: saveName)
+                        QuietButton(title: "Cancel") {
+                            name = profiles.guardian?.name ?? ""
+                            renamingSelf = false
+                        }
+                    }
+                } else if profiles.guardian != nil {
+                    QuietButton(title: "Rename yourself") {
+                        name = profiles.guardian?.name ?? ""
+                        renamingSelf = true
+                    }
+                }
+            }
+
+            // Not said while a field is open below it — that is already explaining itself.
+            if isEmpty && addingMinor != isMinor {
+                Text(empty)
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.28))
+            }
+
+            if addingMinor == isMinor {
+                HStack(spacing: 8) {
+                    CapsuleField(text: $newName,
+                                 prompt: isMinor ? "Minor's name" : "Admin's name",
+                                 onSubmit: addPerson)
+                    if !newName.trimmingCharacters(in: .whitespaces).isEmpty {
+                        QuietButton(title: "Add", accent: true, action: addPerson)
+                            .disabled(working)
+                    }
+                }
+                .help(isMinor
+                      ? "A minor appears on every admin's device as soon as iCloud catches up"
+                      : "Creates the identity their approvals are signed with — on their own device they claim it")
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .background(
+            (dropTarget == isMinor ? Palette.accent.opacity(0.10) : .clear),
+            in: RoundedRectangle(cornerRadius: 8)
+        )
+        .dropDestination(for: String.self) { items, _ in
+            guard let raw = items.first, let id = UUID(uuidString: raw) else { return false }
+            // Dropping somebody into the section they are already in is a no-op rather
+            // than a write — every write lands in a file the other admin reads.
+            let alreadyHere = isMinor
+                ? shelf.roster.contains { $0.id == id }
+                : shelf.guardians.contains { $0.id == id }
+            guard !alreadyHere else { return false }
+            setRole(id, isMinor: isMinor)
+            return true
+        } isTargeted: { targeted in
+            dropTarget = targeted ? isMinor : nil
+        }
+        .animation(.easeOut(duration: 0.14), value: addingMinor)
+        .animation(.easeOut(duration: 0.12), value: dropTarget)
     }
 
     // MARK: - Actions
 
     private func addPerson() {
-        guard let guardian = profiles.guardian else { return }
+        guard let guardian = profiles.guardian, let isMinor = addingMinor else { return }
         let wanted = newName
-        let isMinor = newIsMinor
         newName = ""
+        addingMinor = nil
         working = true
         Task {
             _ = await shelf.createPerson(named: wanted, isMinor: isMinor, as: guardian)
@@ -338,45 +430,15 @@ private struct QuietButton: View {
     }
 }
 
-/// Two chips, not a segmented control. The stock one is a grey slab the width of its
-/// container; this is the size of its two words.
-private struct RoleToggle: View {
-    @Binding var isMinor: Bool
-
-    var body: some View {
-        HStack(spacing: 2) {
-            chip("Minor", on: isMinor) { isMinor = true }
-            chip("Admin", on: !isMinor) { isMinor = false }
-        }
-        .padding(2)
-        .background(.white.opacity(0.06), in: Capsule())
-    }
-
-    private func chip(_ title: String, on: Bool, tap: @escaping () -> Void) -> some View {
-        Button(action: tap) {
-            Text(title)
-                .font(.system(size: 10.5, weight: .medium))
-                .foregroundStyle(on ? .white : .white.opacity(0.45))
-                .padding(.horizontal, 9)
-                .frame(height: 20)
-                .background(on ? AnyShapeStyle(Palette.accent.opacity(0.75))
-                               : AnyShapeStyle(Color.clear),
-                            in: Capsule())
-        }
-        .buttonStyle(.plain)
-        .pointingHand()
-    }
-}
-
 /// One person: who they are, what they hold it on, and how much they have.
 private struct PersonRow: View {
+    let id: UUID
     let name: String
     let isMinor: Bool
     let isYou: Bool
     let unclaimed: Bool
     let devices: [DeviceRecord]
     let count: Int?
-    let setRole: (Bool) -> Void
     let claim: (() -> Void)?
     let remove: () -> Void
 
@@ -402,25 +464,14 @@ private struct PersonRow: View {
                     // The role is the control. Changing somebody from child to parent is
                     // rare enough not to deserve a row of its own, and obvious enough
                     // here that nobody has to look for it.
-                    Menu {
-                        Button("Minor") { setRole(true) }
-                        Button("Admin") { setRole(false) }
-                    } label: {
-                        HStack(spacing: 2) {
-                            Text(isYou ? "you" : (isMinor ? "minor" : "admin"))
-                            // Only once the row is under the cursor: at rest this is a
-                            // label, and a permanent chevron on every row is noise.
-                            if hovering && !isYou {
-                                Image(systemName: "chevron.down").font(.system(size: 7, weight: .bold))
-                            }
-                        }
+                    // A label, not a control, and never a moving one. Changing somebody's
+                    // role is a drag between the two sections — see the drop targets on
+                    // `group`. The dropdown that used to be here grew a chevron on hover,
+                    // which shoved the rest of the line sideways every time the cursor
+                    // crossed a row.
+                    Text(isYou ? "you" : (isMinor ? "minor" : "admin"))
                         .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(hovering && !isYou ? 0.7 : 0.45))
-                    }
-                    .menuStyle(.borderlessButton)
-                    .menuIndicator(.hidden)
-                    .fixedSize()
-                    .disabled(isYou)
+                        .foregroundStyle(.white.opacity(0.45))
 
                     ForEach(devices) { device in
                         Image(systemName: device.kind.icon)
@@ -461,6 +512,14 @@ private struct PersonRow: View {
         }
         .padding(.vertical, 3)
         .contentShape(Rectangle())
+        // The id travels as a plain string: the drop target only needs to know who was
+        // dragged, and everything else about them is already on the other side.
+        .draggable(id.uuidString) {
+            Text(name)
+                .font(.system(size: 12, weight: .medium))
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(.black.opacity(0.7), in: Capsule())
+        }
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.12), value: hovering)
     }
@@ -472,5 +531,28 @@ private struct PersonRow: View {
             parts.append("\(device.downloaded) of \(device.approved) downloaded")
         }
         return parts.joined(separator: ", ")
+    }
+}
+
+/// A small + at the end of a section heading. Quiet until hovered, like everything else
+/// on this panel.
+private struct AddButton: View {
+    let help: String
+    let action: () -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: "plus")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.45))
+                .frame(width: 20, height: 20)
+                .background(.white.opacity(hovering ? 0.12 : 0.06), in: Circle())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .help(help)
+        .pointingHand()
     }
 }

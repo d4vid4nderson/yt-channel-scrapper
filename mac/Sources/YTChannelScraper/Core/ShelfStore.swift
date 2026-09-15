@@ -382,6 +382,23 @@ final class ShelfStore {
         }
     }
 
+    /// What the household is called, as most recently set by any admin.
+    var familyName: String {
+        peopleFiles
+            .filter { $0.familyName?.isEmpty == false }
+            .max { $0.writtenAt < $1.writtenAt }?
+            .familyName ?? ""
+    }
+
+    @discardableResult
+    func setFamilyName(_ name: String, as guardian: Profiles.Guardian) async -> Bool {
+        var mine = peopleFiles.first { $0.guardianID == guardian.id }
+            ?? PeopleFile(guardianID: guardian.id, writtenAt: Date(), people: [])
+        mine.familyName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        mine.writtenAt = Date()
+        return await commit(mine)
+    }
+
     /// Everyone anybody has added, newest entry per id.
     ///
     /// A removal beats an addition written at the same instant — the same tiebreak the
