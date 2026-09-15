@@ -120,6 +120,19 @@ final class Profiles {
 
     // MARK: - Identity
 
+    /// Become a guardian identity that already exists, rather than minting a new one.
+    ///
+    /// This is what makes "add Jill on my Mac, then Jill's phone becomes Jill" work. The
+    /// id has to be the one already in the shared folder — a second id with the same name
+    /// would be a second person, and every approval either of them made would be filed
+    /// under a different author.
+    @discardableResult
+    func adopt(_ guardian: Guardian) -> Bool {
+        guard Keychain.encode(guardian, for: Key.guardian) else { return false }
+        self.guardian = guardian
+        return true
+    }
+
     /// Name this device's guardian, keeping the id they already have. Called at setup,
     /// and again from a rename.
     @discardableResult

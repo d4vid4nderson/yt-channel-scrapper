@@ -316,3 +316,53 @@ struct DeviceRecord: Codable, Sendable, Identifiable {
     static let prefix = "device-"
     var filename: String { "\(Self.prefix)\(deviceID.uuidString).json" }
 }
+
+
+// MARK: - The people in a family
+
+/// Somebody a guardian has added: another parent, or a child.
+///
+/// A child could be inferred from the shelf files alone — the roster is derived from
+/// `ShelfFile.minorName` — but a parent could not. Until they have written something,
+/// nothing in the folder knows they exist, and "add Jill" has to work before Jill has
+/// ever opened the app.
+struct FamilyMember: Codable, Hashable, Sendable, Identifiable {
+    let id: UUID
+    var name: String
+    /// False for a parent. Decides which half of the list they appear under, and which
+    /// role a device claiming this identity takes on.
+    var isMinor: Bool
+
+    /// Whether anybody is actually using it yet. A parent added here exists as a name and
+    /// an id; their device becomes them by claiming it. Until then the UI should say so
+    /// rather than implying somebody is out there approving things.
+    var isClaimed: Bool = false
+
+    /// A tombstone, for the same reason the shelf has them: each guardian writes only
+    /// their own file, so removing somebody the *other* parent added cannot be done by
+    /// deleting anything. It has to be a removal that outlives the entry it overrides.
+    ///
+    /// Optional so files written before this existed still decode — a missing key is not
+    /// a removal.
+    var isRemoved: Bool?
+
+    var removed: Bool { isRemoved == true }
+}
+
+/// The people one guardian has added, in a file only that guardian writes.
+///
+/// A single shared `family.json` would be the one thing two devices write to, which is
+/// precisely what this folder's layout exists to avoid. So each guardian keeps their own
+/// list and every device reads them all; the family is the union, and a name settles by
+/// `writtenAt` the same way everything else here does.
+///
+/// Separate from `ShelfFile` rather than a field on it because a guardian can add a
+/// parent before there is a single child to hang a shelf file on.
+struct PeopleFile: Codable, Sendable {
+    let guardianID: UUID
+    var writtenAt: Date
+    var people: [FamilyMember]
+
+    static let prefix = "people-"
+    var filename: String { "\(Self.prefix)\(guardianID.uuidString).json" }
+}

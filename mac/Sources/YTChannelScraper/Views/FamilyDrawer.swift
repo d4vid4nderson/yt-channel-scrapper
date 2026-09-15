@@ -15,8 +15,10 @@ struct FamilyDrawer: View {
     @Bindable var model: AppModel
 
     @State private var name = ""
-    @State private var childName = ""
+    @State private var newName = ""
+    @State private var newIsMinor = true
     @State private var working = false
+    @State private var removing: (id: UUID, name: String)?
 
     private var profiles: Profiles { model.profiles }
     private var shelf: ShelfStore { model.shelf }
@@ -49,6 +51,16 @@ struct FamilyDrawer: View {
             .task {
                 name = profiles.guardian?.name ?? ""
                 await model.syncShelf()
+            }
+            .alert("Remove \(removing?.name ?? "")?",
+                   isPresented: Binding(get: { removing != nil },
+                                        set: { if !$0 { removing = nil } })) {
+                Button("Remove", role: .destructive) { confirmRemove() }
+                Button("Cancel", role: .cancel) { removing = nil }
+            } message: {
+                Text("They stop appearing for everyone. Nothing is destroyed — a child's "
+                     + "shelf stays in the folder, and past approvals keep the name they "
+                     + "were signed with. Adding the same name later makes a new person.")
             }
         }
     }
@@ -144,18 +156,30 @@ struct FamilyDrawer: View {
                     trailing: "\(shelf.approved(for: minor.id).count)")
             }
 
-            HStack(spacing: 6) {
-                TextField("Add a child…", text: $childName)
-                    .textFieldStyle(.roundedBorder)
-                    .onSubmit(addChild)
-                Button("Add", action: addChild)
-                    .controlSize(.small)
-                    .disabled(working || childName.trimmingCharacters(in: .whitespaces).isEmpty)
+            VStack(alignment: .leading, spacing: 6) {
+                Picker("", selection: $newIsMinor) {
+                    Text("Child").tag(true)
+                    Text("Parent").tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+
+                HStack(spacing: 6) {
+                    TextField(newIsMinor ? "Add a child…" : "Add a parent…", text: $newName)
+                        .textFieldStyle(.roundedBorder)
+                        .onSubmit(addPerson)
+                    Button("Add", action: addPerson)
+                        .controlSize(.small)
+                        .disabled(working || newName.trimmingCharacters(in: .whitespaces).isEmpty)
+                }
             }
 
-            note("Another parent appears once they name themselves and pick this same "
-                 + "folder — nothing to invite or accept. Device icons show only devices "
-                 + "running this app: there is no way to read the devices on an Apple ID.")
+            note(newIsMinor
+                 ? "A child appears on both parents' devices as soon as iCloud catches up. "
+                    + "Set their phone up as them under Minor Mode."
+                 : "Adding a parent creates the identity their approvals will be signed "
+                    + "with. On their own device they pick their name here to claim it — "
+                    + "an app cannot make another person's device become them.")
         }
     }
 
@@ -181,11 +205,39 @@ struct FamilyDrawer: View {
             }
 
             Spacer(minLength: 4)
-            if let trailing {
+
+            // Only offered for an adult nobody is using yet, and never for the person
+            // this device already is — claiming your own identity twice is not a thing.
+            if !isChild, id != profiles.guardian?.id, shelf.isUnclaimed(id) {
+                Button("This is me") { claim(id: id, name: name) }
+                    .controlSize(.small)
+                    .help("Sign this machine's approvals as \(name)")
+            } else if let trailing {
                 Text(trailing)
                     .font(.system(size: 11).monospacedDigit())
                     .foregroundStyle(.secondary)
             }
+        }
+        // A context menu rather than a visible ✕: removing somebody is rare and
+        // irreversible-ish, and a delete button on every row invites the mis-click.
+        .contextMenu {
+            if id != profiles.guardian?.id {
+                Button("Remove \(name)…", role: .destructive) {
+                    removing = (id, name)
+                }
+            }
+        }
+    }
+
+    /// Take on an identity somebody else created, rather than minting a second one with
+    /// the same name — which would file this person's approvals under a different author.
+    private func claim(id: UUID, name: String) {
+        let identity = Profiles.Guardian(id: id, name: name)
+        guard profiles.adopt(identity) else { return }
+        self.name = name
+        Task {
+            await shelf.markClaimed(id, as: identity)
+            await model.syncShelf()
         }
     }
 
@@ -200,13 +252,20 @@ struct FamilyDrawer: View {
         return parts.joined(separator: ", ")
     }
 
-    private func addChild() {
+    private func confirmRemove() {
+        guard let target = removing, let guardian = profiles.guardian else { return }
+        removing = nil
+        Task { await shelf.removePerson(target.id, as: guardian) }
+    }
+
+    private func addPerson() {
         guard let guardian = profiles.guardian else { return }
-        let wanted = childName
-        childName = ""
+        let wanted = newName
+        let isMinor = newIsMinor
+        newName = ""
         working = true
         Task {
-            _ = await shelf.createMinor(named: wanted, as: guardian)
+            _ = await shelf.createPerson(named: wanted, isMinor: isMinor, as: guardian)
             working = false
         }
     }

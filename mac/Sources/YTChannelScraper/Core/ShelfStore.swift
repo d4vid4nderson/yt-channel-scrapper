@@ -60,6 +60,8 @@ final class ShelfStore {
 
     /// Everything read on the last pass, from all guardians.
     private var files: [ShelfFile] = []
+    /// The people each guardian has added, one file per guardian.
+    private var peopleFiles: [PeopleFile] = []
 
     private static let bookmarkKey = "shelf.folder.bookmark"
 
@@ -140,12 +142,13 @@ final class ShelfStore {
         // Read regardless of how the shelf read went: the device list is a nice-to-have
         // and must never be the reason a shelf read counts as failed.
         let reported = await Task.detached { Self.readDevices(in: folder) }.value
+        let declaredPeople = await Task.detached { Self.readPeople(in: folder) }.value
         switch read {
         case .success(let found):
             files = found
-            roster = Self.roster(from: found)
-            guardians = Self.guardians(from: found)
+            peopleFiles = declaredPeople
             devices = reported
+            recompute()
             problem = nil
             lastRead = Date()
         case .failure(let error):
@@ -216,8 +219,7 @@ final class ShelfStore {
         // Publish locally without waiting for a re-read, so the UI moves when tapped.
         files.removeAll { $0.minorID == minor.id && $0.guardianID == guardian.id }
         files.append(file)
-        roster = Self.roster(from: files)
-        guardians = Self.guardians(from: files)
+        recompute()
         problem = nil
         return true
     }
@@ -238,32 +240,144 @@ final class ShelfStore {
         )
     }
 
-    /// Put a new child on the roster by writing an empty shelf for them.
+    /// Add somebody to the family: another parent, or a child.
     ///
-    /// An empty file rather than a roster entry somewhere, because the roster *is* the
-    /// set of files — see `ShelfFile.minorName`. It also means the child exists on both
-    /// guardians' phones as soon as iCloud catches up, with nothing to invite or accept.
-    func createMinor(named name: String, as guardian: Profiles.Guardian) async -> Profiles.Minor? {
+    /// A child also gets an empty shelf written for them, which is what puts them on the
+    /// roster and gives the other guardian something to approve into. A parent gets only
+    /// the entry — there is nothing to approve *for* a parent — and stays unclaimed until
+    /// a device says "I am them".
+    @discardableResult
+    func createPerson(named name: String, isMinor: Bool,
+                      as guardian: Profiles.Guardian) async -> FamilyMember? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let folder else { return nil }
+        guard !trimmed.isEmpty, folder != nil else { return nil }
 
-        let minor = Profiles.Minor(id: UUID(), name: trimmed)
-        let file = ShelfFile(
-            guardianID: guardian.id,
-            guardianName: guardian.name,
-            minorID: minor.id,
-            minorName: minor.name,
-            writtenAt: Date(),
-            entries: []
-        )
-        guard await Task.detached(operation: { Self.write(file, in: folder) }).value else {
-            problem = "Could not save to the shared folder."
-            return nil
+        let member = FamilyMember(id: UUID(), name: trimmed, isMinor: isMinor)
+        guard await write(member, as: guardian) else { return nil }
+
+        if isMinor {
+            await record([], for: Profiles.Minor(id: member.id, name: member.name),
+                         as: guardian, evenIfEmpty: true)
         }
-        files.append(file)
-        roster = Self.roster(from: files)
-        guardians = Self.guardians(from: files)
-        return minor
+        return member
+    }
+
+    /// Take somebody out of the family.
+    ///
+    /// Writes a tombstone into this guardian's own file rather than deleting anything.
+    /// Each guardian writes only their own file, so removing somebody the *other* parent
+    /// added cannot be done by deletion — it has to be a removal that outlives the entry
+    /// it overrides, exactly as a shelf veto does.
+    ///
+    /// Nothing they were part of is destroyed: a child's shelf files stay where they are,
+    /// and past approvals keep the name they were signed with. Re-adding the same name
+    /// later makes a new person, because the id is what everything is keyed on.
+    @discardableResult
+    func removePerson(_ id: UUID, as guardian: Profiles.Guardian) async -> Bool {
+        guard id != guardian.id else { return false }   // never yourself
+        let name = declared.first { $0.id == id }?.name
+            ?? roster.first { $0.id == id }?.name
+            ?? guardians.first { $0.id == id }?.name
+            ?? "Removed"
+        let isMinor = roster.contains { $0.id == id }
+        var stone = FamilyMember(id: id, name: name, isMinor: isMinor)
+        stone.isRemoved = true
+        return await write(stone, as: guardian)
+    }
+
+    /// Mark a person as claimed, so the list stops saying nobody is using that identity.
+    func markClaimed(_ id: UUID, as guardian: Profiles.Guardian) async {
+        guard var mine = peopleFiles.first(where: { $0.guardianID == guardian.id }),
+              let index = mine.people.firstIndex(where: { $0.id == id }),
+              !mine.people[index].isClaimed
+        else { return }
+        mine.people[index].isClaimed = true
+        mine.writtenAt = Date()
+        await commit(mine)
+    }
+
+    private func write(_ member: FamilyMember, as guardian: Profiles.Guardian) async -> Bool {
+        var mine = peopleFiles.first { $0.guardianID == guardian.id }
+            ?? PeopleFile(guardianID: guardian.id, writtenAt: Date(), people: [])
+        mine.people.removeAll { $0.id == member.id }
+        mine.people.append(member)
+        mine.writtenAt = Date()
+        return await commit(mine)
+    }
+
+    @discardableResult
+    private func commit(_ file: PeopleFile) async -> Bool {
+        guard let folder else { return false }
+        let wrote = await Task.detached { Self.write(file, in: folder) }.value
+        guard wrote else {
+            problem = "Could not save to the shared folder."
+            return false
+        }
+        peopleFiles.removeAll { $0.guardianID == file.guardianID }
+        peopleFiles.append(file)
+        recompute()
+        return true
+    }
+
+    /// Everyone, from both sources: who has written shelf files, and who has been added
+    /// by name. Union rather than either alone — a parent who has approved things is real
+    /// even if nobody added them, and one who was added is real before they approve.
+    private func recompute() {
+        var adults: [UUID: Profiles.Guardian] = [:]
+        for g in Self.guardians(from: files) { adults[g.id] = g }
+        var children: [UUID: Profiles.Minor] = [:]
+        for m in Self.roster(from: files) { children[m.id] = m }
+
+        for member in declared {
+            // A tombstone removes them from both halves, including when they would
+            // otherwise be derived from the shelf files they have written. Those files
+            // are left alone — this hides the person, it does not destroy their history.
+            guard !member.removed else {
+                adults[member.id] = nil
+                children[member.id] = nil
+                continue
+            }
+            if member.isMinor {
+                children[member.id] = Profiles.Minor(id: member.id, name: member.name)
+            } else {
+                adults[member.id] = Profiles.Guardian(id: member.id, name: member.name)
+            }
+        }
+
+        guardians = adults.values.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+        roster = children.values.sorted {
+            $0.name.localizedStandardCompare($1.name) == .orderedAscending
+        }
+    }
+
+    /// Everyone anybody has added, newest entry per id.
+    ///
+    /// A removal beats an addition written at the same instant — the same tiebreak the
+    /// shelf uses, and for the same reason: dates go through JSON as ISO-8601, which
+    /// truncates sub-second precision, so two edits moments apart can come back equal.
+    /// Without it, removing somebody would be a coin flip.
+    var declared: [FamilyMember] {
+        var newest: [UUID: (FamilyMember, Date)] = [:]
+        for file in peopleFiles {
+            for member in file.people {
+                if let standing = newest[member.id] {
+                    if standing.1 > file.writtenAt { continue }
+                    if standing.1 == file.writtenAt && standing.0.removed { continue }
+                }
+                newest[member.id] = (member, file.writtenAt)
+            }
+        }
+        return newest.values.map(\.0)
+    }
+
+    /// Whether this person exists only as a name somebody typed.
+    func isUnclaimed(_ id: UUID) -> Bool {
+        guard let member = declared.first(where: { $0.id == id }) else { return false }
+        if member.isClaimed { return false }
+        // Having written anything is proof enough that somebody is using it.
+        return !files.contains { $0.guardianID == id }
     }
 
     // MARK: - The roster
@@ -394,7 +508,8 @@ final class ShelfStore {
 
             var found: [ShelfFile] = []
             for url in names where url.pathExtension.lowercased() == "json"
-                && !url.lastPathComponent.hasPrefix(DeviceRecord.prefix) {
+                && !url.lastPathComponent.hasPrefix(DeviceRecord.prefix)
+                && !url.lastPathComponent.hasPrefix(PeopleFile.prefix) {
                 // A file the other guardian wrote may still be a placeholder on this
                 // device. Asking for it is not the same as having it — a file that is
                 // still arriving is skipped this pass and picked up by the next refresh,
@@ -412,6 +527,40 @@ final class ShelfStore {
         } catch {
             return .failure(error)
         }
+    }
+
+    private nonisolated static func readPeople(in folder: URL) -> [PeopleFile] {
+        let opened = folder.startAccessingSecurityScopedResource()
+        defer { if opened { folder.stopAccessingSecurityScopedResource() } }
+
+        guard let names = try? FileManager.default.contentsOfDirectory(
+            at: folder,
+            includingPropertiesForKeys: [.isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey],
+            options: [.skipsHiddenFiles]
+        ) else { return [] }
+
+        var found: [PeopleFile] = []
+        for url in names where url.lastPathComponent.hasPrefix(PeopleFile.prefix) {
+            guard materialise(url),
+                  let data = try? Data(contentsOf: url),
+                  let file = try? decoder.decode(PeopleFile.self, from: data)
+            else { continue }
+            found.append(file)
+        }
+        return found
+    }
+
+    private nonisolated static func write(_ file: PeopleFile, in folder: URL) -> Bool {
+        let opened = folder.startAccessingSecurityScopedResource()
+        defer { if opened { folder.stopAccessingSecurityScopedResource() } }
+        guard let data = try? encoder.encode(file) else { return false }
+        let url = folder.appendingPathComponent(file.filename)
+        var failure: NSError?
+        var wrote = false
+        NSFileCoordinator().coordinate(writingItemAt: url, options: .forReplacing, error: &failure) { destination in
+            wrote = (try? data.write(to: destination, options: .atomic)) != nil
+        }
+        return wrote && failure == nil
     }
 
     private nonisolated static func readDevices(in folder: URL) -> [DeviceRecord] {

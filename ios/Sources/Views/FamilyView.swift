@@ -19,7 +19,9 @@ struct FamilyView: View {
     @State private var picking = false
     @State private var addingChild = false
     @State private var childName = ""
+    @State private var newIsMinor = true
     @State private var working = false
+    @State private var removing: Profiles.Guardian?
 
     private var profiles: Profiles { model.profiles }
     private var shelf: ShelfStore { model.shelf }
@@ -49,15 +51,28 @@ struct FamilyView: View {
                     Task { await model.syncShelf() }
                 }
             }
-            .alert("Add a child", isPresented: $addingChild) {
+            .alert(newIsMinor ? "Add a child" : "Add a parent", isPresented: $addingChild) {
                 TextField("Their name", text: $childName)
                     .textInputAutocapitalization(.words)
                 Button("Add") { addChild() }
                     .disabled(childName.trimmingCharacters(in: .whitespaces).isEmpty)
                 Button("Cancel", role: .cancel) { childName = "" }
             } message: {
-                Text("A name only — it is how you will tell their shelves apart. Nothing "
-                     + "is sent to them and nobody has to accept anything.")
+                Text(newIsMinor
+                     ? "A name only — it is how you will tell their shelves apart. Nothing "
+                        + "is sent to them and nobody has to accept anything."
+                     : "This creates the identity their approvals will be signed with. On "
+                        + "their own device they pick their name here to claim it.")
+            }
+            .alert("Remove \(removing?.name ?? "")?",
+                   isPresented: Binding(get: { removing != nil },
+                                        set: { if !$0 { removing = nil } })) {
+                Button("Remove", role: .destructive) { confirmRemove() }
+                Button("Cancel", role: .cancel) { removing = nil }
+            } message: {
+                Text("They stop appearing for everyone. Nothing is destroyed — a child's "
+                     + "shelf stays in the folder, and past approvals keep the name they "
+                     + "were signed with. Adding the same name later makes a new person.")
             }
             .task {
                 name = profiles.guardian?.name ?? ""
@@ -165,8 +180,21 @@ struct FamilyView: View {
                         .background(Color.white.opacity(0.08), in: Capsule())
                     Spacer()
                     devices(for: guardian.id)
+                    if guardian.id != profiles.guardian?.id, shelf.isUnclaimed(guardian.id) {
+                        Button("This is me") { claim(guardian) }
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Palette.accent)
+                            .buttonStyle(.plain)
+                    }
                 }
                 .listRowBackground(Color.card)
+                .swipeActions(edge: .trailing) {
+                    if guardian.id != profiles.guardian?.id {
+                        Button(role: .destructive) {
+                            removing = guardian
+                        } label: { Label("Remove", systemImage: "person.badge.minus") }
+                    }
+                }
             }
 
             ForEach(shelf.roster, id: \.id) { minor in
@@ -182,9 +210,23 @@ struct FamilyView: View {
                         .foregroundStyle(Color.secondaryText)
                 }
                 .listRowBackground(Color.card)
+                .swipeActions(edge: .trailing) {
+                    Button(role: .destructive) {
+                        removing = Profiles.Guardian(id: minor.id, name: minor.name)
+                    } label: { Label("Remove", systemImage: "person.badge.minus") }
+                }
             }
 
-            Button("Add a child…", systemImage: "person.badge.plus") {
+            Picker("Add", selection: $newIsMinor) {
+                Text("Child").tag(true)
+                Text("Parent").tag(false)
+            }
+            .pickerStyle(.segmented)
+            .listRowBackground(Color.clear)
+            .listRowInsets(EdgeInsets())
+
+            Button(newIsMinor ? "Add a child…" : "Add a parent…",
+                   systemImage: "person.badge.plus") {
                 childName = ""
                 addingChild = true
             }
@@ -212,14 +254,37 @@ struct FamilyView: View {
         }
     }
 
+    /// Take on an identity another parent created here, rather than minting a second one
+    /// with the same name — which would file this person's approvals under a different
+    /// author and show them twice in the list.
+    private func claim(_ guardian: Profiles.Guardian) {
+        guard profiles.adopt(guardian) else { return }
+        name = guardian.name
+        Task {
+            await shelf.markClaimed(guardian.id, as: guardian)
+            await model.syncShelf()
+        }
+    }
+
+    private func confirmRemove() {
+        guard let target = removing, let guardian = profiles.guardian else { return }
+        removing = nil
+        Task {
+            if await shelf.removePerson(target.id, as: guardian) == false {
+                model.banner = shelf.problem ?? "That person could not be removed."
+            }
+        }
+    }
+
     private func addChild() {
         guard let guardian = profiles.guardian else { return }
         let wanted = childName
+        let isMinor = newIsMinor
         childName = ""
         working = true
         Task {
-            if await shelf.createMinor(named: wanted, as: guardian) == nil {
-                model.banner = shelf.problem ?? "That child could not be added."
+            if await shelf.createPerson(named: wanted, isMinor: isMinor, as: guardian) == nil {
+                model.banner = shelf.problem ?? "That person could not be added."
             }
             working = false
         }
