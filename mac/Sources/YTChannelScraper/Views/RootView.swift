@@ -326,6 +326,10 @@ private struct SearchPill: View {
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
                     .foregroundStyle(.white)
+                    // Stop/Search/Scrape all fit today. The frame is fixed, so anything
+                    // longer would wrap inside the capsule rather than overflow it —
+                    // truncating is the failure worth having.
+                    .lineLimit(1)
                     .frame(width: compact ? 66 : 78)
                     .padding(.vertical, compact ? 7 : 10)
                     .background(
@@ -511,7 +515,10 @@ private struct ResultsList: View {
             } label: {
                 HStack(spacing: 8) {
                     CheckBox(isOn: model.allVisiblePicked, size: 15)
-                    Text("Select all").font(.system(size: 12.5))
+                    Text("Select all")
+                        .font(.system(size: 12.5))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
                 }
                 .chip(active: model.allVisiblePicked)
             }
@@ -528,7 +535,10 @@ private struct ResultsList: View {
                 TextField("Filter titles…", text: $model.filterText)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12.5))
-                    .frame(width: 150)
+                    // Was a hard 150. A fixed width in a row that has to fit a narrow
+                    // window means the squeeze lands somewhere else — on the labels
+                    // either side, which then broke mid-word.
+                    .frame(minWidth: 70, idealWidth: 150, maxWidth: 150)
             }
             .chip()
 
@@ -545,6 +555,13 @@ private struct ResultsList: View {
             Text(countText)
                 .font(.system(size: 11.5).monospacedDigit())
                 .foregroundStyle(.secondary)
+                // The row's designated victim. Everything else is a control with a fixed
+                // label; this is the only part that can lose characters and still make
+                // sense, so it is the only part allowed to.
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
+                .help(countText)
 
             Spacer(minLength: 12)
 
@@ -573,6 +590,8 @@ private struct ResultsList: View {
                 Text(model.picked.isEmpty ? "Download" : "Download \(model.picked.count)")
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .background(
