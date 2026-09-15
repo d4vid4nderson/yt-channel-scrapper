@@ -17,6 +17,9 @@ final class AppModel {
     /// The two favourites drawers. Held here rather than in the view so the menu bar can
     /// reach them, and so each can close the others — three panels over one page at once
     /// would be two too many.
+    /// Whether the family setup sheet is up. Set from a row's ⋯ when it has nothing to
+    /// offer yet, and from the app menu.
+    var showFamily = false
     var showChannelsDrawer = false
     var showVideosDrawer = false
     /// Whether the results area is listing a channel's videos or a search's channels.
@@ -35,6 +38,13 @@ final class AppModel {
     let scraper = Scraper()
     let search = ChannelSearch()
     let library = Library()
+    /// Who this Mac's owner is, for signing approvals. Minor Mode's PIN comes along with
+    /// the type and goes unused here — a Mac is a guardian's machine.
+    let profiles = Profiles()
+    /// What the family has agreed each child may see. The Mac is the big screen this is
+    /// worth curating on, which is the whole reason the store was promoted out of the
+    /// iOS target.
+    let shelf = ShelfStore()
     let downloader = Downloader()
     let updater = Updater()
     let appUpdater = AppUpdater()
@@ -45,6 +55,47 @@ final class AppModel {
     /// Everything downstream of this (filtering, select-all, download) works the same
     /// either way, which is what makes the saved list a place you can act from rather
     /// than just look at.
+    /// Re-read the shared folder. Cheap, and the only honest moment to do it is when
+    /// this machine comes back to the front — the other guardian's device writes into
+    /// that folder and nothing here is notified.
+    func syncShelf() async {
+        await shelf.refresh()
+    }
+
+    /// Put an approval — or its withdrawal — in this guardian's file.
+    ///
+    /// Writes a whole `ShelfEntry` rather than calling `ShelfStore.set`, because an entry
+    /// carries its own title and, for a video, its channel: the child's device names its
+    /// downloads from the first and a later channel veto reaches this video through the
+    /// second.
+    @discardableResult
+    func send(_ video: Video, to minor: Profiles.Minor, approve: Bool) async -> Bool {
+        guard let guardian = profiles.guardian else { return false }
+        return await shelf.record([ShelfEntry(
+            kind: .video, id: video.id,
+            state: approve ? .approved : .removed,
+            guardian: guardian.name,
+            title: video.title,
+            channelID: video.channelId
+        )], for: minor, as: guardian)
+    }
+
+    @discardableResult
+    func send(_ channel: Channel, to minor: Profiles.Minor, approve: Bool) async -> Bool {
+        guard let guardian = profiles.guardian else { return false }
+        return await shelf.record([ShelfEntry(
+            kind: .channel, id: channel.id,
+            state: approve ? .approved : .removed,
+            guardian: guardian.name,
+            title: channel.title
+        )], for: minor, as: guardian)
+    }
+
+    /// Whether this item is on that child's shelf right now.
+    func isOnShelf(kind: ShelfEntry.Kind, id: String, for minor: Profiles.Minor) -> Bool {
+        shelf.approved(for: minor.id).contains(ShelfEntry.Key(kind: kind, id: id))
+    }
+
     var listedVideos: [Video] { mode == .saved ? library.videos : scraper.videos }
 
     /// The rows on screen, in order: kept first, then the rest.

@@ -18,6 +18,12 @@ struct VideoRow: View {
     let preview: () -> Void
     let toggleSaved: () -> Void
 
+    /// The ⋯ that puts this video on a child's shelf, or nothing when there is no family
+    /// set up. Held as a view rather than as another handful of closures: the menu needs
+    /// the roster, the current state and two actions, and passing four more parameters to
+    /// say "show a menu" is worse than passing the menu.
+    var shelfMenu: ShelfMenu?
+
     @State private var hovering = false
     @State private var hoveringThumb = false
 
@@ -55,6 +61,12 @@ struct VideoRow: View {
             }
 
             Spacer(minLength: 8)
+
+            // Same rule as the save mark below: an always-visible menu on every row is
+            // clutter, and the row under the cursor is the one being considered.
+            if let shelfMenu, hovering {
+                shelfMenu.transition(.opacity)
+            }
 
             // Keeping a video is a quieter act than picking one to download, so the mark
             // only shows for the row under the cursor — or for one already kept.

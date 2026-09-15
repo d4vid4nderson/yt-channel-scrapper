@@ -28,6 +28,8 @@ struct YTChannelScraperApp: App {
                 Button("Saved Videos") { model.toggleVideosDrawer() }
                     .keyboardShortcut("3", modifiers: .command)
                 Divider()
+                Button("Family…") { model.showFamily = true }
+                Divider()
                 Button("Export Library…") { model.exportLibrary() }
                 Button("Import Library…") { model.importLibrary() }
                 Divider()

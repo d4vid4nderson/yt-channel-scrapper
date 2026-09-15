@@ -4,19 +4,30 @@ import os
 /// Makes a minor's phone match its shelf: fetch what has been approved, delete what has
 /// not, and never stream anything.
 ///
-/// ## Why the child's device downloads rather than plays
+/// ## Why the child's device downloads rather than streams
 ///
-/// Everything else in this app could have been solved by streaming. This could not.
-/// Playing from YouTube means playing YouTube's ads, and the ads are the reason the app
-/// exists — a downloaded file has none, because there is no request for an ad to be
-/// served into. So the rule on a minor's device is absolute: **if it is not on disk, it
-/// does not play.**
+/// **Not because of ads.** An earlier version of this comment said streaming meant
+/// YouTube's ads, and that is wrong about this app. Ads are inserted by YouTube's own
+/// player; the sanctioned IFrame player in a `WKWebView` would carry them, which is why
+/// that route was rejected. This app never uses it — `StreamResolver` asks InnerTube for
+/// `streamingData` and hands the resulting URLs straight to `AVPlayer`, which plays media
+/// bytes and nothing else. Streaming here is already ad-free, and has been in testing.
 ///
-/// This class keeps the right things on the disk. It does **not** enforce the rule —
-/// nothing stops a minor's device playing a `.stream` yet, and until `Playback` refuses
-/// one in Minor Mode the ad-free guarantee rests on what the UI happens to offer rather
-/// than on something the app actually holds to. That guard is the next thing to write,
-/// and this note is here so the gap is not mistaken for a finished feature.
+/// The reasons that do hold are quieter and worth keeping straight, because one of them
+/// is about correctness rather than preference:
+///
+/// - **It works with no network.** A car, a plane, a school with the WiFi locked down.
+/// - **The child's device never talks to YouTube.** Every entry carries its own title, so
+///   that device makes no listing calls at all and nothing is logged against them.
+/// - **A stream might simply not resolve.** See `StreamResolver`'s own notes: every client
+///   in the ladder can come back "Sign in to confirm you're not a bot". A file on disk
+///   cannot fail that way.
+/// - **A file is what was approved.** A stream is re-fetched each time.
+///
+/// So this class keeps the approved things on disk, which is worth doing on all four
+/// counts. Whether a minor's device should additionally *refuse* to stream is a product
+/// decision and not a safety hole — nothing currently stops it, and that is no longer
+/// filed as a bug.
 ///
 /// The side effects are all the good kind. The phone works in the car, on a plane and at
 /// school, because nothing it plays needs a network. And it makes no listing calls to

@@ -57,6 +57,15 @@ struct RootView: View {
         )) {
             AppUpdateSheet(updater: model.appUpdater)
         }
+        .sheet(isPresented: $model.showFamily) {
+            FamilySheet(model: model)
+        }
+        // The other guardian writes into the shared folder and nothing here is told, so
+        // the honest moment to re-read is whenever this window comes back to the front.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { _ in
+            Task { await model.syncShelf() }
+        }
+        .task { await model.syncShelf() }
         // Over everything, panels included: previewing something from a drawer has to
         // land on top of the panel it was started from.
         .overlay {
@@ -503,7 +512,8 @@ private struct ResultsList: View {
             toggle: { model.toggle(video) },
             downloadOne: { model.download([video]) },
             preview: { model.preview.open(video) },
-            toggleSaved: { model.toggleSaved(video) }
+            toggleSaved: { model.toggleSaved(video) },
+            shelfMenu: ShelfMenu(model: model, video: video)
         )
         .id(video.id)
     }

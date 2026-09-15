@@ -59,6 +59,19 @@ targets:
       # is the only way that stays true.
       - path: ../mac/Sources/YTChannelScraper/Core/CloudMirror.swift
         name: Shared-Cloud
+      # The shelf, shared so a guardian can approve from either machine. Only the store
+      # and the merge rules travel: `ShelfReconciler` stays on iOS because it depends on
+      # `Downloads` and `LocalFiles`, and because only a minor's device reconciles — a
+      # Mac is a guardian's machine and has nothing to reconcile.
+      # Guardian and Minor identity live here, so the shelf's `Profiles.Minor` means the
+      # same type in both apps. Minor Mode's PIN travels with it and is simply unused on
+      # the Mac — cheaper than splitting one small file in two.
+      - path: ../mac/Sources/YTChannelScraper/Core/Profiles.swift
+        name: Shared-Profiles
+      - path: ../mac/Sources/YTChannelScraper/Core/Shelf.swift
+        name: Shared-Shelf
+      - path: ../mac/Sources/YTChannelScraper/Core/ShelfStore.swift
+        name: Shared-ShelfStore
     info:
       path: Support/Info.plist
       properties:
