@@ -65,6 +65,24 @@ final class ShelfStore {
 
     private static let bookmarkKey = "shelf.folder.bookmark"
 
+    #if os(macOS)
+    /// Watches the shared folder so a change on another device shows up on its own.
+    ///
+    /// Without this the folder was read at launch, when the window became key, and when
+    /// the family panel opened — so anything the other admin wrote appeared only once you
+    /// clicked away and back. Nothing was slow; nothing was looking.
+    ///
+    /// macOS only. A phone is suspended most of the time and a descriptor held open
+    /// across that is worth nothing — refreshing when the app comes to the foreground is
+    /// the right beat there, and it already does.
+    private var watcher: DispatchSourceFileSystemObject?
+    private var watchedDescriptor: CInt = -1
+    private var settle: Task<Void, Never>?
+    /// Set when a change lands mid-read. `refresh` bails if one is already running, so
+    /// without this the last write of a burst could be the one that gets dropped.
+    private var wantsAnotherPass = false
+    #endif
+
     init() {
         resolveBookmark()
     }
@@ -88,6 +106,7 @@ final class ShelfStore {
             UserDefaults.standard.set(bookmark, forKey: Self.bookmarkKey)
             folder = picked
             problem = nil
+            startWatching(picked)
             return true
         } catch {
             Log.shelf.error("could not bookmark \(picked.lastPathComponent, privacy: .public): \(error)")
@@ -99,6 +118,7 @@ final class ShelfStore {
     /// Forget the folder. The decisions themselves are in iCloud and are not touched —
     /// this only stops *this device* looking at them.
     func forgetFolder() {
+        stopWatching()
         UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
         folder = nil
         files = []
@@ -113,6 +133,10 @@ final class ShelfStore {
             let url = try URL(resolvingBookmarkData: bookmark,
                               bookmarkDataIsStale: &stale)
             folder = url
+            // The folder is set on every launch, not only when it is first picked, so
+            // the watcher has to start here too or it would only ever run in the session
+            // somebody chose the folder in.
+            startWatching(url)
             // A stale bookmark still resolves; it just will not keep resolving. Rewriting
             // it now is the difference between a folder that keeps working and one that
             // stops on some future launch with nothing to explain it.
@@ -137,6 +161,15 @@ final class ShelfStore {
         guard let folder, !isReading else { return }
         isReading = true
         defer { isReading = false }
+        #if os(macOS)
+        wantsAnotherPass = false
+        defer {
+            if wantsAnotherPass {
+                wantsAnotherPass = false
+                Task { [weak self] in await self?.refresh() }
+            }
+        }
+        #endif
 
         let read = await Task.detached { Self.readAll(in: folder) }.value
         // Read regardless of how the shelf read went: the device list is a nice-to-have
@@ -497,6 +530,51 @@ final class ShelfStore {
             .map { Profiles.Minor(id: $0.minorID, name: $0.minorName) }
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
+
+    // MARK: - Watching the folder
+
+    #if os(macOS)
+    private func startWatching(_ url: URL) {
+        stopWatching()
+        let descriptor = open(url.path, O_EVTONLY)
+        guard descriptor >= 0 else {
+            Log.shelf.error("could not watch \(url.lastPathComponent, privacy: .public)")
+            return
+        }
+        watchedDescriptor = descriptor
+        let source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: descriptor, eventMask: [.write, .rename, .delete], queue: .main)
+        source.setEventHandler { [weak self] in self?.folderChanged() }
+        source.setCancelHandler { close(descriptor) }
+        source.resume()
+        watcher = source
+    }
+
+    private func stopWatching() {
+        settle?.cancel()
+        watcher?.cancel()          // its cancel handler closes the descriptor
+        watcher = nil
+        watchedDescriptor = -1
+    }
+
+    /// Coalesced: writing one file produces several events, and a burst of them should be
+    /// one read rather than five.
+    private func folderChanged() {
+        settle?.cancel()
+        settle = Task { [weak self] in
+            try? await Task.sleep(for: .milliseconds(400))
+            guard !Task.isCancelled, let self else { return }
+            if self.isReading {
+                self.wantsAnotherPass = true
+            } else {
+                await self.refresh()
+            }
+        }
+    }
+    #else
+    private func startWatching(_ url: URL) {}
+    private func stopWatching() {}
+    #endif
 
     // MARK: - Devices
 
