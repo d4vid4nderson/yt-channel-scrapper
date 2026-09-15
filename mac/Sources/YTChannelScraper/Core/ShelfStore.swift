@@ -381,6 +381,12 @@ final class ShelfStore {
         var children: [UUID: Profiles.Minor] = [:]
         for m in Self.roster(from: files) { children[m.id] = m }
 
+        // Somebody who has *written* a file is an admin, whatever a file addressed *to*
+        // them might imply. A shelf file is `<recipientID>-<senderID>`, and since admins
+        // can be sent things too, being a recipient no longer means being a minor — so
+        // without this, sending a video to another admin turned them into one.
+        for id in adults.keys { children[id] = nil }
+
         for member in declared {
             // A tombstone removes them from both halves, including when they would
             // otherwise be derived from the shelf files they have written. Those files

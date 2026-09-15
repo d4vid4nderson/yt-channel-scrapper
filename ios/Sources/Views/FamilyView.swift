@@ -34,7 +34,7 @@ struct FamilyView: View {
                 you
                 folder
                 if profiles.guardian != nil, shelf.folder != nil {
-                    children
+                    people
                     if !profiles.isMinor { inbox }
                 }
             }
@@ -56,7 +56,7 @@ struct FamilyView: View {
                     Task { await model.syncShelf() }
                 }
             }
-            .alert(newIsMinor ? "Add a child" : "Add a parent", isPresented: $addingChild) {
+            .alert(newIsMinor ? "Add a minor" : "Add an admin", isPresented: $addingChild) {
                 TextField("Their name", text: $childName)
                     .textInputAutocapitalization(.words)
                 Button("Add") { addChild() }
@@ -66,8 +66,8 @@ struct FamilyView: View {
                 Text(newIsMinor
                      ? "A name only — it is how you will tell their shelves apart. Nothing "
                         + "is sent to them and nobody has to accept anything."
-                     : "This creates the identity their approvals will be signed with. On "
-                        + "their own device they pick their name here to claim it.")
+                     : "This creates the identity their approvals are signed with. On their "
+                        + "own device they tap “This is me” to claim it.")
             }
             .alert("Sign as \(claiming?.name ?? "")?",
                    isPresented: Binding(get: { claiming != nil },
@@ -122,8 +122,8 @@ struct FamilyView: View {
         } footer: {
             // The id behind the name is what every approval is signed with, so the name
             // being editable costs nothing.
-            Text("Shown against the videos you approve, so the other parent can see who "
-                 + "decided what. You can change it later without unpicking anything.")
+            Text("Shown against what you approve, so other admins can see who decided "
+                 + "what. You can change it later without unpicking anything.")
         }
     }
 
@@ -208,82 +208,100 @@ struct FamilyView: View {
         }
     }
 
-    private var children: some View {
-        Section {
-            // Adults are listed, not added: a guardian's identity is created on their own
-            // device when they name themselves, so there is nothing to create from here.
-            ForEach(shelf.guardians, id: \.id) { guardian in
-                HStack {
-                    Image(systemName: "person.crop.circle.badge.checkmark")
-                        .foregroundStyle(Palette.accent)
-                    Text(guardian.name).foregroundStyle(Color.primaryText)
-                    Text(guardian.id == profiles.guardian?.id ? "you" : "parent")
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(Color.secondaryText)
-                        .padding(.horizontal, 6).padding(.vertical, 2)
-                        .background(Color.white.opacity(0.08), in: Capsule())
-                    Spacer()
-                    devices(for: guardian.id)
-                    if guardian.id != profiles.guardian?.id {
-                        Button("This is me") { claiming = guardian }
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Palette.accent)
-                            .buttonStyle(.plain)
-                    }
+    /// Admins and minors, headed separately — they are read for different reasons and
+    /// mixing them under one heading made the heading a lie.
+    private var people: some View {
+        Group {
+            Section {
+                ForEach(shelf.guardians, id: \.id) { guardian in
+                    person(name: guardian.name,
+                           id: guardian.id,
+                           isMinor: false,
+                           isYou: guardian.id == profiles.guardian?.id,
+                           trailing: nil)
+                        .swipeActions(edge: .trailing) {
+                            if guardian.id != profiles.guardian?.id {
+                                Button(role: .destructive) { removing = guardian } label: {
+                                    Label("Remove", systemImage: "person.badge.minus")
+                                }
+                            }
+                        }
                 }
+                Button("Add an admin…", systemImage: "person.badge.plus") {
+                    childName = ""
+                    newIsMinor = false
+                    addingChild = true
+                }
+                .disabled(working)
                 .listRowBackground(Color.card)
-                .swipeActions(edge: .trailing) {
-                    if guardian.id != profiles.guardian?.id {
-                        Button(role: .destructive) {
-                            removing = guardian
-                        } label: { Label("Remove", systemImage: "person.badge.minus") }
-                    }
-                }
+            } header: {
+                header("Admins")
+            } footer: {
+                Text("Another admin appears once they name themselves and pick this same "
+                     + "folder. On their own device they tap “This is me” to take on the "
+                     + "identity rather than making a second one with the same name.")
             }
 
-            ForEach(shelf.roster, id: \.id) { minor in
-                HStack {
-                    Image(systemName: "person.crop.circle")
-                        .foregroundStyle(Palette.accent)
-                    Text(minor.name)
-                        .foregroundStyle(Color.primaryText)
-                    Spacer()
-                    devices(for: minor.id)
-                    Text("\(shelf.approved(for: minor.id).count) approved")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.secondaryText)
+            Section {
+                ForEach(shelf.roster, id: \.id) { minor in
+                    person(name: minor.name,
+                           id: minor.id,
+                           isMinor: true,
+                           isYou: false,
+                           trailing: "\(shelf.approved(for: minor.id).count) sent")
+                        .swipeActions(edge: .trailing) {
+                            Button(role: .destructive) {
+                                removing = Profiles.Guardian(id: minor.id, name: minor.name)
+                            } label: { Label("Remove", systemImage: "person.badge.minus") }
+                        }
                 }
+                Button("Add a minor…", systemImage: "person.badge.plus") {
+                    childName = ""
+                    newIsMinor = true
+                    addingChild = true
+                }
+                .disabled(working)
                 .listRowBackground(Color.card)
-                .swipeActions(edge: .trailing) {
-                    Button(role: .destructive) {
-                        removing = Profiles.Guardian(id: minor.id, name: minor.name)
-                    } label: { Label("Remove", systemImage: "person.badge.minus") }
-                }
+            } header: {
+                header("Minors")
+            } footer: {
+                Text(shelf.roster.isEmpty
+                     ? "A minor appears on every admin's device as soon as iCloud catches up."
+                     : "To hand a phone over, set it up as that minor under Minor Mode.")
             }
-
-            Picker("Add", selection: $newIsMinor) {
-                Text("Child").tag(true)
-                Text("Parent").tag(false)
-            }
-            .pickerStyle(.segmented)
-            .listRowBackground(Color.clear)
-            .listRowInsets(EdgeInsets())
-
-            Button(newIsMinor ? "Add a child…" : "Add a parent…",
-                   systemImage: "person.badge.plus") {
-                childName = ""
-                addingChild = true
-            }
-            .disabled(working)
-            .listRowBackground(Color.card)
-        } header: {
-            header("Children")
-        } footer: {
-            Text("Another parent appears here once they open the app, name themselves and "
-                 + "pick this same folder — nothing to invite or accept. Device icons show "
-                 + "only devices running this app; there is no way to read the devices on "
-                 + "an Apple ID.")
         }
+    }
+
+    /// One row: who they are, what they carry, and — for anybody but you — a way to take
+    /// on their identity on this device.
+    private func person(name: String, id: UUID, isMinor: Bool, isYou: Bool,
+                        trailing: String?) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: isMinor ? "person.crop.circle" : "person.crop.circle.badge.checkmark")
+                .foregroundStyle(Palette.accent)
+            Text(name).foregroundStyle(Color.primaryText)
+            if isYou {
+                Text("you")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Color.secondaryText)
+                    .padding(.horizontal, 6).padding(.vertical, 2)
+                    .background(Color.white.opacity(0.08), in: Capsule())
+            }
+            Spacer()
+            devices(for: id)
+            if let trailing {
+                Text(trailing)
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.secondaryText)
+            }
+            if !isYou, !isMinor {
+                Button("This is me") { claiming = Profiles.Guardian(id: id, name: name) }
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Palette.accent)
+                    .buttonStyle(.plain)
+            }
+        }
+        .listRowBackground(Color.card)
     }
 
     /// One glyph per device that has announced itself as this person's. Only devices
