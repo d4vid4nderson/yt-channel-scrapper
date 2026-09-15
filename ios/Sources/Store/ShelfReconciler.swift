@@ -60,11 +60,17 @@ final class ShelfReconciler {
 
     /// Bring the phone in line with the shelf. Safe to call on every foreground and
     /// after every refresh — it is a diff, so a pass with nothing to do costs a scan.
+    /// - Parameter sweeping: whether to delete local files that are no longer approved.
+    ///   True on a minor's device, where an un-approval has to reach a file that is
+    ///   already there or the veto is decorative. **False on an admin's**, where the
+    ///   local files are their own library and the shelf is only a list of things other
+    ///   people have sent them — sweeping there would delete what nobody vetoed.
     func reconcile(
         for minor: Profiles.Minor,
         shelf: ShelfStore,
         downloads: Downloads,
-        localFiles: LocalFiles
+        localFiles: LocalFiles,
+        sweeping: Bool = true
     ) async {
         guard !isRunning else { return }
         isRunning = true
@@ -82,7 +88,7 @@ final class ShelfReconciler {
         let playable = ShelfMerge.playable(entries)
         let allowed = Set(playable.map(\.id))
 
-        lastSwept = sweep(keeping: allowed, localFiles: localFiles)
+        lastSwept = sweeping ? sweep(keeping: allowed, localFiles: localFiles) : 0
         awaiting = fetch(playable, downloads: downloads, localFiles: localFiles)
         lastRun = Date()
     }

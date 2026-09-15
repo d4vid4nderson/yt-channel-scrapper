@@ -93,41 +93,65 @@ struct CommandBoard: View {
         }
     }
 
+    /// Everybody in the family, and what each of their devices is holding.
+    ///
+    /// Anyone can be sent to, admins included — a shelf is just a list of things addressed
+    /// to somebody. What differs is what the receiving device does with it. A minor's
+    /// device reconciles: it fetches what is approved *and deletes what is not*, which is
+    /// what makes a veto real. An admin's device only fetches. Sweeping a parent's machine
+    /// against a list somebody else writes would delete their own library, so it never
+    /// happens.
     private var dispatch: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 14) {
             title("Dispatch")
 
-            if shelf.roster.isEmpty {
+            if shelf.guardians.isEmpty && shelf.roster.isEmpty {
                 Button { model.showFamily = true } label: {
-                    Text("Add a minor, then drag a channel or video onto them")
+                    Text("Add someone, then drag a channel or video onto their device")
                         .font(.system(size: 12))
                         .foregroundStyle(.white.opacity(0.45))
                 }
                 .buttonStyle(.plain)
                 .pointingHand()
             } else {
-                ForEach(shelf.roster, id: \.id) { minor in
-                    MinorLine(
-                        name: minor.name,
-                        approved: shelf.approved(for: minor.id).count,
-                        device: shelf.devices.first { $0.personID == minor.id },
-                        expected: shelf.expectedDevice(for: minor.id),
-                        sent: justSent?.minor == minor.id ? justSent?.title : nil,
-                        isOver: over == minor.id
+                ForEach(shelf.guardians, id: \.id) { person in
+                    PersonBlock(
+                        name: person.name,
+                        isMinor: false,
+                        approved: shelf.approved(for: person.id).count,
+                        devices: devices(of: person.id),
+                        expected: shelf.expectedDevice(for: person.id),
+                        sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
+                        isOver: over == person.id,
+                        onDrop: { payload, targeted in
+                            if let payload {
+                                send(payload, to: Profiles.Minor(id: person.id, name: person.name))
+                            }
+                            over = targeted ? person.id : over
+                        }
                     )
-                    .dropDestination(for: String.self) { items, _ in
-                        // A person's id would arrive here as a bare UUID; only an item
-                        // decodes, so anything else is declined rather than acted on.
-                        guard let raw = items.first,
-                              let item = SendPayload(encoded: raw) else { return false }
-                        send(item, to: minor)
-                        return true
-                    } isTargeted: { targeted in
-                        over = targeted ? minor.id : nil
-                    }
+                }
+                ForEach(shelf.roster, id: \.id) { person in
+                    PersonBlock(
+                        name: person.name,
+                        isMinor: true,
+                        approved: shelf.approved(for: person.id).count,
+                        devices: devices(of: person.id),
+                        expected: shelf.expectedDevice(for: person.id),
+                        sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
+                        isOver: over == person.id,
+                        onDrop: { payload, targeted in
+                            if let payload { send(payload, to: person) }
+                            over = targeted ? person.id : over
+                        }
+                    )
                 }
             }
         }
+    }
+
+    private func devices(of person: UUID) -> [DeviceRecord] {
+        shelf.devices.filter { $0.personID == person }
     }
 
     private var meta: some View {
@@ -177,73 +201,131 @@ struct CommandBoard: View {
     }
 }
 
-/// One minor: what they have been sent, and how much of it is actually on their device.
-private struct MinorLine: View {
+/// One person, with their devices under their name.
+///
+/// The device is the drop target, not the name — which is how somebody thinks about it
+/// ("put this on Wyatt's phone") even though the shelf underneath is per person. Dropping
+/// on any of somebody's devices sends to that person; their devices then all pick it up.
+///
+/// A minor with no device still gets a target, because you have to be able to send things
+/// before their phone has ever been set up.
+private struct PersonBlock: View {
     let name: String
-    let approved: Int
-    let device: DeviceRecord?
+    let isMinor: Bool
+    let approved: Int?
+    let devices: [DeviceRecord]
     let expected: DeviceRecord.Kind?
-    /// What was just dropped here, if anything.
-    let sent: String?
+    let sentTitle: String?
     let isOver: Bool
+    /// Nil for an admin — see `dispatch`. Called with the payload on a drop, and with nil
+    /// when only the hover state changed.
+    let onDrop: ((SendPayload?, Bool) -> Void)?
 
     var body: some View {
-        HStack(spacing: 11) {
-            ProgressArc(done: device?.downloaded ?? 0, total: approved)
+        VStack(alignment: .leading, spacing: 5) {
+            HStack(spacing: 8) {
+                if let approved {
+                    ProgressArc(done: devices.map(\.downloaded).max() ?? 0, total: approved)
+                } else {
+                    Circle()
+                        .strokeBorder(.white.opacity(0.12), lineWidth: 2.5)
+                        .frame(width: 30, height: 30)
+                }
 
-            VStack(alignment: .leading, spacing: 2) {
                 Text(name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white)
-                if let sent {
-                    Label("Sent " + sent, systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(isMinor ? 1 : 0.7))
+
+                if !isMinor {
+                    Text("admin")
+                        .font(.system(size: 9.5, weight: .medium))
+                        .foregroundStyle(.white.opacity(0.3))
+                        .padding(.horizontal, 5).padding(.vertical, 1.5)
+                        .background(.white.opacity(0.06), in: Capsule())
+                }
+
+                Spacer(minLength: 6)
+
+                if let sentTitle {
+                    Label("Sent", systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 10.5))
                         .foregroundStyle(Palette.accent.opacity(0.9))
-                        .lineLimit(1)
-                } else {
-                    Text(status)
-                        .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.42))
+                        .help("Sent " + sentTitle)
                 }
             }
 
-            Spacer(minLength: 8)
-
-            if let device {
-                Image(systemName: device.kind.icon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.35))
-                    .help("\(device.name) — last seen "
-                          + device.lastSeen.formatted(date: .abbreviated, time: .shortened))
-            } else if let expected {
-                Image(systemName: expected.icon)
-                    .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.16))
-                    .help("Expected, but this device has not opened the app yet")
-            }
+            deviceRows
+                .padding(.leading, 38)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
-        .background(
-            isOver ? Palette.accent.opacity(0.12) : .clear,
-            in: RoundedRectangle(cornerRadius: 9)
-        )
-        .overlay {
-            RoundedRectangle(cornerRadius: 9)
-                .strokeBorder(isOver ? Palette.accent.opacity(0.4) : .clear)
-        }
-        .animation(.easeOut(duration: 0.12), value: isOver)
-        .animation(.easeOut(duration: 0.18), value: sent)
-        .help("Drag a channel or video from the Saved panel onto \(name) to send it")
     }
 
-    /// Says the gap where there is one, because the gap is the thing worth knowing.
-    private var status: String {
-        guard approved > 0 else { return "nothing sent yet" }
-        guard let device else { return "\(approved) sent · no device yet" }
-        let waiting = max(0, approved - device.downloaded)
-        if waiting == 0 { return "\(approved) sent · all downloaded" }
-        return "\(approved) sent · \(waiting) still coming"
+    @ViewBuilder
+    private var deviceRows: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            if devices.isEmpty {
+                slot(icon: expected?.icon ?? "questionmark.circle",
+                     text: expected == nil ? "no device yet" : "not seen yet",
+                     detail: nil)
+            } else {
+                ForEach(devices) { device in
+                    slot(icon: device.kind.icon,
+                         text: device.kind.noun.capitalized,
+                         detail: isMinor && approved != nil
+                            ? "\(device.downloaded) of \(approved ?? 0)"
+                            : device.lastSeen.formatted(date: .omitted, time: .shortened))
+                }
+            }
+        }
+    }
+
+    private func slot(icon: String, text: String, detail: String?) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon).font(.system(size: 10.5))
+            Text(text).font(.system(size: 11))
+            if let detail {
+                Text("· " + detail)
+                    .font(.system(size: 10.5).monospacedDigit())
+                    .foregroundStyle(.white.opacity(0.3))
+            }
+            Spacer(minLength: 4)
+        }
+        .foregroundStyle(.white.opacity(devices.isEmpty ? 0.28 : 0.45))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(
+            isOver ? Palette.accent.opacity(0.14) : .white.opacity(0.03),
+            in: RoundedRectangle(cornerRadius: 7)
+        )
+        .overlay {
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(isOver ? Palette.accent.opacity(0.45) : .white.opacity(0.05))
+        }
+        .contentShape(RoundedRectangle(cornerRadius: 7))
+        .modifier(DropTarget(onDrop: onDrop))
+        .help("Drop a channel or video here to send it to " + name)
+        .animation(.easeOut(duration: 0.12), value: isOver)
+    }
+}
+
+/// Applied to every device slot, but only live for those that can receive. An admin's
+/// slot has no drop destination at all rather than one that refuses — a target that
+/// highlights and then declines is worse than one that never lit up.
+private struct DropTarget: ViewModifier {
+    let onDrop: ((SendPayload?, Bool) -> Void)?
+
+    func body(content: Content) -> some View {
+        if let onDrop {
+            content.dropDestination(for: String.self) { items, _ in
+                guard let raw = items.first,
+                      let payload = SendPayload(encoded: raw) else { return false }
+                onDrop(payload, false)
+                return true
+            } isTargeted: { targeted in
+                onDrop(nil, targeted)
+            }
+        } else {
+            content
+        }
     }
 }
 

@@ -64,10 +64,24 @@ final class AppModel {
         }
 
         // A guardian's phone: appear on the family list even before a first approval,
-        // and report this device.
+        // report this device, and fetch anything another admin has sent here.
         guard let guardian = profiles.guardian else { return }
         await shelf.announce(guardian: guardian)
-        await shelf.announce(person: (guardian.id, guardian.name), isMinor: false)
+
+        // Never sweeping. On this device the local files are the guardian's own library,
+        // and the shelf is only a list of things other people addressed to them — so an
+        // absence from it means "nobody sent me that", not "delete it".
+        await reconciler.reconcile(for: Profiles.Minor(id: guardian.id, name: guardian.name),
+                                   shelf: shelf,
+                                   downloads: downloads,
+                                   localFiles: localFiles,
+                                   sweeping: false)
+
+        let approved = shelf.approved(for: guardian.id).count
+        await shelf.announce(person: (guardian.id, guardian.name),
+                             isMinor: false,
+                             approved: approved,
+                             downloaded: max(0, approved - reconciler.awaiting))
     }
 
     // MARK: - Input
