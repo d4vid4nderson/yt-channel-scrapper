@@ -62,7 +62,7 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: YT Scraper
+        CFBundleDisplayName: Command Center
         # App Store Connect rejects an upload without this (ITMS-90713), and nothing
         # catches it until you try. Xcode injects it for itself when it generates the
         # Info.plist, but this target supplies its own, so `actool` writes the nested
@@ -117,7 +117,7 @@ targets:
         # The exported library type, matching Model/LibraryType.swift.
         UTExportedTypeDeclarations:
           - UTTypeIdentifier: com.d4vid4nderson.ytchannelscraper.library
-            UTTypeDescription: YT Channel Scraper Library
+            UTTypeDescription: YT Parent Command Center Library
             UTTypeConformsTo: [public.json]
             UTTypeTagSpecification:
               public.filename-extension: [ytcslibrary]
@@ -140,7 +140,7 @@ targets:
         # the xcconfig — target-level build settings outrank it — which made the
         # "change this if the id is taken" note over there a lie.
         PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper)
-        INFOPLIST_KEY_CFBundleDisplayName: YT Scraper
+        INFOPLIST_KEY_CFBundleDisplayName: Command Center
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad

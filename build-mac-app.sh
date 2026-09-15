@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 WANT_DMG=
 [ "${1:-}" = "--dmg" ] && WANT_DMG=1
 
-APP_NAME="YT Channel Scraper"
+APP_NAME="YT Parent Command Center"
 BUNDLE_ID="com.d4vid4nderson.ytchannelscraper"
 # Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
 VERSION="${VERSION:-2.4.1}"
@@ -280,13 +280,52 @@ Rez -append "$RSRC/icon.rsrc" -o "$DMG"                   # and appended to the 
 SetFile -a C "$DMG"
 rm -rf "$RSRC"
 
+# Notarisation. Only possible with a Developer ID identity — Apple will not notarise an
+# ad-hoc or development signature — and only worth doing for a .dmg somebody else will
+# download, because the quarantine flag is what makes it necessary.
+#
+# Credentials come from ios/Local.release.env, the same App Store Connect API key the iOS
+# release script uses. Notarisation needs far less from a key than provisioning does, so a
+# key that cannot create profiles can still do this.
+notarised=
+case "$IDENTITY" in
+  "Developer ID Application"*)
+    # shellcheck disable=SC1091
+    [ -f ios/Local.release.env ] && . ./ios/Local.release.env
+    KEY_PATH="${ASC_KEY_PATH:-$HOME/.appstoreconnect/private_keys/AuthKey_${ASC_KEY_ID:-}.p8}"
+    KEY_PATH="${KEY_PATH/#\~/$HOME}"
+    if [ -n "${ASC_KEY_ID:-}" ] && [ -n "${ASC_ISSUER_ID:-}" ] && [ -f "$KEY_PATH" ]; then
+      echo "==> notarising (a few minutes; Apple is doing the work)"
+      if xcrun notarytool submit "$DMG" --key "$KEY_PATH" --key-id "$ASC_KEY_ID" \
+           --issuer "$ASC_ISSUER_ID" --wait; then
+        # Stapling writes the ticket into the .dmg so it opens on a machine that is
+        # offline — without it Gatekeeper has to ask Apple at first launch.
+        xcrun stapler staple "$DMG" && notarised=1
+      else
+        echo "    notarisation failed — the dmg is signed but will be quarantined"
+      fi
+    else
+      echo "    no App Store Connect key in ios/Local.release.env; skipping notarisation"
+    fi
+    ;;
+esac
+
 DMG_SIZE=$(du -sh "$DMG" | cut -f1)
 echo "==> done: $DMG ($DMG_SIZE)"
 echo
 echo "    To publish it — this is what the app's own updater reads:"
 echo "        gh release create v$VERSION \"$DMG\" --title \"v$VERSION\" --notes \"…\""
 echo
-echo "    Ad-hoc signed, not notarised. A copy downloaded through a browser carries"
-echo "    the quarantine flag, and Gatekeeper refuses ad-hoc-signed apps from"
-echo "    quarantine. Recipients need Privacy & Security -> Open Anyway, or:"
-echo "        xattr -dr com.apple.quarantine \"/Applications/$APP_NAME.app\""
+if [ -n "$notarised" ]; then
+  echo "    Signed and notarised. It opens on any Mac with no warning."
+else
+  echo "    Not notarised. A copy downloaded through a browser carries the quarantine"
+  echo "    flag, and Gatekeeper refuses it. Recipients need Privacy & Security ->"
+  echo "    Open Anyway, or:"
+  echo "        xattr -dr com.apple.quarantine \"/Applications/$APP_NAME.app\""
+  echo
+  echo "    To sign and notarise properly you need a Developer ID Application"
+  echo "    certificate (Xcode -> Settings -> Accounts -> Manage Certificates -> +):"
+  echo "        YTCS_MAC_IDENTITY=\"Developer ID Application: … (TEAMID)\" \\"
+  echo "        YTCS_MAC_PROFILE=~/Downloads/YTCS_Mac.provisionprofile ./build-mac-app.sh --dmg"
+fi

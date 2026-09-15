@@ -2,6 +2,12 @@ import Foundation
 
 /// Where the app's binaries and files live.
 enum Paths {
+    /// What the user sees. Deliberately *not* the same string as `appName`.
+    static let displayName = "YT Parent Command Center"
+
+    /// The name on disk, and only that — Application Support and Downloads both hang off
+    /// it. Changing it to match the display name orphans every saved channel and every
+    /// downloaded file. See the fuller note in the iOS copy of this file.
     static let appName = "YT Channel Scraper"
 
     /// The vendored ffmpeg / ffprobe / deno / yt-dlp, wherever this copy is running from.

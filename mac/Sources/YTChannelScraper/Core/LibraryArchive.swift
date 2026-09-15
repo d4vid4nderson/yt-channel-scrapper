@@ -17,7 +17,7 @@ struct LibraryArchive: Codable, Sendable {
     static let fileExtension = "ytcslibrary"
 
     var format: Int = LibraryArchive.currentFormat
-    var app: String = Paths.appName
+    var app: String = Paths.displayName
     var exportedAt: Date = Date()
     var channels: [Channel]
     var videos: [Video]
@@ -84,7 +84,7 @@ struct LibraryArchive: Codable, Sendable {
     /// What to call the file. Dated, because the point of one is that it is a snapshot.
     static var suggestedFilename: String {
         let stamp = Date().formatted(.iso8601.year().month().day().dateSeparator(.dash))
-        return "\(Paths.appName) Library \(stamp).\(fileExtension)"
+        return "\(Paths.displayName) Library \(stamp).\(fileExtension)"
     }
 
     enum Failure: LocalizedError {
@@ -94,7 +94,7 @@ struct LibraryArchive: Codable, Sendable {
         var errorDescription: String? {
             switch self {
             case .unreadable:
-                "That file is not a \(Paths.appName) library."
+                "That file is not a \(Paths.displayName) library."
             case .tooNew:
                 "That library was made by a newer version of the app."
             }

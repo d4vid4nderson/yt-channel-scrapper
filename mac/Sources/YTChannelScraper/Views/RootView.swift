@@ -195,7 +195,7 @@ struct RootView: View {
                     HStack(spacing: 16) {
                         BrandMark(width: 62)
                             .matchedGeometryEffect(id: "brand", in: hero)
-                        Text("YT Channel Scraper")
+                        Text(Paths.displayName)
                             .font(.system(size: 40, weight: .bold))
                             .foregroundStyle(.white)
                             .fixedSize()

@@ -23,7 +23,7 @@ struct AppUpdateSheet: View {
         HStack(spacing: 12) {
             BrandMark(width: 34)
             VStack(alignment: .leading, spacing: 2) {
-                Text("YT Channel Scraper")
+                Text(Paths.displayName)
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(.white)
                 Text(updater.current.isEmpty ? "Installed version unknown" : "Version \(updater.current)")

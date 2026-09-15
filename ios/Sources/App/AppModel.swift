@@ -337,7 +337,7 @@ final class AppModel {
     func exportSelection(channelIDs: Set<String>, videoIDs: Set<String>) throws -> URL {
         let picked = library.archive(channelIDs: channelIDs, videoIDs: videoIDs)
         let what = Library.summary(of: picked)
-        let name = "\(Paths.appName) — \(what).\(LibraryArchive.fileExtension)"
+        let name = "\(Paths.displayName) — \(what).\(LibraryArchive.fileExtension)"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try picked.write(to: url)
         return url
@@ -351,7 +351,7 @@ final class AppModel {
     func exportLibrary(_ contents: Library.Contents) throws -> URL {
         let what = contents == .both ? "Library" : contents.short
         let stamp = Date().formatted(.iso8601.year().month().day().dateSeparator(.dash))
-        let name = "\(Paths.appName) \(what) \(stamp).\(LibraryArchive.fileExtension)"
+        let name = "\(Paths.displayName) \(what) \(stamp).\(LibraryArchive.fileExtension)"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(name)
         try library.export(contents, to: url)
         return url

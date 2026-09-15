@@ -12,11 +12,26 @@ import Foundation
 /// another player, or copy it off over a cable. A downloader whose files can only be
 /// opened by the downloader is not much of a downloader.
 enum Paths {
-    /// Matches the Mac app's name so an exported library reads as coming from the same
-    /// product. `LibraryArchive` stamps it into the file.
+    /// What the user sees. Changed when the app was renamed; deliberately *not* the
+    /// same string as `appName` below.
+    static let displayName = "YT Parent Command Center"
+
+    /// The name on disk, and only that.
+    ///
+    /// **Do not change this to match the display name.** It is the directory the library
+    /// and the downloads live in, on both platforms:
+    ///
+    ///     ~/Library/Application Support/YT Channel Scraper
+    ///     ~/Downloads/YT Channel Scraper            (Mac)
+    ///
+    /// Renaming it points the app at a new empty folder and the saved channels appear to
+    /// have been deleted — the files are still there, just somewhere the app no longer
+    /// looks. That has already happened once on a phone and is not worth repeating for
+    /// the sake of a tidier path. Moving it would need a migration that renames the
+    /// directory on first launch, which is a deliberate change and not a rename.
     static let appName = "YT Channel Scraper"
 
-    /// Visible in Files under "On My iPhone → YT Scraper".
+    /// Visible in Files under "On My iPhone → Command Center".
     static let downloads: URL = {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return ensure(documents)
