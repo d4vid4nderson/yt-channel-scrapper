@@ -84,11 +84,15 @@ struct FamilySheet: View {
             Text("Shared folder")
                 .font(.system(size: 12, weight: .semibold)).foregroundStyle(.secondary)
             HStack {
-                Text(shelf.folder?.lastPathComponent ?? "Not chosen")
+                // Not `lastPathComponent`: iCloud Drive's root is literally named
+                // "com~apple~CloudDocs", which tells a parent nothing and hides the fact
+                // that they may have picked the root rather than a folder inside it.
+                Text(folderLabel)
                     .font(.system(size: 13))
                     .foregroundStyle(shelf.folder == nil ? .secondary : .primary)
                     .lineLimit(1)
-                    .truncationMode(.middle)
+                    .truncationMode(.head)
+                    .help(shelf.folder?.path ?? "")
                 Spacer()
                 Button(shelf.folder == nil ? "Choose…" : "Change…", action: pickFolder)
                 if shelf.folder != nil {
@@ -102,6 +106,15 @@ struct FamilySheet: View {
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    /// The last two components, with iCloud Drive's container name translated back into
+    /// what Finder calls it.
+    private var folderLabel: String {
+        guard let url = shelf.folder else { return "Not chosen" }
+        let parts = url.pathComponents.filter { $0 != "/" }
+        let readable = parts.map { $0 == "com~apple~CloudDocs" ? "iCloud Drive" : $0 }
+        return readable.suffix(2).joined(separator: " / ")
     }
 
     private func pickFolder() {
