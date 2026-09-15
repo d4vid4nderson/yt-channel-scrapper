@@ -18,9 +18,9 @@ struct FamilyStrip: View {
     var body: some View {
         Group {
             if model.profiles.guardian == nil || model.shelf.folder == nil {
-                setup("Set up your family to send videos to a child", "person.2.badge.plus")
+                setup("Set up your family to send videos to a minor", "person.2.badge.plus")
             } else if model.shelf.roster.isEmpty {
-                setup("Add a child to send videos to", "person.badge.plus")
+                setup("Add a minor to send videos to", "person.badge.plus")
             } else {
                 roster
             }
@@ -102,7 +102,7 @@ struct FamilyStrip: View {
         }
         .buttonStyle(.plain)
         .pointingHand()
-        .help("\(minor.name)'s shelf — send with the ⋯ on any video")
+        .help("Manage family — send to \(minor.name) with the ⋯ on any video")
     }
 
     /// What this child has, and on what. The device line is the honest one — it only

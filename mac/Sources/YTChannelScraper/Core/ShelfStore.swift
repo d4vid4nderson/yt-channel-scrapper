@@ -275,14 +275,39 @@ final class ShelfStore {
     @discardableResult
     func removePerson(_ id: UUID, as guardian: Profiles.Guardian) async -> Bool {
         guard id != guardian.id else { return false }   // never yourself
-        let name = declared.first { $0.id == id }?.name
+
+        // Refuse rather than invent. Removing somebody who is already gone — a double
+        // click, a stale row — used to write a tombstone named "Removed" with the wrong
+        // role into a file both parents read.
+        let known = declared.first { $0.id == id }
+        let name = known?.name
             ?? roster.first { $0.id == id }?.name
             ?? guardians.first { $0.id == id }?.name
-            ?? "Removed"
-        let isMinor = roster.contains { $0.id == id }
+        guard let name else { return false }
+
+        let isMinor = known?.isMinor ?? roster.contains { $0.id == id }
         var stone = FamilyMember(id: id, name: name, isMinor: isMinor)
         stone.isRemoved = true
         return await write(stone, as: guardian)
+    }
+
+    /// Change somebody between parent and child after the fact.
+    ///
+    /// Writes the corrected entry into this guardian's own file; the union's newest-wins
+    /// rule does the rest. A child promoted to parent keeps their shelf files — nothing
+    /// is deleted — they simply stop being somebody you can send to, and `recompute`
+    /// takes them out of the roster even though those files still name them.
+    @discardableResult
+    func setRole(_ id: UUID, isMinor: Bool, as guardian: Profiles.Guardian) async -> Bool {
+        guard id != guardian.id else { return false }
+        let existing = declared.first { $0.id == id }
+        let name = existing?.name
+            ?? roster.first { $0.id == id }?.name
+            ?? guardians.first { $0.id == id }?.name
+        guard let name else { return false }
+        var member = FamilyMember(id: id, name: name, isMinor: isMinor)
+        member.isClaimed = existing?.isClaimed ?? false
+        return await write(member, as: guardian)
     }
 
     /// Mark a person as claimed, so the list stops saying nobody is using that identity.
@@ -337,9 +362,14 @@ final class ShelfStore {
                 children[member.id] = nil
                 continue
             }
+            // The declared role is authoritative, so it has to clear the other bucket:
+            // a child promoted to parent still has shelf files carrying their name, and
+            // `roster(from:)` would keep deriving them as a child from those.
             if member.isMinor {
+                adults[member.id] = nil
                 children[member.id] = Profiles.Minor(id: member.id, name: member.name)
             } else {
+                children[member.id] = nil
                 adults[member.id] = Profiles.Guardian(id: member.id, name: member.name)
             }
         }

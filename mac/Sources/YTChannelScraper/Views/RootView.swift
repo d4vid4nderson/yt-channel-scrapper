@@ -134,14 +134,14 @@ struct RootView: View {
     private var chrome: some ToolbarContent {
         ToolbarItemGroup(placement: .primaryAction) {
             PanelToggle(
-                icon: "rectangle.leadingthird.inset.filled",
-                title: "Saved channels",
+                icon: "bookmark.fill",
+                title: "Saved",
                 isOn: model.showChannelsDrawer,
-                help: "The channels you have saved  (⌘1)",
+                help: "The channels and videos you have saved  (⌘1)",
                 toggle: model.toggleChannelsDrawer
             )
             PanelToggle(
-                icon: "rectangle.bottomthird.inset.filled",
+                icon: "arrow.down.circle.fill",
                 title: "Downloads",
                 // A dot, not a tally: that something is running is the part worth a mark
                 // on the chrome, and the panel one click away has the numbers.
