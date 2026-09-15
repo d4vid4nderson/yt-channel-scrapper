@@ -2,24 +2,33 @@ import SwiftUI
 
 /// What other people have sent to this device, and a way to keep it.
 ///
-/// Only a guardian sees this. On a minor's device the shelf *is* the library — anything
-/// sent is added on sync, because a child did not ask for any of it and a screen asking
-/// them to accept what a parent already decided would be ceremony. Between adults it is a
-/// suggestion, and a suggestion you cannot decline is not one.
+/// A tab on both kinds of device, doing a different job on each. For an admin it is a
+/// queue: things another admin sent, waiting to be kept or ignored — between adults a
+/// send is a suggestion, and a suggestion you cannot decline is not one. For a minor it
+/// is a record: what has been sent is already on their shelves and already downloading,
+/// because a child did not ask for any of it and a screen asking them to accept what a
+/// parent already decided would be ceremony.
 ///
 /// Everything here is drawn from the shelf entries alone — an id, a title, and for a
 /// video its channel. That is the whole point of carrying those three fields: this screen
 /// works with no network, and makes no request to YouTube for anything it lists.
 struct InboxView: View {
     @Bindable var model: AppModel
-    @Environment(\.dismiss) private var dismiss
 
+    /// What is waiting to be kept — an admin's view.
     private var waiting: (channels: [Channel], videos: [Video]) { model.unclaimedSent }
+    /// Everything ever sent here — a minor's view, since theirs is added automatically
+    /// and a list of "things to accept" would always be empty.
+    private var everything: (channels: [Channel], videos: [Video]) { model.sent }
+
+    private var isMinor: Bool { model.isMinor }
 
     var body: some View {
         NavigationStack {
             Group {
-                if model.inboxCount == 0 {
+                if isMinor {
+                    minorList
+                } else if model.inboxCount == 0 {
                     Placeholder(
                         icon: "tray",
                         title: "Nothing new",
@@ -27,37 +36,71 @@ struct InboxView: View {
                             + "waits here until you keep it."
                     )
                 } else {
-                    list
+                    adminList
                 }
             }
             .ground()
-            .navigationTitle("Sent to you")
+            .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button("Done") { dismiss() }
-                }
                 ToolbarItem(placement: .topBarTrailing) {
-                    if model.inboxCount > 0 {
-                        Button("Keep All") {
-                            model.claimSent()
-                            dismiss()
-                        }
-                        .font(.system(size: 16, weight: .semibold))
+                    if !isMinor, model.inboxCount > 0 {
+                        Button("Keep All") { model.claimSent() }
+                            .font(.system(size: 16, weight: .semibold))
                     }
                 }
             }
+            .task { await model.syncShelf() }
         }
     }
 
-    private var list: some View {
+    // MARK: - A minor's phone
+
+    /// Read-only, and says so. There is nothing to accept: it is already on their
+    /// shelves and the approved videos are already downloading.
+    @ViewBuilder
+    private var minorList: some View {
+        if everything.channels.isEmpty && everything.videos.isEmpty {
+            Placeholder(
+                icon: "tray",
+                title: "Nothing yet",
+                detail: "Channels and videos a grown-up sends you will show up here, and "
+                    + "on your Home shelves."
+            )
+        } else {
+            List {
+                if !everything.channels.isEmpty {
+                    Section {
+                        ForEach(everything.channels) { channel in
+                            ChannelRow(channel: channel, isSaved: true)
+                                .listRowBackground(Color.card)
+                        }
+                    } header: { header("Channels") }
+                }
+                if !everything.videos.isEmpty {
+                    Section {
+                        ForEach(everything.videos) { video in
+                            Button { model.play(video) } label: {
+                                VideoRow(video: video, isSaved: true, showChannel: true)
+                            }
+                            .listRowBackground(Color.card)
+                        }
+                    } header: { header("Videos") }
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    // MARK: - An admin's phone
+
+    private var adminList: some View {
         List {
             if !waiting.channels.isEmpty {
                 Section {
                     ForEach(waiting.channels) { channel in
-                        row(ChannelRow(channel: channel)) {
-                            model.library.add(channel)
-                        }
+                        row(ChannelRow(channel: channel)) { model.library.add(channel) }
                     }
                 } header: {
                     header("Channels")
@@ -74,9 +117,7 @@ struct InboxView: View {
                             model.library.toggleVideo(video, channel: nil)
                         }
                     }
-                } header: {
-                    header("Videos")
-                }
+                } header: { header("Videos") }
             }
         }
         .listStyle(.plain)

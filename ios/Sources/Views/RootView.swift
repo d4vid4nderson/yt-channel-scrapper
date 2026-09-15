@@ -67,6 +67,14 @@ struct RootView: View {
                     .tag(AppModel.Tab.search)
             }
 
+            // What has been sent to this device. Third for an admin, second for a minor,
+            // because a minor has no Search tab — the same position in the list either
+            // way, which is what keeps the two layouts feeling like one app.
+            InboxView(model: model)
+                .tabItem { Label("Inbox", systemImage: "tray") }
+                .badge(model.isMinor ? 0 : model.inboxCount)
+                .tag(AppModel.Tab.inbox)
+
             DownloadsView(model: model)
                 .tabItem {
                     Label(model.isMinor ? "Downloaded" : "Downloads",

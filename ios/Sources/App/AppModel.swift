@@ -120,7 +120,7 @@ final class AppModel {
     /// `.search` stays in the enum in Minor Mode even though the tab is not offered —
     /// removing the case would mean every switch over it needing a minor-only shape.
     /// `enterMinorMode()` makes sure nothing is left pointing at it.
-    enum Tab: Hashable { case home, search, downloads }
+    enum Tab: Hashable { case home, search, inbox, downloads }
     var tab: Tab = .home
 
     /// The pushed channel stack for each tab that has one. Held here rather than in the
