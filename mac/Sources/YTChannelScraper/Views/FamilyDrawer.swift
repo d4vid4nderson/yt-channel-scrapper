@@ -491,7 +491,7 @@ private struct PersonRow: View {
         // Claiming an identity somebody else created happens once, on one machine, ever.
         // A button for it on every unclaimed row was permanent furniture for a one-off.
         .contextMenu {
-            if unclaimed, !isYou, let claim {
+            if !isYou, let claim {
                 Button("This is me — sign my approvals as \(name)", action: claim)
             }
         }

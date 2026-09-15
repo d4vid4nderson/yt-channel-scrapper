@@ -447,7 +447,13 @@ final class ShelfStore {
         return newest.values.map(\.0)
     }
 
-    /// Whether this person exists only as a name somebody typed.
+    /// Whether nobody has used this identity yet — a name typed by an admin that no
+    /// device has adopted.
+    ///
+    /// Information, not permission. It used to gate the "this is me" action, which meant
+    /// the one identity worth adopting — the one that has been doing the approving — was
+    /// the only one that could not be. Somebody adding their second device is the common
+    /// case, not an edge one.
     func isUnclaimed(_ id: UUID) -> Bool {
         guard let member = declared.first(where: { $0.id == id }) else { return false }
         if member.isClaimed { return false }

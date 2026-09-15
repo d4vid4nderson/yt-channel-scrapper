@@ -22,6 +22,8 @@ struct FamilyView: View {
     @State private var newIsMinor = true
     @State private var working = false
     @State private var removing: Profiles.Guardian?
+    @State private var claiming: Profiles.Guardian?
+    @State private var showingInbox = false
 
     private var profiles: Profiles { model.profiles }
     private var shelf: ShelfStore { model.shelf }
@@ -31,7 +33,10 @@ struct FamilyView: View {
             List {
                 you
                 folder
-                if profiles.guardian != nil, shelf.folder != nil { children }
+                if profiles.guardian != nil, shelf.folder != nil {
+                    children
+                    if !profiles.isMinor { inbox }
+                }
             }
             .listStyle(.insetGrouped)
             .scrollContentBackground(.hidden)
@@ -64,6 +69,20 @@ struct FamilyView: View {
                      : "This creates the identity their approvals will be signed with. On "
                         + "their own device they pick their name here to claim it.")
             }
+            .alert("Sign as \(claiming?.name ?? "")?",
+                   isPresented: Binding(get: { claiming != nil },
+                                        set: { if !$0 { claiming = nil } })) {
+                Button("This is me") {
+                    if let target = claiming { claim(target) }
+                    claiming = nil
+                }
+                Button("Cancel", role: .cancel) { claiming = nil }
+            } message: {
+                Text("This device takes on that identity, so anything you approve is "
+                     + "signed with it and anything sent to them arrives here. Use it "
+                     + "when the person is you on another device — not to act as "
+                     + "somebody else.")
+            }
             .alert("Remove \(removing?.name ?? "")?",
                    isPresented: Binding(get: { removing != nil },
                                         set: { if !$0 { removing = nil } })) {
@@ -74,6 +93,7 @@ struct FamilyView: View {
                      + "shelf stays in the folder, and past approvals keep the name they "
                      + "were signed with. Adding the same name later makes a new person.")
             }
+            .sheet(isPresented: $showingInbox) { InboxView(model: model) }
             .task {
                 name = profiles.guardian?.name ?? ""
                 await model.syncShelf()
@@ -164,6 +184,30 @@ struct FamilyView: View {
 
     // MARK: - Children
 
+    /// Always shown, even at zero. The badge on Home appears only when something is
+    /// waiting, which is right for the toolbar and wrong here — this is the screen
+    /// somebody opens *looking* for it.
+    private var inbox: some View {
+        Section {
+            Button {
+                showingInbox = true
+            } label: {
+                HStack {
+                    Label("Sent to you", systemImage: "tray")
+                        .foregroundStyle(Color.primaryText)
+                    Spacer()
+                    Text("\(model.inboxCount)")
+                        .font(.system(size: 13).monospacedDigit())
+                        .foregroundStyle(model.inboxCount > 0 ? Palette.accent : Color.secondaryText)
+                }
+            }
+            .listRowBackground(Color.card)
+        } footer: {
+            Text("Things other admins have sent you wait here until you keep them. "
+                 + "Anything already on your shelves is not listed.")
+        }
+    }
+
     private var children: some View {
         Section {
             // Adults are listed, not added: a guardian's identity is created on their own
@@ -180,8 +224,8 @@ struct FamilyView: View {
                         .background(Color.white.opacity(0.08), in: Capsule())
                     Spacer()
                     devices(for: guardian.id)
-                    if guardian.id != profiles.guardian?.id, shelf.isUnclaimed(guardian.id) {
-                        Button("This is me") { claim(guardian) }
+                    if guardian.id != profiles.guardian?.id {
+                        Button("This is me") { claiming = guardian }
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(Palette.accent)
                             .buttonStyle(.plain)
