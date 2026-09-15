@@ -1,39 +1,39 @@
-Your library now lives in iCloud, so deleting the app no longer loses it.
+The app is now YT Parent Command Center. On the home screen it reads "Command Center".
 
-The saved channels and videos are mirrored to iCloud on every change. Delete the app,
-reinstall it, and the shelf comes back on first launch with nothing to restore by hand.
-Home -> the ... menu says which state it is in: "Saved to iCloud", or the reason it is not.
+Nothing moved on disk. The name you see and the folder the library lives in are
+deliberately two different things, so renaming the app did not hide your saved channels
+the way the earlier bundle-id change did. If your shelf was there before this build, it
+should still be there after it.
 
-It is last-writer-wins on the whole library rather than a merge, which means deleting a
-channel actually deletes it instead of reappearing from the other copy. The trade is that
-edits made on two devices between syncs can lose one side.
+New: Send to Device. Home -> ... -> Send to Device. Tick the exact channels and videos you
+want somebody else to have, and it exports just those through the share sheet — AirDrop,
+Messages, whatever. The other phone imports it with Home -> ... -> Import Library.
 
-Minor Mode, which did not reach anyone on the last build.
+Read the warning on that screen before ticking a channel. A channel gives them everything
+in it, including whatever it uploads next. A video gives them that one video and nothing
+else. Videos-only is the tighter choice.
 
-Home -> ... -> Minor Mode. Set a four-digit PIN, then turn it on. The Search tab
-disappears, downloading goes with it, and what is left is the channels and videos you
-saved plus anything already downloaded. The lock button top right is the way back out and
-it costs the PIN. It survives a restart and a reinstall — the PIN lives in the Keychain.
+Still worth re-testing from the last build, because this is the first one most of you will
+actually have:
 
-Face ID is offered but starts switched off on purpose: on a child's own phone the enrolled
-face is theirs, not yours.
-
-Exporting and importing now ask what you want. Export Library offers channels, videos or
-both. Import Library reads the file first and tells you what is in it before you choose.
+- Minor Mode. Home -> ... -> Minor Mode, set a PIN, turn it on. Search disappears,
+  downloading goes with it. The lock button top right is the way back and costs the PIN.
+- iCloud. Save a channel, delete the app, reinstall from TestFlight. It should come back
+  on first launch. This is the one that matters most — it is the thing that failed.
+- Export and import now ask for channels, videos or both, and import tells you what is in
+  the file before you choose.
 
 Worth trying:
-- Save a few channels. Delete the app. Reinstall from TestFlight. They should come back.
-- Turn Minor Mode on, force-quit, reopen. Still locked.
+- Check the app name and icon look right, on the home screen and in Settings.
+- Send two videos to another device and confirm no channels arrive with them.
+- Import the same file twice. The second time should say there is nothing new.
 - Four wrong PINs is free; the fifth starts making you wait.
-- Export videos only, import it somewhere else. No channels should arrive.
-- Import the same file twice — the second time should say there is nothing new.
-- Sign out of iCloud and open the app. The menu should say so rather than claiming a
-  backup that is not happening.
 
-Known limits: Minor Mode is a switch inside this app. It does not stop anyone opening
-Safari or the real YouTube — that is Screen Time's job. And the iCloud copy is capped at
-1MB, which is thousands of channels; a library past that says so rather than silently
-failing.
+Not in this build, so do not go looking for it: the guardian shelf — shared approvals
+between two parents through an iCloud Drive folder — is written and tested but has no
+screens yet. There is nothing to see.
 
-Also fixed: Import Library could not see files this app had exported (the bundle declared
-the wrong filename extension), and importing no longer reshuffles videos you had saved.
+Known and deliberate: Minor Mode is a switch inside this app. It does not stop anyone
+opening Safari or the real YouTube; that is Screen Time's job. And videos in Minor Mode
+currently stream, which means YouTube's ads. The ad-free guarantee arrives with the shelf,
+which plays only downloaded files.

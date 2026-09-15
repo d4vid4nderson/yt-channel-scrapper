@@ -79,7 +79,22 @@ load_key() {
 # falls back to the Apple ID signed into Xcode, which is enough for a one-off upload.
 # Run by launchd at three in the morning it is not optional: that session prompts, and
 # eventually expires, and nobody is there to notice either.
+# An API key that App Store Connect accepts is not necessarily one the *developer
+# portal* accepts. A key without Admin rights reads TestFlight happily and is then
+# refused for provisioning, which fails the archive with
+#
+#   Unable to find a team with the given Content Provider ID '…' to which you belong
+#
+# and, confusingly, two follow-on errors about missing capabilities. Handing xcodebuild
+# no key at all is better in that case: it falls back to the Apple ID signed into Xcode,
+# which usually has the portal access the key lacks.
+#
+#   YTCS_IGNORE_KEY=1 ./release.sh
+#
+# The real fix is a key with the Admin role; this exists so a half-privileged one does
+# not mean moving Local.release.env out of the way by hand every time.
 have_key() {
+  [ -z "${YTCS_IGNORE_KEY:-}" ] || return 1
   load_key
   [ -n "$ASC_KEY_ID" ] && [ -n "$ASC_ISSUER_ID" ] && [ -f "$ASC_KEY_PATH" ]
 }
