@@ -1,39 +1,39 @@
-The app is now YT Parent Command Center. On the home screen it reads "Command Center".
+This is the build that can receive things sent from the Mac.
 
-Nothing moved on disk. The name you see and the folder the library lives in are
-deliberately two different things, so renaming the app did not hide your saved channels
-the way the earlier bundle-id change did. If your shelf was there before this build, it
-should still be there after it.
+Set it up first — Home -> ... -> Family:
+1. Type your name. It is what your approvals get signed with, so the other admin can see
+   who decided what.
+2. Choose the shared folder. It has to be the same iCloud Drive folder the Mac is pointed
+   at, shared with the other admin in Files. No app can create or share that folder for
+   you, which is why this step is by hand.
+3. Add people. Minors are who you send to; admins are the other grown-ups. A person added
+   as the wrong one can be fixed later rather than removed and re-added.
 
-New: Send to Device. Home -> ... -> Send to Device. Tick the exact channels and videos you
-want somebody else to have, and it exports just those through the share sheet — AirDrop,
-Messages, whatever. The other phone imports it with Home -> ... -> Import Library.
+Then, on the Mac, drag a channel or a video from the Saved panel onto somebody's device in
+the Dispatch board. What happens on this phone depends on who it is set up as:
 
-Read the warning on that screen before ticking a channel. A channel gives them everything
-in it, including whatever it uploads next. A video gives them that one video and nothing
-else. Videos-only is the tighter choice.
+- An ADMIN's phone gets a tray badge on Home with a count. Open it, swipe to keep what you
+  want, or Keep All. Things sent to you are a suggestion and you can ignore them.
+- A MINOR's phone just gets them. They appear on the Home shelves and approved videos
+  download by themselves. No inbox: a child did not ask for any of it.
 
-Still worth re-testing from the last build, because this is the first one most of you will
-actually have:
-
-- Minor Mode. Home -> ... -> Minor Mode, set a PIN, turn it on. Search disappears,
-  downloading goes with it. The lock button top right is the way back and costs the PIN.
-- iCloud. Save a channel, delete the app, reinstall from TestFlight. It should come back
-  on first launch. This is the one that matters most — it is the thing that failed.
-- Export and import now ask for channels, videos or both, and import tells you what is in
-  the file before you choose.
+Everything the inbox shows is drawn from the decision itself — it makes no request to
+YouTube for any of it, which is the same reason a minor's phone works with no network.
 
 Worth trying:
-- Check the app name and icon look right, on the home screen and in Settings.
-- Send two videos to another device and confirm no channels arrive with them.
-- Import the same file twice. The second time should say there is nothing new.
-- Four wrong PINs is free; the fifth starts making you wait.
+- Set two devices to the same folder and watch somebody appear on both after a sync.
+- Send a video to a minor's phone and check it downloads on its own.
+- Un-send it from the Mac (the same menu, or drag). On a minor's phone the file should be
+  deleted; on an admin's it should not, because an admin's own library is never swept.
+- Send the same thing twice. The second time should change nothing.
+- Anything already on your shelves will not appear in the inbox — that is the filter
+  working, not an empty inbox.
 
-Not in this build, so do not go looking for it: the guardian shelf — shared approvals
-between two parents through an iCloud Drive folder — is written and tested but has no
-screens yet. There is nothing to see.
+Also in this build: a ... menu on every video and channel row for save, download and send.
+Minor Mode gained the guardian/minor identities the family needs, with a migration that
+fails closed — a phone that was locked stays locked and asks an admin which minor it is,
+rather than unlocking itself on upgrade.
 
-Known and deliberate: Minor Mode is a switch inside this app. It does not stop anyone
-opening Safari or the real YouTube; that is Screen Time's job. And videos in Minor Mode
-currently stream, which means YouTube's ads. The ad-free guarantee arrives with the shelf,
-which plays only downloaded files.
+Known limits: only a phone or tablet pulls what it is sent. The Mac has no inbox yet, so
+sending to a Mac records it but that machine will not fetch it. And Minor Mode is a switch
+inside this app — it does not stop anyone opening Safari; that is Screen Time's job.
