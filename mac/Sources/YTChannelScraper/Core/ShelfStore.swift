@@ -282,7 +282,30 @@ final class ShelfStore {
             isMinor: roster.contains { $0.id == person }
         )
         member.sameAs = person
-        return await write(member, as: guardian)
+        guard await write(member, as: guardian) else { return false }
+
+        // Bring the backlog with it, in both directions.
+        //
+        // Attaching is nearly always done *because* something did not arrive, so the
+        // first thing it should do is deliver what was already sent. Copying rather than
+        // waiting for the far device to learn about the alias also means this works
+        // against a device running an older build, which is the realistic case: the
+        // device that got itself a second identity is the one you cannot easily update.
+        let mine = files.filter { $0.guardianID == guardian.id }
+        let toAlias = mine.filter { $0.minorID == person }.flatMap(\.entries)
+        let toPerson = mine.filter { $0.minorID == alias }.flatMap(\.entries)
+
+        if !toAlias.isEmpty {
+            await record(toAlias, for: Profiles.Minor(id: alias, name: name),
+                         as: guardian, spreading: false)
+        }
+        if !toPerson.isEmpty {
+            let to = guardians.first { $0.id == person }?.name
+                ?? roster.first { $0.id == person }?.name ?? name
+            await record(toPerson, for: Profiles.Minor(id: person, name: to),
+                         as: guardian, spreading: false)
+        }
+        return true
     }
 
     /// Every decision about one child, from every guardian.
