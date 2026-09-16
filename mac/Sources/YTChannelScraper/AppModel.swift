@@ -264,6 +264,12 @@ final class AppModel {
         // Both read the state the last run left behind, so they are taken before it goes.
         startedFromResults = hasResults
         openingChannel = channel
+        // Opening a channel from a set of hits throws those hits away, and the only way
+        // back was Home — which also clears the field, so you retyped the search you had
+        // just run. Keep them instead; they cost a few dozen structs.
+        if mode == .channels, search.hasResults {
+            lastSearch = (search.query, search.results)
+        }
         mode = .videos
         search.reset()
         picked = []
@@ -272,6 +278,8 @@ final class AppModel {
     }
 
     func searchChannels() {
+        // These hits become the ones on screen, so there is nothing behind them.
+        lastSearch = nil
         startedFromResults = hasResults
         openingChannel = nil
         mode = .channels
@@ -302,10 +310,35 @@ final class AppModel {
         scrape(opening: channel)
     }
 
+    /// The hits a channel was opened from, if it was opened from any. Held rather than
+    /// re-run: see `ChannelSearch.restore`.
+    private var lastSearch: (query: String, results: [Channel])?
+
+    /// What the back control says it will return to, and whether to show one at all.
+    var searchToReturnTo: String? {
+        guard mode != .channels else { return nil }
+        return lastSearch?.query
+    }
+
+    /// Back to the hits, with the search box saying what it searched for.
+    func returnToSearch() {
+        guard let last = lastSearch else { return }
+        scraper.reset()
+        search.restore(query: last.query, results: last.results)
+        lastSearch = nil
+        startedFromResults = false
+        openingChannel = nil
+        mode = .channels
+        urlText = last.query
+        picked = []
+        filterText = ""
+    }
+
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
         scraper.reset()
         search.reset()
+        lastSearch = nil
         startedFromResults = false
         openingChannel = nil
         mode = .videos

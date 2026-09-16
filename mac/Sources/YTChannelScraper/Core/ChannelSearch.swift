@@ -26,6 +26,18 @@ final class ChannelSearch {
         error = nil
     }
 
+    /// Put a previous set of hits back on screen without asking YouTube for them again.
+    ///
+    /// The results are already in hand — going back should be instant and should not
+    /// spend a request, least of all one that could come back different and lose the hit
+    /// you were about to click.
+    func restore(query: String, results: [Channel]) {
+        stop()
+        self.query = query
+        self.results = results
+        error = nil
+    }
+
     func stop() {
         task?.cancel()
         task = nil

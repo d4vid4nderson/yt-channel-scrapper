@@ -520,6 +520,31 @@ private struct ResultsList: View {
 
     private var controls: some View {
         HStack(spacing: 10) {
+            // First, because it is the only control here that leaves the list rather than
+            // acting on it. Named after what you searched for: "Back" alone makes you
+            // remember, and remembering is the thing that was missing.
+            if let query = model.searchToReturnTo {
+                Button {
+                    model.returnToSearch()
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: "chevron.left")
+                            .font(.system(size: 10, weight: .semibold))
+                        Text(query)
+                            .font(.system(size: 12.5))
+                            .lineLimit(1)
+                            .truncationMode(.tail)
+                            .frame(maxWidth: 140)
+                    }
+                    .chip()
+                }
+                .buttonStyle(.plain)
+                .help("Back to the results for “" + query + "” (⌘[)")
+                .keyboardShortcut("[", modifiers: .command)
+                .pointingHand()
+                .transition(.opacity)
+            }
+
             Button {
                 model.toggleAllVisible()
             } label: {
