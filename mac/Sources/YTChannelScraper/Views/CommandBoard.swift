@@ -356,32 +356,42 @@ private struct DropTarget: ViewModifier {
     }
 }
 
-/// The signature. An arc rather than a number, because the interesting thing is the gap
-/// between what was sent and what arrived — which a count cannot show and a ring can.
+/// The signature: has what you sent this person actually landed?
 ///
-/// `done` is reported by the far device and means something slightly different on each
-/// kind, because the two devices do different jobs with what they are sent. A minor's
-/// phone downloads it, so the number is files on disk. An admin's phone does not download
-/// anything on its own — it offers an inbox — so the number is how much of that inbox has
-/// been dealt with. Both answer the same question, "is there anything outstanding", which
-/// is why they share a ring; the tooltip says which one you are looking at, because a
-/// closed ring meaning two things and saying neither is worse than no ring.
+/// Three states, and the colour is the point. Red while something is outstanding, a quiet
+/// check once nothing is — which is the opposite of the usual green tick, deliberately.
+/// On a board of five people the eye should go to the row that still owes you something;
+/// "all fine" does not need saying in colour, and five red ticks for five finished rows
+/// would say nothing at all.
+///
+/// What counts as landed differs by device, because they do different jobs with what they
+/// are sent. A minor's phone downloads it, so the number is files on disk. An admin's
+/// downloads nothing on its own — it offers an inbox — so it is how much of that inbox
+/// has been dealt with. The tooltip says which; the question is the same either way.
+///
+/// The gap is real rather than cosmetic: `total` is counted here, from the files this Mac
+/// just wrote, and `done` is whatever that device last reported about itself. So sending
+/// something opens the ring immediately and it closes only when the far device has synced
+/// and acted — which is exactly the interval worth showing.
 private struct ProgressArc: View {
     let done: Int
     let total: Int
     var isMinor = false
 
+    private var landed: Bool { total > 0 && done >= total }
+    private var outstanding: Int { max(0, total - done) }
+
     private var explanation: String {
         guard total > 0 else { return "Nothing sent to them yet" }
-        let of = "\(done) of \(total) "
-        if isMinor {
-            return done >= total
-                ? of + "approved videos downloaded — nothing outstanding"
-                : of + "approved videos downloaded, \(total - done) still to come"
+        if landed {
+            return isMinor
+                ? "All \(total) approved videos are on their device"
+                : "All \(total) sent items dealt with — their inbox is clear"
         }
-        return done >= total
-            ? of + "sent items dealt with — their inbox is clear"
-            : of + "sent items dealt with, \(total - done) still waiting in their inbox"
+        let left = "\(outstanding) of \(total) "
+        return isMinor
+            ? left + "still to download onto their device"
+            : left + "still waiting in their inbox"
     }
 
     private var fraction: Double {
@@ -393,19 +403,31 @@ private struct ProgressArc: View {
         ZStack {
             Circle()
                 .stroke(.white.opacity(0.10), lineWidth: 2.5)
-            Circle()
-                .trim(from: 0, to: fraction)
-                .stroke(Palette.accent.opacity(total == 0 ? 0 : 0.9),
-                        style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                // From the top, clockwise. The default start is three o'clock, which
-                // reads as a gauge rather than as progress.
-                .rotationEffect(.degrees(-90))
-            Text(total == 0 ? "–" : "\(done)")
-                .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                .foregroundStyle(.white.opacity(total == 0 ? 0.3 : 0.85))
+
+            if landed {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.white.opacity(0.5))
+                    .transition(.scale(scale: 0.6).combined(with: .opacity))
+            } else {
+                Circle()
+                    .trim(from: 0, to: fraction)
+                    .stroke(Palette.accent.opacity(total == 0 ? 0 : 0.9),
+                            style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+                    // From the top, clockwise. The default start is three o'clock, which
+                    // reads as a gauge rather than as progress.
+                    .rotationEffect(.degrees(-90))
+
+                // What is still owed, not what has arrived. The arc already says how far
+                // along it is; the number is better spent on the part you can act on.
+                Text(total == 0 ? "–" : "\(outstanding)")
+                    .font(.system(size: 10, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(.white.opacity(total == 0 ? 0.3 : 0.85))
+            }
         }
         .frame(width: 30, height: 30)
         .help(explanation)
         .animation(.easeOut(duration: 0.25), value: fraction)
+        .animation(.easeOut(duration: 0.2), value: landed)
     }
 }
