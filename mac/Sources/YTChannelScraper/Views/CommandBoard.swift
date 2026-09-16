@@ -27,7 +27,6 @@ struct CommandBoard: View {
     /// moment. A modal would be the wrong confirmation for a drag: the gesture is already
     /// deliberate, and what you want back is "it landed", not another button to press.
     @State private var justSent: (minor: UUID, title: String)?
-    @State private var over: UUID?
 
     var body: some View {
         Group {
@@ -122,14 +121,11 @@ struct CommandBoard: View {
                         devices: devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
-                        isOver: over == person.id,
-                        onDrop: { payload, targeted in
+                        onDrop: { payload in
                             if let payload {
                                 send(payload, to: Profiles.Minor(id: person.id, name: person.name))
                             }
-                            over = targeted ? person.id : over
-                        },
-                        isThisMachine: shelf.isThisDevice
+                        }
                     )
                 }
                 ForEach(shelf.roster, id: \.id) { person in
@@ -140,12 +136,9 @@ struct CommandBoard: View {
                         devices: devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
-                        isOver: over == person.id,
-                        onDrop: { payload, targeted in
+                        onDrop: { payload in
                             if let payload { send(payload, to: person) }
-                            over = targeted ? person.id : over
-                        },
-                        isThisMachine: shelf.isThisDevice
+                        }
                     )
                 }
             }
@@ -218,12 +211,7 @@ private struct PersonBlock: View {
     let devices: [DeviceRecord]
     let expected: DeviceRecord.Kind?
     let sentTitle: String?
-    let isOver: Bool
-    /// Nil for an admin — see `dispatch`. Called with the payload on a drop, and with nil
-    /// when only the hover state changed.
-    let onDrop: ((SendPayload?, Bool) -> Void)?
-    /// Told rather than worked out here, so the row stays free of the store.
-    let isThisMachine: (DeviceRecord) -> Bool
+    let onDrop: ((SendPayload?) -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -265,32 +253,56 @@ private struct PersonBlock: View {
 
     @ViewBuilder
     private var deviceRows: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            ForEach(devices) { device in
-                slot(icon: device.kind.icon,
-                     text: device.kind.noun.capitalized,
-                     detail: isMinor && approved != nil
+        VStack(alignment: .leading, spacing: 4) {
+            // Dispatch is a list of destinations, and a computer is not one: no Mac
+            // fetches what it is sent, so a row for one is only somewhere to mis-drop.
+            // Computers still show in the Family panel, which is where you go to check
+            // a device is reporting at all.
+            let destinations = devices.filter { $0.kind != .computer }
+            let awaited: DeviceRecord.Kind? = expected == .computer ? nil : expected
+
+            ForEach(destinations) { device in
+                DeviceSlot(
+                    icon: device.kind.icon,
+                    text: device.kind.noun.capitalized,
+                    detail: isMinor && approved != nil
                         ? "\(device.downloaded) of \(approved ?? 0)"
                         : device.lastSeen.formatted(date: .omitted, time: .shortened),
-                     // The machine you are sitting at is not somewhere to send things.
-                     // It still shows, because seeing it listed is how you know it is
-                     // reporting — it just will not take a drop.
-                     canReceive: !isThisMachine(device))
+                    dim: false,
+                    name: name,
+                    onDrop: onDrop
+                )
             }
 
-            // A device recorded but not yet seen is still a destination: you have to be
-            // able to send to somebody's phone before that phone has opened the app.
-            if expected == nil || !devices.contains(where: { $0.kind == expected }) {
-                slot(icon: expected?.icon ?? "questionmark.circle",
-                     text: expected == nil ? "no device yet" : "not seen yet",
-                     detail: nil,
-                     canReceive: true)
+            // A device chosen but not yet reporting is still a destination — you have to
+            // be able to send to somebody's phone before that phone has opened the app.
+            // With nothing chosen and nothing reporting, the empty slot is the invitation.
+            if let awaited, !destinations.contains(where: { $0.kind == awaited }) {
+                DeviceSlot(icon: awaited.icon, text: "not seen yet", detail: nil,
+                           dim: true, name: name, onDrop: onDrop)
+            } else if destinations.isEmpty {
+                DeviceSlot(icon: "questionmark.circle", text: "no device yet", detail: nil,
+                           dim: true, name: name, onDrop: onDrop)
             }
         }
     }
+}
 
-    private func slot(icon: String, text: String, detail: String?,
-                      canReceive: Bool) -> some View {
+/// One device, holding its own drop state.
+///
+/// That state used to live on the person, so hovering one of somebody's devices lit every
+/// device they had. A slot is what gets dropped on, so a slot is what knows.
+private struct DeviceSlot: View {
+    let icon: String
+    let text: String
+    let detail: String?
+    let dim: Bool
+    let name: String
+    let onDrop: ((SendPayload?) -> Void)?
+
+    @State private var over = false
+
+    var body: some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 10.5))
             Text(text).font(.system(size: 11))
@@ -301,21 +313,21 @@ private struct PersonBlock: View {
             }
             Spacer(minLength: 4)
         }
-        .foregroundStyle(.white.opacity(devices.isEmpty ? 0.28 : 0.45))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 5)
+        .foregroundStyle(.white.opacity(dim ? 0.28 : 0.45))
+        .padding(.horizontal, 10)
+        .frame(minHeight: 34, alignment: .leading)
         .background(
-            isOver ? Palette.accent.opacity(0.14) : .white.opacity(0.03),
+            over ? Palette.accent.opacity(0.14) : .white.opacity(0.03),
             in: RoundedRectangle(cornerRadius: 7)
         )
         .overlay {
             RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(isOver ? Palette.accent.opacity(0.45) : .white.opacity(0.05))
+                .strokeBorder(over ? Palette.accent.opacity(0.45) : .white.opacity(0.05))
         }
         .contentShape(RoundedRectangle(cornerRadius: 7))
-        .modifier(DropTarget(onDrop: onDrop))
+        .modifier(DropTarget(onDrop: onDrop, over: $over))
         .help("Drop a channel or video here to send it to " + name)
-        .animation(.easeOut(duration: 0.12), value: isOver)
+        .animation(.easeOut(duration: 0.12), value: over)
     }
 }
 
@@ -323,17 +335,19 @@ private struct PersonBlock: View {
 /// slot has no drop destination at all rather than one that refuses — a target that
 /// highlights and then declines is worse than one that never lit up.
 private struct DropTarget: ViewModifier {
-    let onDrop: ((SendPayload?, Bool) -> Void)?
+    let onDrop: ((SendPayload?) -> Void)?
+    @Binding var over: Bool
 
     func body(content: Content) -> some View {
         if let onDrop {
             content.dropDestination(for: String.self) { items, _ in
                 guard let raw = items.first,
                       let payload = SendPayload(encoded: raw) else { return false }
-                onDrop(payload, false)
+                onDrop(payload)
+                over = false
                 return true
             } isTargeted: { targeted in
-                onDrop(nil, targeted)
+                over = targeted
             }
         } else {
             content
