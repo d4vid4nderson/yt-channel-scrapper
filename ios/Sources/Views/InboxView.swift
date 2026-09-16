@@ -100,20 +100,16 @@ struct InboxView: View {
             if !waiting.channels.isEmpty {
                 Section {
                     ForEach(waiting.channels) { channel in
-                        ChannelRow(channel: channel, isSaved: model.isKept(channel))
-                            .listRowBackground(Color.card)
-                            .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                                Button(role: .destructive) {
-                                    model.dismiss(channel: channel)
-                                } label: { Label("Remove", systemImage: "xmark") }
-
-                                if !model.isKept(channel) {
-                                    Button { model.library.add(channel) } label: {
-                                        Label("Save", systemImage: "bookmark")
-                                    }
-                                    .tint(Palette.accent)
-                                }
-                            }
+                        HStack(spacing: 8) {
+                            ChannelRow(channel: channel)
+                            InboxActions(model: model, channel: channel)
+                        }
+                        .listRowBackground(Color.card)
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                model.dismiss(channel: channel)
+                            } label: { Label("Remove", systemImage: "xmark") }
+                        }
                     }
                 } header: {
                     header("Channels")
@@ -126,27 +122,21 @@ struct InboxView: View {
             if !waiting.videos.isEmpty {
                 Section {
                     ForEach(waiting.videos) { video in
-                        Button { model.play(video) } label: {
-                            VideoRow(video: video, isSaved: model.isKept(video),
-                                     showChannel: true)
+                        HStack(spacing: 8) {
+                            // Not a Button around the whole row. The actions live inside
+                            // it, and an enclosing Button eats their taps — the same thing
+                            // that made the Mac's drawer rows undraggable.
+                            VideoRow(video: video, showChannel: true)
+                                .contentShape(Rectangle())
+                                .onTapGesture { model.play(video) }
+
+                            InboxActions(model: model, video: video)
                         }
                         .listRowBackground(Color.card)
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 model.dismiss(video: video)
                             } label: { Label("Remove", systemImage: "xmark") }
-
-                            Button { model.download([video]) } label: {
-                                Label("Download", systemImage: "arrow.down.circle")
-                            }
-                            .tint(.indigo)
-
-                            if !model.isKept(video) {
-                                Button { model.library.toggleVideo(video, channel: nil) } label: {
-                                    Label("Save", systemImage: "bookmark")
-                                }
-                                .tint(Palette.accent)
-                            }
                         }
                     }
                 } header: {
@@ -166,5 +156,80 @@ struct InboxView: View {
             .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Color.secondaryText)
             .textCase(nil)
+    }
+}
+
+/// Keep this, on the row it arrived on.
+///
+/// The inbox used to hide every verb behind a swipe, which meant the only thing you could
+/// do to something somebody sent you was open it — and opening a channel to save it goes
+/// off to YouTube for a listing nobody asked for. A send is a suggestion, so accepting one
+/// is the whole job of this screen and deserves to be visible.
+///
+/// Save is the button; everything else is behind the ⋯ the rest of the app already uses.
+/// Three buttons on a row makes a toolbar, which is the same reason `ShelfMenu` exists.
+private struct InboxActions: View {
+    @Bindable var model: AppModel
+
+    /// Exactly one of these, as in `ShelfMenu`.
+    var video: Video?
+    var channel: Channel?
+
+    private var isKept: Bool {
+        if let video { return model.isKept(video) }
+        if let channel { return model.isKept(channel) }
+        return false
+    }
+
+    private func save() {
+        if let video { model.library.toggleVideo(video, channel: nil) }
+        if let channel { model.library.add(channel) }
+    }
+
+    var body: some View {
+        HStack(spacing: 2) {
+            Button(action: save) {
+                Label(isKept ? "Saved" : "Save",
+                      systemImage: isKept ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(isKept ? Color.secondaryText : Palette.accent)
+                    .padding(.horizontal, 11)
+                    .frame(height: 30)
+                    .background {
+                        Capsule().fill(isKept ? .clear : Palette.accent.opacity(0.16))
+                    }
+                    .overlay {
+                        Capsule().strokeBorder(
+                            isKept ? Color.secondaryText.opacity(0.22) : .clear)
+                    }
+            }
+            .buttonStyle(.plain)
+            // Saved is a state, not a second action. Unsaving belongs where the saved
+            // thing lives, not on a copy of the notification that brought it.
+            .disabled(isKept)
+            .animation(.easeOut(duration: 0.15), value: isKept)
+
+            Menu {
+                if let video {
+                    Button("Download", systemImage: "arrow.down.circle") {
+                        model.download([video])
+                    }
+                    Divider()
+                }
+                Button("Remove from Inbox", systemImage: "xmark", role: .destructive) {
+                    if let video { model.dismiss(video: video) }
+                    if let channel { model.dismiss(channel: channel) }
+                }
+            } label: {
+                Image(systemName: "ellipsis")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(Color.secondaryText)
+                    .frame(width: 32, height: Metrics.tap)
+                    .contentShape(Rectangle())
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+        }
     }
 }
