@@ -29,6 +29,8 @@ struct FamilyDrawer: View {
     @State private var addingMinor: Bool?
     @State private var working = false
     @State private var removing: (id: UUID, name: String)?
+    /// An existing admin whose name matches what was just typed — see `saveName`.
+    @State private var sameName: Profiles.Guardian?
 
     private var profiles: Profiles { model.profiles }
     private var shelf: ShelfStore { model.shelf }
@@ -63,6 +65,27 @@ struct FamilyDrawer: View {
                 name = profiles.guardian?.name ?? ""
                 await model.syncShelf()
                 family = shelf.familyName
+            }
+            .alert("\(sameName?.name ?? "") is already here",
+                   isPresented: Binding(get: { sameName != nil },
+                                        set: { if !$0 { sameName = nil } })) {
+                Button("That's me — use it") {
+                    if let existing = sameName { claim(id: existing.id, name: existing.name) }
+                    sameName = nil
+                }
+                Button("Make a separate person") {
+                    _ = profiles.setGuardianName(name.trimmingCharacters(in: .whitespaces))
+                    sameName = nil
+                    Task { await model.syncShelf() }
+                }
+                Button("Cancel", role: .cancel) {
+                    name = profiles.guardian?.name ?? ""
+                    sameName = nil
+                }
+            } message: {
+                Text("Somebody with that name is already in this family, on another "
+                     + "device. Use it and both devices are the same person, so anything "
+                     + "sent to them reaches here too.")
             }
             .alert("Remove \(removing?.name ?? "")?",
                    isPresented: Binding(get: { removing != nil },
@@ -106,7 +129,20 @@ struct FamilyDrawer: View {
 
     private func saveName() {
         guard nameChanged else { return }
-        _ = profiles.setGuardianName(name.trimmingCharacters(in: .whitespaces))
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+
+        // Taking a name that is already in the folder splits one person into two, one per
+        // device, with half of what is sent to them arriving on each. Offer the existing
+        // identity instead of quietly minting a second.
+        if let existing = shelf.guardians.first(where: {
+            $0.name.compare(trimmed, options: .caseInsensitive) == .orderedSame
+                && $0.id != profiles.guardian?.id
+        }) {
+            sameName = existing
+            return
+        }
+
+        _ = profiles.setGuardianName(trimmed)
         Task { await model.syncShelf() }
     }
 

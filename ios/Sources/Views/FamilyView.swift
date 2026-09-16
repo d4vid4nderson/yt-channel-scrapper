@@ -23,6 +23,10 @@ struct FamilyView: View {
     @State private var working = false
     @State private var removing: Profiles.Guardian?
     @State private var claiming: Profiles.Guardian?
+    /// An existing admin whose name matches what was just typed. Offered rather than
+    /// silently accepted: typing a name that already exists is how a person ends up as
+    /// two people, one per device, with half their things sent to each.
+    @State private var sameName: Profiles.Guardian?
     @State private var showingInbox = false
 
     private var profiles: Profiles { model.profiles }
@@ -68,6 +72,27 @@ struct FamilyView: View {
                         + "is sent to them and nobody has to accept anything."
                      : "This creates the identity their approvals are signed with. On their "
                         + "own device they tap “This is me” to claim it.")
+            }
+            .alert("\(sameName?.name ?? "") is already here",
+                   isPresented: Binding(get: { sameName != nil },
+                                        set: { if !$0 { sameName = nil } })) {
+                Button("That's me — use it") {
+                    if let existing = sameName { claim(existing) }
+                    sameName = nil
+                }
+                Button("Make a separate person") {
+                    _ = profiles.setGuardianName(name.trimmingCharacters(in: .whitespaces))
+                    sameName = nil
+                }
+                Button("Cancel", role: .cancel) {
+                    name = profiles.guardian?.name ?? ""
+                    sameName = nil
+                }
+            } message: {
+                Text("Somebody with that name is already in this family, on another "
+                     + "device. Use it and both devices are the same person, so anything "
+                     + "sent to them reaches here too. Make a separate person only if "
+                     + "this is genuinely somebody else with the same name.")
             }
             .alert("Sign as \(claiming?.name ?? "")?",
                    isPresented: Binding(get: { claiming != nil },
@@ -130,6 +155,19 @@ struct FamilyView: View {
     private func saveName() {
         let trimmed = name.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
+
+        // Somebody with this name is already in the folder and it is not this device.
+        // Almost always that is the same person on their other device, and taking a new
+        // identity would split them in two — half of what gets sent to "David" arriving
+        // on the Mac and half on the phone, which is exactly what happened here.
+        if let existing = shelf.guardians.first(where: {
+            $0.name.compare(trimmed, options: .caseInsensitive) == .orderedSame
+                && $0.id != profiles.guardian?.id
+        }) {
+            sameName = existing
+            return
+        }
+
         if !profiles.setGuardianName(trimmed) {
             model.banner = "That name could not be saved."
         }
