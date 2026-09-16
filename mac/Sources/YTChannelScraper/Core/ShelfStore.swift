@@ -194,7 +194,12 @@ final class ShelfStore {
             // which used to mean the answer stood until somebody clicked the window.
             // Asking again shortly is the difference between "the family takes forever to
             // appear" and it appearing.
-            if skipped > 0 { scheduleRetry(after: skipped) } else { retries = 0 }
+            if skipped > 0 {
+                scheduleRetry(after: skipped)
+            } else {
+                retries = 0
+            }
+            pendingRetry = skipped > 0 && retries < 5
             // Worth keeping rather than deleting after the bug it was added for: when a
             // sync feature shows the wrong thing, the first question is always whether
             // the files were read, and this is the only place that can answer it.
@@ -713,6 +718,15 @@ final class ShelfStore {
     /// never ends is worse than a stale list.
     private var retries = 0
     private var retry: Task<Void, Never>?
+
+    /// Whether this read came back incomplete and another is already booked.
+    ///
+    /// A file iCloud has not finished handing over is skipped rather than waited for, so
+    /// a refresh can return successfully having seen less than the folder holds. Anything
+    /// that reports "refreshed" to a person — a pull-to-refresh especially, since they
+    /// pull precisely when something was just sent — should wait for this to clear rather
+    /// than claim to be done on a read it knows was partial.
+    private(set) var pendingRetry = false
 
     private func scheduleRetry(after skipped: Int) {
         guard retries < 5 else { return }

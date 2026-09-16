@@ -29,17 +29,25 @@ struct InboxView: View {
                 if isMinor {
                     minorList
                 } else if model.inboxCount == 0 {
-                    Placeholder(
-                        icon: "tray",
-                        title: "Nothing new",
-                        detail: "When another admin sends you a channel or a video it waits "
-                            + "here until you deal with it. Nothing downloads by itself."
-                    )
+                    PullableEmpty {
+                        Placeholder(
+                            icon: "tray",
+                            title: "Nothing new",
+                            detail: "When another admin sends you a channel or a video it "
+                                + "waits here until you deal with it. Nothing downloads by "
+                                + "itself. Pull down to check for anything just sent."
+                        )
+                    }
                 } else {
                     adminList
                 }
             }
             .ground()
+            // A send arrives as a file in a shared folder, and nothing pushes a
+            // notification when one lands — the app finds out by looking. Foregrounding
+            // looks, which covers most of it, but not the case this is for: both devices
+            // already open, one sending and the other waiting for it.
+            .refreshable { await pull() }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -54,6 +62,23 @@ struct InboxView: View {
         }
     }
 
+    /// One pull, held open until the folder has actually settled.
+    ///
+    /// A read that met a file iCloud had not finished handing over comes back successful
+    /// having seen less than the folder holds, and the store books another go. Ending the
+    /// spinner there would show you the same empty list you pulled to change — and this
+    /// is pulled exactly when something has just been sent, which is exactly when a file
+    /// is mid-download. So it waits for the retries, with a ceiling: past a second or two
+    /// the honest thing is to stop spinning and let you pull again.
+    private func pull() async {
+        await model.syncShelf()
+        var waits = 0
+        while model.shelf.pendingRetry, waits < 6 {
+            try? await Task.sleep(for: .milliseconds(350))
+            waits += 1
+        }
+    }
+
     // MARK: - A minor's phone
 
     /// Read-only, and says so. There is nothing to accept: it is already on their
@@ -61,12 +86,14 @@ struct InboxView: View {
     @ViewBuilder
     private var minorList: some View {
         if everything.channels.isEmpty && everything.videos.isEmpty {
-            Placeholder(
-                icon: "tray",
-                title: "Nothing yet",
-                detail: "Channels and videos a grown-up sends you will show up here, and "
-                    + "on your Home shelves."
-            )
+            PullableEmpty {
+                Placeholder(
+                    icon: "tray",
+                    title: "Nothing yet",
+                    detail: "Channels and videos a grown-up sends you will show up here, "
+                        + "and on your Home shelves. Pull down to check."
+                )
+            }
         } else {
             List {
                 if !everything.channels.isEmpty {
@@ -234,6 +261,26 @@ private struct InboxActions: View {
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
+        }
+    }
+}
+
+/// An empty state you can still pull on.
+///
+/// An empty inbox is the one you most want to refresh — you are waiting for something —
+/// and `refreshable` needs a scroll view to hang the gesture on, which a centred VStack
+/// is not. This keeps the layout identical and makes the gesture exist: the placeholder is
+/// given the full height of the viewport inside a ScrollView that bounces even when its
+/// content fits.
+private struct PullableEmpty<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                content.frame(minHeight: proxy.size.height)
+            }
+            .scrollBounceBehavior(.always)
         }
     }
 }
