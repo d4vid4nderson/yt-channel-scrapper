@@ -69,7 +69,9 @@ struct CommandBoard: View {
         HStack(alignment: .top, spacing: 0) {
             dispatch
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
 
             Rectangle()
                 .fill(.white.opacity(0.07))
@@ -83,7 +85,9 @@ struct CommandBoard: View {
             // Equal halves would say they matter equally.
             meta
                 .frame(width: 186, alignment: .leading)
-                .padding(16)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 26)
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
