@@ -128,7 +128,8 @@ struct CommandBoard: View {
                                 send(payload, to: Profiles.Minor(id: person.id, name: person.name))
                             }
                             over = targeted ? person.id : over
-                        }
+                        },
+                        isThisMachine: shelf.isThisDevice
                     )
                 }
                 ForEach(shelf.roster, id: \.id) { person in
@@ -143,7 +144,8 @@ struct CommandBoard: View {
                         onDrop: { payload, targeted in
                             if let payload { send(payload, to: person) }
                             over = targeted ? person.id : over
-                        }
+                        },
+                        isThisMachine: shelf.isThisDevice
                     )
                 }
             }
@@ -220,6 +222,8 @@ private struct PersonBlock: View {
     /// Nil for an admin — see `dispatch`. Called with the payload on a drop, and with nil
     /// when only the hover state changed.
     let onDrop: ((SendPayload?, Bool) -> Void)?
+    /// Told rather than worked out here, so the row stays free of the store.
+    let isThisMachine: (DeviceRecord) -> Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 5) {
@@ -262,23 +266,31 @@ private struct PersonBlock: View {
     @ViewBuilder
     private var deviceRows: some View {
         VStack(alignment: .leading, spacing: 3) {
-            if devices.isEmpty {
+            ForEach(devices) { device in
+                slot(icon: device.kind.icon,
+                     text: device.kind.noun.capitalized,
+                     detail: isMinor && approved != nil
+                        ? "\(device.downloaded) of \(approved ?? 0)"
+                        : device.lastSeen.formatted(date: .omitted, time: .shortened),
+                     // The machine you are sitting at is not somewhere to send things.
+                     // It still shows, because seeing it listed is how you know it is
+                     // reporting — it just will not take a drop.
+                     canReceive: !isThisMachine(device))
+            }
+
+            // A device recorded but not yet seen is still a destination: you have to be
+            // able to send to somebody's phone before that phone has opened the app.
+            if expected == nil || !devices.contains(where: { $0.kind == expected }) {
                 slot(icon: expected?.icon ?? "questionmark.circle",
                      text: expected == nil ? "no device yet" : "not seen yet",
-                     detail: nil)
-            } else {
-                ForEach(devices) { device in
-                    slot(icon: device.kind.icon,
-                         text: device.kind.noun.capitalized,
-                         detail: isMinor && approved != nil
-                            ? "\(device.downloaded) of \(approved ?? 0)"
-                            : device.lastSeen.formatted(date: .omitted, time: .shortened))
-                }
+                     detail: nil,
+                     canReceive: true)
             }
         }
     }
 
-    private func slot(icon: String, text: String, detail: String?) -> some View {
+    private func slot(icon: String, text: String, detail: String?,
+                      canReceive: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: icon).font(.system(size: 10.5))
             Text(text).font(.system(size: 11))

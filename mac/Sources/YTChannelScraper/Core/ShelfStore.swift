@@ -181,7 +181,7 @@ final class ShelfStore {
         let reported = await Task.detached { Self.readDevices(in: folder) }.value
         let declaredPeople = await Task.detached { Self.readPeople(in: folder) }.value
         switch read {
-        case .success(let found):
+        case .success(let (found, skipped)):
             files = found
             peopleFiles = declaredPeople
             devices = reported
@@ -189,6 +189,12 @@ final class ShelfStore {
             problem = nil
             lastRead = Date()
             lastCounts = (found.count, declaredPeople.count, reported.count)
+
+            // A file iCloud has not finished handing over is skipped, not waited for —
+            // which used to mean the answer stood until somebody clicked the window.
+            // Asking again shortly is the difference between "the family takes forever to
+            // appear" and it appearing.
+            if skipped > 0 { scheduleRetry(after: skipped) } else { retries = 0 }
             // Worth keeping rather than deleting after the bug it was added for: when a
             // sync feature shows the wrong thing, the first question is always whether
             // the files were read, and this is the only place that can answer it.
@@ -378,6 +384,16 @@ final class ShelfStore {
         return await write(member, as: guardian)
     }
 
+    /// Whether that record is this very machine.
+    ///
+    /// Sending something to the device you are sitting at is not a thing anybody means to
+    /// do, and on a Mac it would not even arrive — there is no reconciler here. The slot
+    /// still shows, because seeing your own machine listed is how you know it is
+    /// reporting; it simply does not accept a drop.
+    func isThisDevice(_ record: DeviceRecord) -> Bool {
+        record.deviceID == deviceID
+    }
+
     /// What an admin said this person carries, if anything.
     func expectedDevice(for id: UUID) -> DeviceRecord.Kind? {
         declared.first { $0.id == id }?.expected
@@ -543,6 +559,26 @@ final class ShelfStore {
             .sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Re-read after a short pause when iCloud was still handing files over.
+    ///
+    /// Backs off rather than hammering, and gives up after a handful of goes: past that
+    /// something is wrong with the folder rather than merely slow, and a retry loop that
+    /// never ends is worse than a stale list.
+    private var retries = 0
+    private var retry: Task<Void, Never>?
+
+    private func scheduleRetry(after skipped: Int) {
+        guard retries < 5 else { return }
+        retries += 1
+        let wait = Duration.milliseconds(400 * retries)
+        retry?.cancel()
+        retry = Task { [weak self] in
+            try? await Task.sleep(for: wait)
+            guard !Task.isCancelled else { return }
+            await self?.refresh()
+        }
+    }
+
     // MARK: - Watching the folder
 
     #if os(macOS)
@@ -672,7 +708,7 @@ final class ShelfStore {
     // MARK: - File I/O
 
     /// Off the main actor: iCloud Drive reads can block on a download.
-    private nonisolated static func readAll(in folder: URL) -> Result<[ShelfFile], Error> {
+    private nonisolated static func readAll(in folder: URL) -> Result<(files: [ShelfFile], skipped: Int), Error> {
         let opened = folder.startAccessingSecurityScopedResource()
         defer { if opened { folder.stopAccessingSecurityScopedResource() } }
 
@@ -684,6 +720,7 @@ final class ShelfStore {
             )
 
             var found: [ShelfFile] = []
+            var skipped = 0
             for url in names where url.pathExtension.lowercased() == "json"
                 && !url.lastPathComponent.hasPrefix(DeviceRecord.prefix)
                 && !url.lastPathComponent.hasPrefix(PeopleFile.prefix) {
@@ -691,7 +728,7 @@ final class ShelfStore {
                 // device. Asking for it is not the same as having it — a file that is
                 // still arriving is skipped this pass and picked up by the next refresh,
                 // which is why a failed read must never be treated as an empty shelf.
-                if !materialise(url) { continue }
+                if !materialise(url) { skipped += 1; continue }
                 guard let data = try? Data(contentsOf: url),
                       let file = try? decoder.decode(ShelfFile.self, from: data)
                 else {
@@ -700,7 +737,7 @@ final class ShelfStore {
                 }
                 found.append(file)
             }
-            return .success(found)
+            return .success((found, skipped))
         } catch {
             return .failure(error)
         }
@@ -781,9 +818,18 @@ final class ShelfStore {
             .isUbiquitousItemKey, .ubiquitousItemDownloadingStatusKey,
         ])
         guard values?.isUbiquitousItem == true else { return true }   // a plain local file
-        if values?.ubiquitousItemDownloadingStatus == .current { return true }
-        try? FileManager.default.startDownloadingUbiquitousItem(at: url)
-        return false
+        switch values?.ubiquitousItemDownloadingStatus {
+        case .some(.current):
+            return true
+        case .some(.downloaded):
+            // Present locally, with a newer version still in the cloud. Reading it gives
+            // data that is a moment stale; skipping it gives nothing at all, and the
+            // newer version arriving fires a folder event that reads again anyway.
+            return true
+        default:
+            try? FileManager.default.startDownloadingUbiquitousItem(at: url)
+            return false
+        }
     }
 
     private nonisolated static func write(_ file: ShelfFile, in folder: URL) -> Bool {
