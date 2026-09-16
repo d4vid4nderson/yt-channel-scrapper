@@ -187,16 +187,6 @@ struct SavedChannelsDrawer: View {
                 } preview: {
                     DragChip(title: channel.title, icon: "person.crop.circle")
                 }
-                // Drag a channel onto somebody in Dispatch to send it. The payload
-                // carries the title so the receiving device never has to ask YouTube.
-                .onDrag {
-                    NSItemProvider(object: SendPayload(
-                        kind: .channel, id: channel.id,
-                        title: channel.title, channelID: nil
-                    ).encoded as NSString)
-                } preview: {
-                    DragChip(title: channel.title, icon: "person.crop.circle")
-                }
             }
         }
     }
@@ -219,14 +209,6 @@ struct SavedChannelsDrawer: View {
                     download: { model.download([video]) },
                     remove: { model.library.removeVideo(video.id) }
                 )
-                .onDrag {
-                    NSItemProvider(object: SendPayload(
-                        kind: .video, id: video.id,
-                        title: video.title, channelID: video.channelId
-                    ).encoded as NSString)
-                } preview: {
-                    DragChip(title: video.title, icon: "play.rectangle")
-                }
                 .onDrag {
                     NSItemProvider(object: SendPayload(
                         kind: .video, id: video.id,
