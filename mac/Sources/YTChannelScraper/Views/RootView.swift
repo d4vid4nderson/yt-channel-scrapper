@@ -70,6 +70,8 @@ struct RootView: View {
                 session: model.preview,
                 download: { model.downloadPreviewed($0) },
                 popOut: { model.popOutToIsland(tuckingWindowAway: true) },
+                isSaved: { model.isSaved($0) },
+                toggleSaved: { model.toggleSaved($0) },
                 dismiss: model.dismissPreview
             )
         }

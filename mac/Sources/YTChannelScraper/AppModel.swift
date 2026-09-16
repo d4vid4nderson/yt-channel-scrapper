@@ -453,6 +453,21 @@ extension AppModel {
         islandVideo = handed.video
         miniPlayer.onRestore = { [weak self] in self?.restoreFromIsland() }
         miniPlayer.onClose = { [weak self] in self?.closeIsland() }
+        miniPlayer.isSaved = { [weak self] in
+            guard let self, let video = islandVideo else { return false }
+            return isSaved(video)
+        }
+        // The page this was popped out from, captured now. `toggleSaved(_ video:)`
+        // falls back to whatever is being scraped *at the time of the call*, and the
+        // island outlives the page — pop out, go home, save, and a video that arrived
+        // without a channel of its own would be filed under an unrelated one. That is
+        // not only a wrong label: a channel veto reaches its videos through that id.
+        let from = scraper.channelRef
+        let fromName = scraper.channel.isEmpty ? nil : scraper.channel
+        miniPlayer.onToggleSaved = { [weak self] in
+            guard let self, let video = islandVideo else { return }
+            library.toggleVideo(video, channel: from, channelName: fromName)
+        }
         miniPlayer.show(
             player: handed.player,
             title: handed.video.title,

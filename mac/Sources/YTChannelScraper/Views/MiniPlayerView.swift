@@ -166,6 +166,20 @@ struct MiniPlayerView: View {
 
     private var chrome: some View {
         HStack(spacing: 8) {
+            // First, because it is the only one that changes anything you keep — the rest
+            // move the picture around or stop it. Deciding you want a video is a thing
+            // that happens while watching it, which is the whole reason this is here and
+            // not only on the row you started from.
+            if let saved = mini.isSaved?() {
+                IslandButton(
+                    icon: saved ? "bookmark.fill" : "bookmark",
+                    size: 11,
+                    tint: saved ? Palette.accent : nil,
+                    help: saved ? "Remove from Saved" : "Save this video"
+                ) {
+                    mini.onToggleSaved?()
+                }
+            }
             // One way to the question "where is this playing?", answered by one list:
             // the outputs this Mac has, and AirPlay for the ones it has not met yet.
             IslandButton(
@@ -192,6 +206,9 @@ struct MiniPlayerView: View {
 private struct IslandButton: View {
     let icon: String
     let size: CGFloat
+    /// Left nil by everything but the bookmark. A transport control that took a colour
+    /// would be one more thing competing with the picture.
+    var tint: Color?
     let help: String
     let action: () -> Void
     @State private var hovering = false
@@ -200,7 +217,7 @@ private struct IslandButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: size, weight: .semibold))
-                .foregroundStyle(.white.opacity(hovering ? 1 : 0.82))
+                .foregroundStyle(tint ?? .white.opacity(hovering ? 1 : 0.82))
                 .frame(width: size + 12, height: size + 12)
                 .background(.white.opacity(hovering ? 0.16 : 0), in: Circle())
         }

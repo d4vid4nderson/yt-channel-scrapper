@@ -40,6 +40,15 @@ final class MiniPlayer {
     /// Stop entirely.
     var onClose: (() -> Void)?
 
+    /// Whether what is playing is already kept, and a way to change that.
+    ///
+    /// Closures rather than a reference to the library, so the island stays a player and
+    /// does not grow a second opinion about what the library is. Both read observable
+    /// state when the view calls them, which is what keeps the bookmark filling in the
+    /// instant it is pressed.
+    var isSaved: (() -> Bool)?
+    var onToggleSaved: (() -> Void)?
+
     private var panel: NSPanel?
     private var tracker: Task<Void, Never>?
     private var outputsWatch: Task<Void, Never>?

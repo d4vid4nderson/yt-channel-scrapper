@@ -10,6 +10,10 @@ struct PreviewModal: View {
     let session: PreviewSession
     let download: (Video) -> Void
     let popOut: () -> Void
+    /// Keeping what you are watching. Closures rather than the model, to match the rest
+    /// of this card's inputs — it is handed what it can do, not where things live.
+    let isSaved: (Video) -> Bool
+    let toggleSaved: (Video) -> Void
     /// Every way out of the card. Not `session.close()` directly: leaving the card is not
     /// asking for silence, so what is playing goes up to the island rather than stopping.
     let dismiss: () -> Void
@@ -71,6 +75,17 @@ struct PreviewModal: View {
                         .foregroundStyle(Color(white: 0.6))
                 }
                 Spacer(minLength: 8)
+                // Beside the close button rather than down in the footer. The footer is
+                // what to *do* with this video — fetch it, open it elsewhere, move it to
+                // the notch — and each of those leaves the card. Keeping it does not.
+                CircleButton(
+                    icon: isSaved(video) ? "bookmark.fill" : "bookmark",
+                    title: isSaved(video)
+                        ? "Remove from Saved"
+                        : "Save this video to your shelf",
+                    tint: isSaved(video) ? Palette.accent : nil,
+                    action: { toggleSaved(video) }
+                )
                 CircleButton(
                     icon: "xmark",
                     title: "Put the card away — it keeps playing in the notch",
@@ -192,6 +207,8 @@ private struct PreviewStage: View {
 private struct CircleButton: View {
     let icon: String
     let title: String
+    /// Only the bookmark uses it. Close is chrome and stays white.
+    var tint: Color?
     let action: () -> Void
     @State private var hovering = false
 
@@ -199,7 +216,7 @@ private struct CircleButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(tint ?? .white)
                 .frame(width: 28, height: 28)
                 .background(.white.opacity(hovering ? 0.22 : 0.1), in: Circle())
         }
