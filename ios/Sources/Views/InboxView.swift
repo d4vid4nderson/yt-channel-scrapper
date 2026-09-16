@@ -29,7 +29,7 @@ struct InboxView: View {
                 if isMinor {
                     minorList
                 } else if model.inboxCount == 0 {
-                    PullableEmpty {
+                    PullableEmpty(refresh: pull) {
                         Placeholder(
                             icon: "tray",
                             title: "Nothing new",
@@ -43,11 +43,6 @@ struct InboxView: View {
                 }
             }
             .ground()
-            // A send arrives as a file in a shared folder, and nothing pushes a
-            // notification when one lands — the app finds out by looking. Foregrounding
-            // looks, which covers most of it, but not the case this is for: both devices
-            // already open, one sending and the other waiting for it.
-            .refreshable { await pull() }
             .navigationTitle("Inbox")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -63,6 +58,11 @@ struct InboxView: View {
     }
 
     /// One pull, held open until the folder has actually settled.
+    ///
+    /// A send arrives as a file in a shared folder, and nothing pushes a notification when
+    /// one lands — the app finds out by looking. Foregrounding looks, which covers most of
+    /// it, but not the case this is for: both devices open, one sending and the other
+    /// waiting for it.
     ///
     /// A read that met a file iCloud had not finished handing over comes back successful
     /// having seen less than the folder holds, and the store books another go. Ending the
@@ -86,7 +86,7 @@ struct InboxView: View {
     @ViewBuilder
     private var minorList: some View {
         if everything.channels.isEmpty && everything.videos.isEmpty {
-            PullableEmpty {
+            PullableEmpty(refresh: pull) {
                 Placeholder(
                     icon: "tray",
                     title: "Nothing yet",
@@ -117,6 +117,7 @@ struct InboxView: View {
             }
             .listStyle(.plain)
             .scrollContentBackground(.hidden)
+            .refreshable { await pull() }
         }
     }
 
@@ -177,6 +178,7 @@ struct InboxView: View {
         }
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
+        .refreshable { await pull() }
     }
 
     private func header(_ text: String) -> some View {
@@ -267,20 +269,35 @@ private struct InboxActions: View {
 
 /// An empty state you can still pull on.
 ///
-/// An empty inbox is the one you most want to refresh — you are waiting for something —
-/// and `refreshable` needs a scroll view to hang the gesture on, which a centred VStack
-/// is not. This keeps the layout identical and makes the gesture exist: the placeholder is
-/// given the full height of the viewport inside a ScrollView that bounces even when its
-/// content fits.
+/// An empty inbox is the one you most want to refresh — an empty list is what you are
+/// trying to change — and `refreshable` needs something scrollable to hang the gesture
+/// on, which a centred VStack is not.
+///
+/// It is a `List` of one full-height row rather than a `ScrollView`, which looks like the
+/// long way round. A List gets UIKit's own refresh control on a table view that bounces
+/// whether or not its content overflows; a ScrollView has to be talked into bouncing
+/// before the gesture exists at all, and inside a GeometryReader that is one more thing
+/// that has to go right. This screen has a List on every other path anyway, so the empty
+/// one behaving identically is the point rather than a coincidence.
 private struct PullableEmpty<Content: View>: View {
+    let refresh: () async -> Void
     @ViewBuilder var content: Content
 
     var body: some View {
         GeometryReader { proxy in
-            ScrollView {
-                content.frame(minHeight: proxy.size.height)
+            List {
+                content
+                    .frame(maxWidth: .infinity)
+                    // One less than the viewport, so the row cannot round up into a
+                    // scroll of a couple of points and take the bounce with it.
+                    .frame(height: max(0, proxy.size.height - 1))
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                    .listRowSeparator(.hidden)
             }
-            .scrollBounceBehavior(.always)
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+            .refreshable { await refresh() }
         }
     }
 }
