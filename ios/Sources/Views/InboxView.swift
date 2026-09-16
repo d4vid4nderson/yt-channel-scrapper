@@ -114,8 +114,9 @@ struct InboxView: View {
                 } header: {
                     header("Channels")
                 } footer: {
-                    Text("Saving puts a channel on your Home shelf. Removing takes it off "
-                         + "this list without changing anything for anybody else.")
+                    Text("Saving puts a channel on your Home shelf and clears it from "
+                         + "here. Either way nothing changes for anybody else — the "
+                         + "sender still sent it.")
                 }
             }
 
@@ -181,13 +182,19 @@ private struct InboxActions: View {
         return false
     }
 
+    /// Saving also clears the row. Animated because the row is what you are looking at
+    /// when it happens, and something leaving a list without moving reads as a glitch.
     private func save() {
-        if let video { model.library.toggleVideo(video, channel: nil) }
-        if let channel { model.library.add(channel) }
+        withAnimation(.easeOut(duration: 0.2)) {
+            if let video { model.keep(video: video) }
+            if let channel { model.keep(channel: channel) }
+        }
     }
 
     var body: some View {
         HStack(spacing: 2) {
+            // The kept state is still drawn, for the one case that survives: something
+            // saved from the Home shelf while its inbox row was open.
             Button(action: save) {
                 Label(isKept ? "Saved" : "Save",
                       systemImage: isKept ? "bookmark.fill" : "bookmark")
@@ -204,9 +211,6 @@ private struct InboxActions: View {
                     }
             }
             .buttonStyle(.plain)
-            // Saved is a state, not a second action. Unsaving belongs where the saved
-            // thing lives, not on a copy of the notification that brought it.
-            .disabled(isKept)
             .animation(.easeOut(duration: 0.15), value: isKept)
 
             Menu {

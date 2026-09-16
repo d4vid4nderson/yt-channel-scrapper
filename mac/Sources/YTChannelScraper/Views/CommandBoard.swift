@@ -217,7 +217,8 @@ private struct PersonBlock: View {
         VStack(alignment: .leading, spacing: 5) {
             HStack(spacing: 8) {
                 if let approved {
-                    ProgressArc(done: devices.map(\.downloaded).max() ?? 0, total: approved)
+                    ProgressArc(done: devices.map(\.downloaded).max() ?? 0,
+                                total: approved, isMinor: isMinor)
                 } else {
                     Circle()
                         .strokeBorder(.white.opacity(0.12), lineWidth: 2.5)
@@ -357,9 +358,31 @@ private struct DropTarget: ViewModifier {
 
 /// The signature. An arc rather than a number, because the interesting thing is the gap
 /// between what was sent and what arrived — which a count cannot show and a ring can.
+///
+/// `done` is reported by the far device and means something slightly different on each
+/// kind, because the two devices do different jobs with what they are sent. A minor's
+/// phone downloads it, so the number is files on disk. An admin's phone does not download
+/// anything on its own — it offers an inbox — so the number is how much of that inbox has
+/// been dealt with. Both answer the same question, "is there anything outstanding", which
+/// is why they share a ring; the tooltip says which one you are looking at, because a
+/// closed ring meaning two things and saying neither is worse than no ring.
 private struct ProgressArc: View {
     let done: Int
     let total: Int
+    var isMinor = false
+
+    private var explanation: String {
+        guard total > 0 else { return "Nothing sent to them yet" }
+        let of = "\(done) of \(total) "
+        if isMinor {
+            return done >= total
+                ? of + "approved videos downloaded — nothing outstanding"
+                : of + "approved videos downloaded, \(total - done) still to come"
+        }
+        return done >= total
+            ? of + "sent items dealt with — their inbox is clear"
+            : of + "sent items dealt with, \(total - done) still waiting in their inbox"
+    }
 
     private var fraction: Double {
         guard total > 0 else { return 0 }
@@ -382,6 +405,7 @@ private struct ProgressArc: View {
                 .foregroundStyle(.white.opacity(total == 0 ? 0.3 : 0.85))
         }
         .frame(width: 30, height: 30)
+        .help(explanation)
         .animation(.easeOut(duration: 0.25), value: fraction)
     }
 }

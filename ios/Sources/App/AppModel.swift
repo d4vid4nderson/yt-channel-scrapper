@@ -204,10 +204,14 @@ final class AppModel {
 
     /// What is still in the inbox.
     ///
-    /// Filtered by what has been dismissed, *not* by what is already in the library —
-    /// keeping something and clearing it off the list are two different acts, and
-    /// conflating them meant an item vanished the moment you saved it, before you had a
-    /// chance to download it too.
+    /// Filtered by what has been dismissed. Keeping something dismisses it, so saving and
+    /// clearing amount to the same thing — which is the point: an inbox is a list of
+    /// things not yet dealt with, and something you have kept is dealt with.
+    ///
+    /// This was the other way round for a while, on the grounds that you might want to
+    /// save *and* download and the row vanishing took the download with it. That reason
+    /// went away when Download moved onto the row's ⋯ menu — and it was the weaker of the
+    /// two anyway, since a kept video is on the Home shelf with the same menu on it.
     var unclaimedSent: (channels: [Channel], videos: [Video]) {
         let all = sent
         let gone = dismissed
@@ -219,6 +223,20 @@ final class AppModel {
     /// changes — the sender still sent it, and it stays on the shelf.
     func dismiss(channel: Channel) { dismissed.insert(key(.channel, channel.id)) }
     func dismiss(video: Video) { dismissed.insert(key(.video, video.id)) }
+
+    /// Keep one thing, which is the same act as taking it off the list.
+    ///
+    /// One verb rather than two calls at each site, so "saved but still sitting in the
+    /// inbox" is not a state anything can leave behind by forgetting the second call.
+    func keep(channel: Channel) {
+        if !library.contains(channel.id) { library.add(channel) }
+        dismiss(channel: channel)
+    }
+
+    func keep(video: Video) {
+        if !library.containsVideo(video.id) { library.toggleVideo(video, channel: nil) }
+        dismiss(video: video)
+    }
 
     func isKept(_ channel: Channel) -> Bool { library.contains(channel.id) }
     func isKept(_ video: Video) -> Bool { library.containsVideo(video.id) }
@@ -237,15 +255,8 @@ final class AppModel {
     /// and a suggestion you cannot decline is not one.
     func claimSent() {
         let waiting = unclaimedSent
-        for channel in waiting.channels where !library.contains(channel.id) {
-            library.add(channel)
-        }
-        for video in waiting.videos where !library.containsVideo(video.id) {
-            library.toggleVideo(video, channel: nil)
-        }
-        // "Keep All" means the list is dealt with, so it also clears.
-        for channel in waiting.channels { dismiss(channel: channel) }
-        for video in waiting.videos { dismiss(video: video) }
+        for channel in waiting.channels { keep(channel: channel) }
+        for video in waiting.videos { keep(video: video) }
     }
 
     /// Set by a row's ⋯ menu when it has nothing to offer because the family has not
