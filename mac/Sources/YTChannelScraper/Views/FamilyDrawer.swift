@@ -242,7 +242,7 @@ struct FamilyDrawer: View {
                         isMinor: false,
                         isYou: guardian.id == profiles.guardian?.id,
                         unclaimed: shelf.isUnclaimed(guardian.id),
-                        devices: shelf.devices.filter { $0.personID == guardian.id },
+                        devices: shelf.devices(of: guardian.id),
                         count: nil,
                         expected: shelf.expectedDevice(for: guardian.id),
                         setExpected: { setExpected(guardian.id, $0) },
@@ -262,7 +262,7 @@ struct FamilyDrawer: View {
                         isMinor: true,
                         isYou: false,
                         unclaimed: false,
-                        devices: shelf.devices.filter { $0.personID == minor.id },
+                        devices: shelf.devices(of: minor.id),
                         count: shelf.approved(for: minor.id).count,
                         expected: shelf.expectedDevice(for: minor.id),
                         setExpected: { setExpected(minor.id, $0) },
@@ -270,6 +270,44 @@ struct FamilyDrawer: View {
                         remove: { removing = (minor.id, minor.name) }
                     )
                 }
+            }
+
+            strays
+        }
+    }
+
+    /// Devices checking in under an id nobody in the family carries.
+    ///
+    /// Every device makes up its own id for whoever set it up, so one person setting up a
+    /// Mac and then a phone becomes two people — and anything sent to one of them is
+    /// invisible to the other. Nothing here was wrong enough to show an error, which is
+    /// why it presented as "drag and drop does not work".
+    ///
+    /// Only appears when there is one. The section is a repair, not furniture.
+    @ViewBuilder
+    private var strays: some View {
+        let orphans = shelf.unattachedDevices
+        if !orphans.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                heading("Not attached to anyone")
+
+                ForEach(orphans) { device in
+                    StrayRow(device: device, people: shelf.guardians + shelf.roster.map {
+                        Profiles.Guardian(id: $0.id, name: $0.name)
+                    }) { person in
+                        guard let me = profiles.guardian, let alias = device.personID else { return }
+                        Task {
+                            await shelf.attach(alias, to: person, as: me)
+                            await model.syncShelf()
+                        }
+                    }
+                }
+
+                Text("Same person as somebody above? Attach it and anything you send them "
+                     + "reaches this device too.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.white.opacity(0.3))
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
     }
@@ -573,7 +611,10 @@ private struct PersonRow: View {
     /// section heading two rows up already says whether this is an admin or a minor.
     @ViewBuilder
     private var second: some View {
-        HStack(spacing: 8) {
+        // One device per line. Side by side they ran out of drawer and wrapped mid-phrase
+        // — "Computer · seen 21:54" broke across two lines while a second chip sat beside
+        // it — and a caption that reflows as devices come and go is not a caption.
+        VStack(alignment: .leading, spacing: 2) {
             // Devices that have checked in, then the picker — always, not only when
             // nothing has. A reported device is a fact about a machine; an expected one
             // is a fact about the person, and somebody whose Mac has checked in still
@@ -583,6 +624,7 @@ private struct PersonRow: View {
                 // concatenation here put the whole HStack past the type checker's budget.
                 Label(Self.caption(for: device), systemImage: device.kind.icon)
                     .labelStyle(.titleAndIcon)
+                    .lineLimit(1)
                     .help(Self.tooltip(for: device))
             }
 
@@ -618,7 +660,7 @@ private struct PersonRow: View {
     /// concatenation put the whole row past the type checker's budget.
     private static func caption(for device: DeviceRecord) -> String {
         let seen = device.lastSeen.formatted(date: .omitted, time: .shortened)
-        return device.kind.noun.capitalized + " · seen " + seen
+        return device.kind.noun.capitalized + " · " + seen
     }
 
     /// The fuller version, for the tooltip. Named `tooltip` rather than `help` because
@@ -701,5 +743,60 @@ private struct AddButton: View {
         .onHover { hovering = $0 }
         .help(help)
         .pointingHand()
+    }
+}
+
+/// A device nobody in the family owns, and the one action that fixes it.
+///
+/// Deliberately not removable and not a person. It is not a row about somebody, it is a
+/// row about a mistake, and the only thing worth doing to it is saying who it belongs to.
+private struct StrayRow: View {
+    let device: DeviceRecord
+    let people: [Profiles.Guardian]
+    let attach: (UUID) -> Void
+
+    @State private var hovering = false
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: device.kind.icon)
+                .font(.system(size: 12))
+                .foregroundStyle(.white.opacity(0.45))
+                .frame(width: 28, height: 28)
+                .background(.white.opacity(0.05), in: Circle())
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(device.name)
+                    .font(.system(size: 12.5, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.85))
+                    .lineLimit(1)
+                Text("set up as " + (device.personName ?? "somebody else"))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(.white.opacity(0.38))
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Menu {
+                ForEach(people, id: \.id) { person in
+                    Button(person.name) { attach(person.id) }
+                }
+            } label: {
+                Text("Attach")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.white.opacity(hovering ? 0.8 : 0.55))
+                    .padding(.horizontal, 9)
+                    .padding(.vertical, 3.5)
+                    .background(.white.opacity(hovering ? 0.10 : 0.06), in: Capsule())
+                    .overlay(Capsule().strokeBorder(.white.opacity(0.10)))
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .disabled(people.isEmpty)
+        }
+        .padding(.vertical, 4)
+        .onHover { hovering = $0 }
     }
 }

@@ -354,6 +354,19 @@ struct FamilyMember: Codable, Hashable, Sendable, Identifiable {
     /// real device reports, it takes over and this is only a fallback.
     var expectedKind: String?
 
+    /// The same human as another identity, already in the family.
+    ///
+    /// Every device mints its own id for whoever is setting it up, so one person can end
+    /// up as two: the Mac's "David Anderson" and the phone's "David". There is no way to
+    /// rename an id into another one — everything is keyed on it, and the phone is the
+    /// only writer of its own files — so instead the two are declared to be the same
+    /// person and everything addressed to either counts for both.
+    ///
+    /// The alternative was making the second device adopt the first's id, which works but
+    /// only if somebody notices in time. This one can be fixed after the fact, which is
+    /// when you actually find out: the moment something you sent does not arrive.
+    var sameAs: UUID?
+
     var removed: Bool { isRemoved == true }
     var expected: DeviceRecord.Kind? { expectedKind.flatMap(DeviceRecord.Kind.init(rawValue:)) }
 }

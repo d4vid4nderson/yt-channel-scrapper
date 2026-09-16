@@ -212,9 +212,86 @@ final class ShelfStore {
         }
     }
 
+    // MARK: - One human, more than one id
+
+    /// Alias -> the identity it is really the same person as, chains resolved.
+    ///
+    /// Rebuilt on every `recompute` rather than stored, because it is derived from the
+    /// people files like everything else here. A cycle — two ids each claiming to be the
+    /// other, which a pair of admins could write independently — is broken by bailing out
+    /// of the walk rather than by trusting the data not to contain one.
+    private(set) var aliases: [UUID: UUID] = [:]
+
+    /// Every id that means this person: the one you asked for, whoever it is an alias of,
+    /// and everybody else pointing at the same place.
+    func family(of id: UUID) -> Set<UUID> {
+        let root = aliases[id] ?? id
+        var all: Set<UUID> = [root, id]
+        for (alias, primary) in aliases where primary == root { all.insert(alias) }
+        return all
+    }
+
+    /// The devices belonging to somebody, including any reporting under an id that has
+    /// been declared the same person.
+    func devices(of person: UUID) -> [DeviceRecord] {
+        let ids = family(of: person)
+        return devices.filter { $0.personID.map(ids.contains) == true }
+    }
+
+    /// Devices reporting in for nobody the family knows about.
+    ///
+    /// This is how you find out a second device made itself a second person: it is here,
+    /// checking in, addressed by an id no row on the board carries. Without somewhere to
+    /// show it, the only symptom is that things sent never arrive — which is a bug report,
+    /// not a diagnosis.
+    var unattachedDevices: [DeviceRecord] {
+        let known = Set(guardians.map(\.id)).union(roster.map(\.id))
+        return devices
+            // A device with no person at all is not an orphan, it is an older build that
+            // never said who it was. There is nothing to attach it *by*, so it is left
+            // out rather than shown as a row with no working action.
+            .compactMap { device -> DeviceRecord? in
+                guard let person = device.personID else { return nil }
+                return known.contains(aliases[person] ?? person) ? nil : device
+            }
+            .sorted { $0.lastSeen > $1.lastSeen }
+    }
+
+    /// Declare two identities to be the same human.
+    ///
+    /// Written into this admin's own people file, so it follows the one-writer rule like
+    /// everything else. Nothing is deleted and no id moves: the alias keeps its shelf
+    /// files, and reads and writes simply start covering both.
+    @discardableResult
+    func attach(_ alias: UUID, to person: UUID, as guardian: Profiles.Guardian) async -> Bool {
+        guard alias != person else { return false }
+        // Refuse to fold away somebody real. The point of this is duplicates, and the
+        // damage from getting it wrong — two different people sharing one shelf — is
+        // worse than the inconvenience of refusing.
+        guard (aliases[person] ?? person) != alias else { return false }
+
+        let name = declared.first { $0.id == alias }?.name
+            ?? devices.first { $0.personID == alias }?.personName ?? nil
+            ?? guardians.first { $0.id == alias }?.name
+            ?? roster.first { $0.id == alias }?.name
+        guard let name else { return false }
+
+        var member = FamilyMember(
+            id: alias,
+            name: name,
+            isMinor: roster.contains { $0.id == person }
+        )
+        member.sameAs = person
+        return await write(member, as: guardian)
+    }
+
     /// Every decision about one child, from every guardian.
+    ///
+    /// Covers every id that means this person, so a device still reporting under an old
+    /// identity sees what was addressed to the new one.
     func entries(for minorID: UUID) -> [ShelfEntry] {
-        files.filter { $0.minorID == minorID }.flatMap(\.entries)
+        let ids = family(of: minorID)
+        return files.filter { ids.contains($0.minorID) }.flatMap(\.entries)
     }
 
     /// What this child is allowed to see, after every guardian's decisions are merged.
@@ -238,7 +315,10 @@ final class ShelfStore {
         _ decisions: [ShelfEntry],
         for minor: Profiles.Minor,
         as guardian: Profiles.Guardian,
-        evenIfEmpty: Bool = false
+        evenIfEmpty: Bool = false,
+        /// False on the copies this makes for a person's other identities, so the spread
+        /// is one level deep rather than a recursion that revisits where it started.
+        spreading: Bool = true
     ) async -> Bool {
         guard !decisions.isEmpty || evenIfEmpty else { return true }
         guard let folder else {
@@ -272,6 +352,16 @@ final class ShelfStore {
         files.append(file)
         recompute()
         problem = nil
+
+        // Write the same decisions to every other id this person answers to. A device
+        // still reporting under an old identity only reads files addressed to that id, so
+        // a send that goes solely to the surviving one lands nowhere it will ever look.
+        // Still one writer per file — every one of these is `<theirID>-<myID>.json`.
+        guard spreading else { return true }
+        for other in family(of: minor.id) where other != minor.id {
+            await record(decisions, for: Profiles.Minor(id: other, name: minor.name),
+                         as: guardian, evenIfEmpty: evenIfEmpty, spreading: false)
+        }
         return true
     }
 
@@ -437,6 +527,8 @@ final class ShelfStore {
     /// by name. Union rather than either alone — a parent who has approved things is real
     /// even if nobody added them, and one who was added is real before they approve.
     private func recompute() {
+        aliases = Self.aliasTable(declared)
+
         var adults: [UUID: Profiles.Guardian] = [:]
         for g in Self.guardians(from: files) { adults[g.id] = g }
         var children: [UUID: Profiles.Minor] = [:]
@@ -467,6 +559,14 @@ final class ShelfStore {
                 children[member.id] = nil
                 adults[member.id] = Profiles.Guardian(id: member.id, name: member.name)
             }
+        }
+
+        // An alias is not a person in their own right. It keeps its files and its device,
+        // both of which now count towards whoever it points at, but it stops being a row
+        // you can add to, send to, or accidentally send to *instead*.
+        for alias in aliases.keys {
+            adults[alias] = nil
+            children[alias] = nil
         }
 
         guardians = adults.values.sorted {
@@ -537,6 +637,30 @@ final class ShelfStore {
     /// within a sync, and the id it hangs off never moves.
     /// Newest name per guardian id, so renaming yourself renames you everywhere rather
     /// than adding a second person.
+    /// Flattens `sameAs` chains so a lookup is one step.
+    ///
+    /// Walks with a step limit rather than a visited set: the lists here are a handful of
+    /// people, and a bound that cannot be reasoned away is the cheaper guarantee against a
+    /// cycle written by two admins who each decided the other's id was the duplicate.
+    nonisolated static func aliasTable(_ members: [FamilyMember]) -> [UUID: UUID] {
+        var direct: [UUID: UUID] = [:]
+        for member in members where !member.removed {
+            if let target = member.sameAs, target != member.id { direct[member.id] = target }
+        }
+
+        var resolved: [UUID: UUID] = [:]
+        for start in direct.keys {
+            var current = start
+            var steps = 0
+            while let next = direct[current], steps < 16 {
+                current = next
+                steps += 1
+            }
+            if current != start { resolved[start] = current }
+        }
+        return resolved
+    }
+
     private static func guardians(from files: [ShelfFile]) -> [Profiles.Guardian] {
         var newest: [UUID: ShelfFile] = [:]
         for file in files {

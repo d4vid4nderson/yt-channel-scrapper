@@ -122,7 +122,7 @@ struct CommandBoard: View {
                         name: person.name,
                         isMinor: false,
                         approved: shelf.approved(for: person.id).count,
-                        devices: devices(of: person.id),
+                        devices: shelf.devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
                         onDrop: { payload in
@@ -137,7 +137,7 @@ struct CommandBoard: View {
                         name: person.name,
                         isMinor: true,
                         approved: shelf.approved(for: person.id).count,
-                        devices: devices(of: person.id),
+                        devices: shelf.devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
                         onDrop: { payload in
@@ -147,10 +147,6 @@ struct CommandBoard: View {
                 }
             }
         }
-    }
-
-    private func devices(of person: UUID) -> [DeviceRecord] {
-        shelf.devices.filter { $0.personID == person }
     }
 
     private var meta: some View {
