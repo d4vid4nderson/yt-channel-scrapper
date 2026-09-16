@@ -24,7 +24,14 @@ struct MiniPlayerView: View {
             VStack(spacing: 0) {
                 content
                     .padding(.horizontal, expanded ? 14 : 10)
-                    .padding(.vertical, expanded ? 12 : 6)
+                    .padding(.top, expanded ? 12 : 6)
+                    .padding(.bottom, expanded ? 8 : 6)
+
+                if expanded {
+                    scrubber
+                        .padding(.horizontal, 14)
+                        .padding(.bottom, 10)
+                }
 
                 if mini.isShowingOutputs, let player = mini.player {
                     OutputList(
@@ -62,15 +69,17 @@ struct MiniPlayerView: View {
             }
 
             if expanded {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(mini.title)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .truncationMode(.tail)
-                    scrubber
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
+                // Title only. The scrubber used to live under it in this column, which
+                // meant a progress bar for an hour-long video sharing the leftovers of a
+                // row that also holds the picture, the transport, the volume and four
+                // chrome buttons — a few dozen points, where a minute of seeking is a
+                // pixel. It now has the full width below, on its own row.
+                Text(mini.title)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, alignment: .leading)
                 transport
                 volume
                 Divider().frame(height: 26).overlay(.white.opacity(0.14))

@@ -53,7 +53,10 @@ final class MiniPlayer {
     private var tracker: Task<Void, Never>?
     private var outputsWatch: Task<Void, Never>?
 
-    private static let expanded = CGSize(width: 640, height: 118)
+    /// Height covers the picture row plus the scrubber's own row beneath it. The
+    /// scrubber was moved out of the title's column so it can run the island's full
+    /// width; the panel has to grow by that row or it simply clips.
+    private static let expanded = CGSize(width: 640, height: 140)
     private static let collapsedHeight: CGFloat = 48
 
     static let outputRowHeight: CGFloat = 30
