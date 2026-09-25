@@ -25,10 +25,10 @@ struct AppUpdateSheet: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(Paths.displayName)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.ink(1))
                 Text(updater.current.isEmpty ? "Installed version unknown" : "Version \(updater.current)")
                     .font(.system(size: 11.5).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(Palette.ink(0.45))
             }
             Spacer(minLength: 0)
         }
@@ -42,14 +42,14 @@ struct AppUpdateSheet: View {
         switch state {
         case .idle, .checking:
             line {
-                ProgressView().controlSize(.small).tint(.white)
+                ProgressView().controlSize(.small).tint(Palette.ink(1))
                 Text("Looking for a newer version…")
             }
 
         case .upToDate:
             line {
                 Image(systemName: "checkmark.circle.fill")
-                    .foregroundStyle(Color(red: 0.35, green: 0.82, blue: 0.45))
+                    .foregroundStyle(Palette.good)
                 Text("This is the latest version.")
             }
 
@@ -58,22 +58,22 @@ struct AppUpdateSheet: View {
                 HStack(spacing: 7) {
                     Text("Version \(release.version)")
                         .font(.system(size: 13, weight: .semibold).monospacedDigit())
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.ink(1))
                     if let published = release.published {
                         Text(published.formatted(date: .abbreviated, time: .omitted))
                             .font(.system(size: 11))
-                            .foregroundStyle(.white.opacity(0.38))
+                            .foregroundStyle(Palette.ink(0.38))
                     }
                 }
                 if release.notes.isEmpty {
                     Text("No release notes.")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(Palette.ink(0.45))
                 } else {
                     ScrollView {
                         Text(notes(release.notes))
                             .font(.system(size: 12))
-                            .foregroundStyle(.white.opacity(0.72))
+                            .foregroundStyle(Palette.ink(0.72))
                             .textSelection(.enabled)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -86,25 +86,25 @@ struct AppUpdateSheet: View {
             VStack(alignment: .leading, spacing: 9) {
                 Text("Downloading…")
                     .font(.system(size: 12.5))
-                    .foregroundStyle(.white.opacity(0.78))
+                    .foregroundStyle(Palette.ink(0.78))
                 ProgressView(value: fraction)
                     .progressViewStyle(.linear)
                     .tint(Palette.accent)
                 Text(String(format: "%.0f%%", fraction * 100))
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(Palette.ink(0.45))
             }
             .padding(.horizontal, 22)
 
         case .installing:
             line {
-                ProgressView().controlSize(.small).tint(.white)
+                ProgressView().controlSize(.small).tint(Palette.ink(1))
                 Text("Replacing the app…")
             }
 
         case .relaunching:
             line {
-                ProgressView().controlSize(.small).tint(.white)
+                ProgressView().controlSize(.small).tint(Palette.ink(1))
                 Text("Reopening the new version…")
             }
 
@@ -112,15 +112,15 @@ struct AppUpdateSheet: View {
             VStack(alignment: .leading, spacing: 8) {
                 HStack(alignment: .firstTextBaseline, spacing: 8) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundStyle(.orange)
+                        .foregroundStyle(Palette.warn)
                     Text(message)
                         .font(.system(size: 12.5))
-                        .foregroundStyle(.white.opacity(0.85))
+                        .foregroundStyle(Palette.ink(0.85))
                         .fixedSize(horizontal: false, vertical: true)
                 }
                 Text("You can always download it yourself from the releases page.")
                     .font(.system(size: 11.5))
-                    .foregroundStyle(.white.opacity(0.40))
+                    .foregroundStyle(Palette.ink(0.40))
             }
             .padding(.horizontal, 22)
         }
@@ -134,7 +134,7 @@ struct AppUpdateSheet: View {
             }
             .buttonStyle(.plain)
             .font(.system(size: 11.5))
-            .foregroundStyle(.white.opacity(0.42))
+            .foregroundStyle(Palette.ink(0.42))
             .help("Open the releases page in your browser")
             .pointingHand()
 
@@ -164,7 +164,7 @@ struct AppUpdateSheet: View {
             content()
         }
         .font(.system(size: 12.5))
-        .foregroundStyle(.white.opacity(0.78))
+        .foregroundStyle(Palette.ink(0.78))
         .padding(.horizontal, 22)
     }
 
@@ -198,14 +198,14 @@ private struct UpdateButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 12, weight: prominent ? .semibold : .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 7)
                 .background(
                     prominent
                         ? AnyShapeStyle(Palette.accent.opacity(hovering ? 0.85 : 1))
-                        : AnyShapeStyle(Color.white.opacity(hovering ? 0.2 : 0.1)),
-                    in: Capsule()
+                        : AnyShapeStyle(Palette.ink(hovering ? 0.2 : 0.1)),
+                    in: ThemedCapsule()
                 )
         }
         .buttonStyle(.plain)

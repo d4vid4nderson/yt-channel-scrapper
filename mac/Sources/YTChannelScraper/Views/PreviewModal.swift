@@ -31,7 +31,14 @@ struct PreviewModal: View {
                 Rectangle()
                     .fill(.black.opacity(0.62))
                     .background(.ultraThinMaterial)
-                    .ignoresSafeArea()
+                    // Not under the title bar: reaching up into it, this caught every
+                    // click there as "dismiss", and the window could not be dragged
+                    // while a video was open — invisibly so under a theme, whose title
+                    // bar is opaque and hid the dimming.
+                    .ignoresSafeArea(edges: [.horizontal, .bottom])
+                    // The dimmed page is as good a handle as the title bar: a drag moves
+                    // the window, a click still closes the card.
+                    .gesture(WindowDragGesture())
                     .onTapGesture(perform: dismiss)
                     .transition(.opacity)
 
@@ -66,13 +73,13 @@ struct PreviewModal: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(video.title)
                         .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.ink(1))
                         .lineLimit(2)
                         .fixedSize(horizontal: false, vertical: true)
                     Text([video.durationText, video.viewsText]
                             .filter { !$0.isEmpty }.joined(separator: "  ·  "))
                         .font(.system(size: 11).monospacedDigit())
-                        .foregroundStyle(Color(white: 0.6))
+                        .foregroundStyle(Palette.ink(0.6))
                 }
                 Spacer(minLength: 8)
                 // Beside the close button rather than down in the footer. The footer is
@@ -113,10 +120,10 @@ struct PreviewModal: View {
                 } label: {
                     Label("Download this", systemImage: "arrow.down.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onFill)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 7)
-                        .background(Palette.accent, in: Capsule())
+                        .background(Palette.accent, in: ThemedCapsule())
                 }
                 .buttonStyle(.plain)
                 .help("Queue this video at the chosen quality, and keep it playing in the notch")
@@ -125,10 +132,10 @@ struct PreviewModal: View {
                 Link(destination: video.url) {
                     Text("Open on YouTube")
                         .font(.system(size: 12))
-                        .foregroundStyle(Color(white: 0.75))
+                        .foregroundStyle(Palette.ink(0.75))
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
-                        .background(.white.opacity(0.1), in: Capsule())
+                        .background(Palette.ink(0.1), in: ThemedCapsule())
                 }
                 .buttonStyle(.plain)
                 .help("Open this video in your browser")
@@ -140,10 +147,10 @@ struct PreviewModal: View {
                         Text("Notch Player")
                     }
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.75))
+                    .foregroundStyle(Palette.ink(0.75))
                     .padding(.horizontal, 12)
                     .padding(.vertical, 7)
-                    .background(.white.opacity(0.1), in: Capsule())
+                    .background(Palette.ink(0.1), in: ThemedCapsule())
                 }
                 .buttonStyle(.plain)
                 .help("Keep it playing in the notch and put the window away")
@@ -153,7 +160,7 @@ struct PreviewModal: View {
 
                 Text("Adapts to your connection, up to 1080p")
                     .font(.system(size: 10.5))
-                    .foregroundStyle(Color(white: 0.45))
+                    .foregroundStyle(Palette.ink(0.45))
             }
             .padding(.horizontal, 20)
             .padding(.vertical, 14)
@@ -161,11 +168,12 @@ struct PreviewModal: View {
         .frame(maxWidth: max(min(maxStageWidth, 980), 560))
         .fixedSize(horizontal: false, vertical: true)
         .background(Palette.sheetSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: 18, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(Color(white: 0.18), lineWidth: 1)
+            ThemedRect(cornerRadius: 18, style: .continuous)
+                .strokeBorder(Palette.ink(0.18), lineWidth: 1)
         }
+        .themeEdge(radius: 18)
         .shadow(color: .black.opacity(0.6), radius: 40, y: 16)
         .padding(44)
     }
@@ -179,10 +187,10 @@ private struct PreviewStage: View {
         switch state {
         case .working(let stage):
             VStack(spacing: 10) {
-                ProgressView().controlSize(.small).tint(.white)
+                ProgressView().controlSize(.small).tint(Palette.ink(1))
                 Text(stage)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.6))
+                    .foregroundStyle(Palette.ink(0.6))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let player):
@@ -191,10 +199,10 @@ private struct PreviewStage: View {
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 22))
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Palette.warn)
                 Text(message)
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.72))
+                    .foregroundStyle(Palette.ink(0.72))
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 420)
             }
@@ -216,9 +224,9 @@ private struct CircleButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(tint ?? .white)
+                .foregroundStyle(tint ?? Palette.ink(1))
                 .frame(width: 28, height: 28)
-                .background(.white.opacity(hovering ? 0.22 : 0.1), in: Circle())
+                .background(Palette.ink(hovering ? 0.22 : 0.1), in: Circle())
         }
         .buttonStyle(.plain)
         .help(title)

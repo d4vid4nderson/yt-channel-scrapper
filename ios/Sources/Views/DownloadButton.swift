@@ -49,7 +49,7 @@ struct DownloadButton: View {
         Button(action: action) {
             ZStack {
                 Circle()
-                    .stroke(Color.white.opacity(0.28), lineWidth: 2)
+                    .stroke(Palette.ink(0.28), lineWidth: 2)
 
                 if isDone {
                     Circle().fill(Palette.accent)
@@ -80,7 +80,7 @@ struct DownloadButton: View {
         case .done:
             Image(systemName: "checkmark")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
                 .transition(.scale.combined(with: .opacity))
 
         case .paused:
@@ -108,7 +108,7 @@ struct DownloadButton: View {
             Text(percentText)
                 .font(.system(size: 9, weight: .bold, design: .rounded))
                 .monospacedDigit()
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
                 .lineLimit(1)
                 .minimumScaleFactor(0.7)
                 .contentTransition(.numericText())
@@ -117,7 +117,7 @@ struct DownloadButton: View {
         default:
             Image(systemName: "arrow.down")
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
         }
     }
 

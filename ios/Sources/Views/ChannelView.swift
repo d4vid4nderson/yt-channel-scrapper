@@ -17,38 +17,29 @@ struct ChannelView: View {
     var body: some View {
         VStack(spacing: 0) {
             ChannelHeader(channel: channel, isSaved: model.library.contains(channel.id)) {
-                model.library.toggle(channel)
+                // The saved channels are the parent's curation, not the minor's to edit.
+                if !model.isMinor { model.library.toggle(channel) }
             }
             Divider().overlay(Color.hairline)
 
-            TabPicker(tab: Binding(
-                get: { model.listing.tab },
-                set: { model.listing.show($0) }
-            ))
-            .padding(.vertical, 8)
+            if model.isMinor {
+                downloaded
+            } else {
+                TabPicker(tab: Binding(
+                    get: { model.listing.tab },
+                    set: { model.listing.show($0) }
+                ))
+                .padding(.vertical, 8)
 
-            List {
-                ForEach(model.visible) { video in
-                    row(for: video)
-                }
-
-                // Reaching this row is what asks for the next page — no "load more"
-                // button, because an infinite list is what a phone expects.
-                if model.listing.continuation != nil {
-                    loadingRow
-                        .onAppear { model.listing.loadMore() }
-                }
+                live
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
-            .animation(.default, value: model.isSelecting)
 
             if model.isSelecting && !model.picked.isEmpty {
                 selectionBar
             }
         }
         .ground()
-        .navigationTitle(model.listing.tab.label)
+        .navigationTitle(model.isMinor ? channel.title : model.listing.tab.label)
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
@@ -68,7 +59,50 @@ struct ChannelView: View {
         }
         // Keyed on the id so that pushing a different channel re-opens rather than
         // showing the previous one's videos under the new one's header.
-        .task(id: channel.id) { model.beginListing(channel) }
+        // A minor's phone never asks YouTube for the channel's catalogue at all.
+        .task(id: channel.id) { if !model.isMinor { model.beginListing(channel) } }
+    }
+
+    private var live: some View {
+        List {
+            ForEach(model.visible) { video in
+                row(for: video)
+            }
+
+            // Reaching this row is what asks for the next page — no "load more"
+            // button, because an infinite list is what a phone expects.
+            if model.listing.continuation != nil {
+                loadingRow
+                    .onAppear { model.listing.loadMore() }
+            }
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .animation(.default, value: model.isSelecting)
+    }
+
+    /// Minor Mode's version of the channel: what has been approved from it, and nothing
+    /// else.
+    @ViewBuilder
+    private var downloaded: some View {
+        let videos = model.approvedVideos(of: channel)
+        if videos.isEmpty {
+            Placeholder(icon: "play.rectangle", title: "Nothing here yet",
+                        detail: "Videos from this channel show up once a parent has "
+                            + "added them.")
+        } else {
+            List {
+                ForEach(videos) { video in
+                    Button { model.play(video) } label: {
+                        VideoRow(video: video, isSaved: true, showChannel: false)
+                    }
+                    .buttonStyle(.plain)
+                    .listRowBackground(Color.card)
+                }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
     }
 
     private func row(for video: Video) -> some View {
@@ -146,6 +180,9 @@ struct ChannelView: View {
                     .font(.system(size: 15, weight: .semibold))
             }
             .buttonStyle(.borderedProminent)
+            // The theme sets a default ink for the whole app, which would otherwise win over
+            // the white a filled button gives its label — green on green on the Nostromo.
+            .foregroundStyle(Palette.onFill)
             .tint(Palette.accent)
         }
         .padding(.horizontal, Metrics.gutter)

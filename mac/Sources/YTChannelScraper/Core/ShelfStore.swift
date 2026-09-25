@@ -40,6 +40,15 @@ final class ShelfStore {
     /// folder is deleted or unshared out from under the app.
     private(set) var folder: URL?
 
+    /// Whether `folder` is a copy of the family folder that a Mac put on this device over
+    /// the cable or Wi-Fi, rather than the shared iCloud folder itself.
+    ///
+    /// Exists for the child's phone signed into its own Apple ID, where the shared folder
+    /// only appears once somebody has shared it and accepted the invitation — the step
+    /// that, in practice, did not happen. A Mac that can reach the phone can simply hand
+    /// it the files instead. The shared folder always wins when there is one.
+    private(set) var isDeliveredCopy = false
+
     /// Every child any guardian has created, newest name wins. Derived from the files
     /// rather than stored, so adding a child needs no coordination either.
     private(set) var roster: [Profiles.Minor] = []
@@ -125,9 +134,43 @@ final class ShelfStore {
         stopWatching()
         UserDefaults.standard.removeObject(forKey: Self.bookmarkKey)
         folder = nil
+        isDeliveredCopy = false
         files = []
         roster = []
         problem = nil
+    }
+
+    /// Read from a copy a Mac delivered, when there is no shared folder to read instead.
+    func useDeliveredCopy(at url: URL) {
+        guard folder == nil || isDeliveredCopy else { return }
+        folder = url
+        isDeliveredCopy = true
+        problem = nil
+    }
+
+    /// Take a device's own report, carried here from that device by a Mac, and put it in
+    /// the shared folder where the rest of the family can see it.
+    ///
+    /// Still one writer per file in every sense that matters: the bytes are the device's
+    /// own, unchanged, and a copy is only ever replaced by a newer report from the same
+    /// device. Returns the record when it was relayed.
+    @discardableResult
+    func relay(deviceRecord data: Data) async -> DeviceRecord? {
+        guard let folder, !isDeliveredCopy,
+              let record = try? Self.decoder.decode(DeviceRecord.self, from: data)
+        else { return nil }
+        // A device somebody removed comes back in every phone's delivered copy until that
+        // copy is replaced. Relaying it would undo the removal on the next sync.
+        guard !DeviceTidy.visible([record], forgotten: forgotten).isEmpty else { return nil }
+        if let known = devices.first(where: { $0.deviceID == record.deviceID }),
+           known.lastSeen >= record.lastSeen {
+            return record
+        }
+        let wrote = await Task.detached { Self.write(record, in: folder) }.value
+        guard wrote else { return nil }
+        devices.removeAll { $0.deviceID == record.deviceID }
+        devices.append(record)
+        return record
     }
 
     private func resolveBookmark() {
@@ -184,7 +227,7 @@ final class ShelfStore {
         case .success(let (found, skipped)):
             files = found
             peopleFiles = declaredPeople
-            devices = reported
+            devices = DeviceTidy.visible(reported, forgotten: forgotten)
             recompute()
             problem = nil
             lastRead = Date()
@@ -325,6 +368,16 @@ final class ShelfStore {
     /// What this child is allowed to see, after every guardian's decisions are merged.
     func approved(for minorID: UUID) -> Set<ShelfEntry.Key> {
         ShelfMerge.approved(entries(for: minorID))
+    }
+
+    /// The standing approvals for somebody, newest first, each carrying who made it —
+    /// what the Devices list shows under a child's phone.
+    func approvedEntries(for personID: UUID) -> [ShelfEntry] {
+        let all = entries(for: personID)
+        let allowed = ShelfMerge.approved(all)
+        return ShelfMerge.resolve(all).values
+            .filter { allowed.contains($0.key) }
+            .sorted { $0.at > $1.at }
     }
 
     /// The standing decision about one item, for a row that wants to show who made it.
@@ -790,14 +843,26 @@ final class ShelfStore {
     /// This install's own id, made once and kept. Not derived from anything the system
     /// offers: `identifierForVendor` changes when the last app from a vendor is deleted,
     /// and a device that came back with a new id would appear as a second device.
+    ///
+    /// On iOS the id lives in the Keychain, which survives deleting the app; `UserDefaults`
+    /// does not. It used to live only in the defaults, and every reinstall — which setting
+    /// up a child's phone from the Mac does routinely — came back as a second device
+    /// beside the first. An id already in the defaults is carried over, so upgrading does
+    /// not itself mint one more. The Mac keeps the defaults: an ad-hoc signed build gets a
+    /// new code signature every time, and the Keychain would ask for a password on each.
     private var deviceID: UUID {
         let key = "shelf.device.id"
-        if let raw = UserDefaults.standard.string(forKey: key), let id = UUID(uuidString: raw) {
+        #if os(iOS)
+        if let raw = DeviceIDKeychain.read(), let id = UUID(uuidString: raw) {
             return id
         }
-        let made = UUID()
-        UserDefaults.standard.set(made.uuidString, forKey: key)
-        return made
+        #endif
+        let id = UserDefaults.standard.string(forKey: key).flatMap(UUID.init(uuidString:)) ?? UUID()
+        UserDefaults.standard.set(id.uuidString, forKey: key)
+        #if os(iOS)
+        DeviceIDKeychain.write(id.uuidString)
+        #endif
+        return id
     }
 
     /// The name this device shows in the family list, until somebody renames it.
@@ -821,7 +886,10 @@ final class ShelfStore {
         person: (id: UUID, name: String)?,
         isMinor: Bool,
         approved: Int = 0,
-        downloaded: Int = 0
+        downloaded: Int = 0,
+        files: [DeviceRecord.File]? = nil,
+        freeBytes: Int64? = nil,
+        library: DeviceRecord.LibraryCounts? = nil
     ) async -> Bool {
         guard let folder else { return false }
         personID = person?.id
@@ -840,7 +908,10 @@ final class ShelfStore {
             isMinor: isMinor,
             lastSeen: Date(),
             approved: approved,
-            downloaded: downloaded
+            downloaded: downloaded,
+            files: files.map { Array($0.sorted { $0.added > $1.added }.prefix(DeviceRecord.fileLimit)) },
+            freeBytes: freeBytes,
+            library: library
         )
 
         let wrote = await Task.detached { Self.write(record, in: folder) }.value
@@ -848,6 +919,62 @@ final class ShelfStore {
         devices.removeAll { $0.deviceID == id }
         devices.append(record)
         devices.sort { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+        return true
+    }
+
+    // MARK: - Tidying the device list
+
+    /// Every admin's removals, together. A device hidden by either stays hidden.
+    private var forgotten: [ForgottenDevice] {
+        peopleFiles.flatMap { $0.forgottenDevices ?? [] }
+    }
+
+    /// Records that look like an older copy of a device still reporting — what an app
+    /// reinstall used to leave behind.
+    var duplicateDevices: [DeviceRecord] {
+        DeviceTidy.duplicates(in: devices, aliases: aliases)
+            .filter { !isThisDevice($0) }
+    }
+
+    /// Records nothing has heard from in a month.
+    var staleDevices: [DeviceRecord] {
+        DeviceTidy.stale(in: devices).filter { !isThisDevice($0) }
+    }
+
+    /// What Clean up would take off the list.
+    var clutter: [DeviceRecord] {
+        DeviceTidy.clutter(in: devices, aliases: aliases).filter { !isThisDevice($0) }
+    }
+
+    /// Take devices off the family list, on every device that reads this folder.
+    ///
+    /// Writes a tombstone for each into this admin's own people file, then deletes the
+    /// record's file to keep the folder readable. The tombstone is what makes it stick;
+    /// the deletion alone would be undone by the next phone that relays its copy. Never
+    /// removes the device you are holding — it would only write itself back a moment
+    /// later, and "I removed this Mac and it is still here" reads as a bug.
+    @discardableResult
+    func forget(_ records: [DeviceRecord], as guardian: Profiles.Guardian) async -> Bool {
+        guard let folder, !isDeliveredCopy else { return false }
+        let targets = records.filter { !isThisDevice($0) }
+        guard !targets.isEmpty else { return true }
+
+        var mine = peopleFiles.first { $0.guardianID == guardian.id }
+            ?? PeopleFile(guardianID: guardian.id, writtenAt: Date(), people: [])
+        var tombstones = mine.forgottenDevices ?? []
+        for record in targets {
+            tombstones.removeAll { $0.deviceID == record.deviceID && $0.lastSeen <= record.lastSeen }
+            tombstones.append(ForgottenDevice(deviceID: record.deviceID, lastSeen: record.lastSeen))
+        }
+        mine.forgottenDevices = tombstones
+        mine.writtenAt = Date()
+        guard await commit(mine) else { return false }
+
+        let names = targets.map(\.filename)
+        await Task.detached { Self.delete(names, in: folder) }.value
+        let gone = Set(targets.map(\.deviceID))
+        devices.removeAll { gone.contains($0.deviceID) }
+        Log.shelf.notice("forgot \(targets.count) device record(s)")
         return true
     }
 
@@ -959,6 +1086,20 @@ final class ShelfStore {
         return found.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
     }
 
+    /// Remove device records by name. A file already gone is not a failure: the other
+    /// admin's device may have tidied it first.
+    private nonisolated static func delete(_ filenames: [String], in folder: URL) {
+        let opened = folder.startAccessingSecurityScopedResource()
+        defer { if opened { folder.stopAccessingSecurityScopedResource() } }
+        for name in filenames where name.hasPrefix(DeviceRecord.prefix) {
+            let url = folder.appendingPathComponent(name)
+            var failure: NSError?
+            NSFileCoordinator().coordinate(writingItemAt: url, options: .forDeleting, error: &failure) { target in
+                try? FileManager.default.removeItem(at: target)
+            }
+        }
+    }
+
     private nonisolated static func write(_ record: DeviceRecord, in folder: URL) -> Bool {
         let opened = folder.startAccessingSecurityScopedResource()
         defer { if opened { folder.stopAccessingSecurityScopedResource() } }
@@ -1039,3 +1180,42 @@ extension Log {
     static let shelf = Logger(subsystem: "com.d4vid4nderson.ytchannelscraper",
                               category: "shelf")
 }
+
+#if os(iOS)
+import Security
+
+/// Where an iPhone keeps its device id: one generic-password item, readable after the
+/// first unlock so a background refresh can still name itself, and never synced — an id
+/// that followed the Apple ID to a new phone would make two phones one device.
+private enum DeviceIDKeychain {
+    private static var query: [String: Any] { [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: "com.d4vid4nderson.ytchannelscraper.device",
+        kSecAttrAccount as String: "shelf.device.id",
+    ] }
+
+    static func read() -> String? {
+        var lookup = query
+        lookup[kSecReturnData as String] = true
+        lookup[kSecMatchLimit as String] = kSecMatchLimitOne
+        var result: CFTypeRef?
+        guard SecItemCopyMatching(lookup as CFDictionary, &result) == errSecSuccess,
+              let data = result as? Data
+        else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    static func write(_ value: String) {
+        let data = Data(value.utf8)
+        if SecItemUpdate(query as CFDictionary, [kSecValueData as String: data] as CFDictionary)
+            == errSecSuccess { return }
+        var item = query
+        item[kSecValueData as String] = data
+        item[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+        let status = SecItemAdd(item as CFDictionary, nil)
+        if status != errSecSuccess {
+            Log.shelf.error("device id not kept in the keychain: \(status)")
+        }
+    }
+}
+#endif

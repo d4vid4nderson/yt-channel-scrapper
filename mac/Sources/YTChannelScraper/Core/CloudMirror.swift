@@ -39,6 +39,21 @@ import os
 /// it would erase the very copy it exists to restore. So nothing is ever pushed until the
 /// first read has come back — `hasSynced` is the entire safety mechanism, and every write
 /// path goes through it.
+///
+/// ## Joining, once per device
+///
+/// Last-writer-wins is only safe between copies that started out the same. Two devices
+/// meeting for the first time did not: the Mac spent months signed ad hoc, which iCloud
+/// silently refuses, so its library and the phone's grew apart — and whichever happened
+/// to be written last would have replaced the other wholesale, taking every channel only
+/// the loser had with it.
+///
+/// So the first snapshot a device sees is *merged* rather than adopted — a union, through
+/// `didJoin` — and only after that does the device join the last-writer-wins regime. A
+/// union is the one merge that cannot lose anything, and at the moment of joining it also
+/// cannot resurrect anything, because no deletion has been communicated yet. Until the
+/// device has joined, its own pushes are held back for a short grace period too, so a
+/// first launch cannot overwrite a copy iCloud simply had not finished handing over.
 @MainActor
 @Observable
 final class CloudMirror {
@@ -75,6 +90,25 @@ final class CloudMirror {
     /// Called when iCloud has a newer library than this device's. The library replaces
     /// its contents with what is handed over.
     var didReceive: ((LibraryArchive) -> Void)?
+
+    /// Called instead of `didReceive` for the first snapshot this device ever sees: the
+    /// library should merge it into what it has — keeping both sides — and push the
+    /// result. Falls back to `didReceive` when nothing is listening.
+    var didJoin: ((LibraryArchive) -> Void)?
+
+    /// Whether this device has merged iCloud's copy once. In `UserDefaults` for the same
+    /// reason `lastWrittenAt` is: a reinstall forgets it, and joins again, and a union of
+    /// an empty library with iCloud's is simply iCloud's.
+    private var hasJoined: Bool {
+        get { UserDefaults.standard.bool(forKey: "library.cloudJoined.v1") }
+        set { UserDefaults.standard.set(newValue, forKey: "library.cloudJoined.v1") }
+    }
+
+    /// Whether pushes may go out. False only before joining, and only for the grace
+    /// period — long enough for a first sync to deliver an existing snapshot.
+    private var mayPush = true
+    private var heldBack: LibraryArchive?
+    private static let joinGrace: Duration = .seconds(20)
 
     private var pushTask: Task<Void, Never>?
     private let observer: Observer
@@ -121,14 +155,34 @@ final class CloudMirror {
             hasSynced = true
             return
         }
+        if !hasJoined {
+            mayPush = false
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.joinGrace)
+                self?.allowPushes()
+            }
+        }
         adoptRemoteIfNewer()
         hasSynced = true
+    }
+
+    private func allowPushes() {
+        guard !mayPush else { return }
+        mayPush = true
+        if let archive = heldBack {
+            heldBack = nil
+            push(archive)
+        }
     }
 
     /// Mirror the library as it now stands. Cheap to call on every change: the actual
     /// write is coalesced into one a second later.
     func push(_ archive: LibraryArchive) {
         guard hasSynced else { return }
+        guard mayPush else {
+            heldBack = archive
+            return
+        }
         pushTask?.cancel()
         pushTask = Task { [weak self] in
             try? await Task.sleep(for: .milliseconds(800))
@@ -178,6 +232,18 @@ final class CloudMirror {
             problem = "iCloud holds a library from a newer version of the app."
             return
         }
+        // The first snapshot this device ever sees is merged, whatever its date — see
+        // "Joining" above. The library pushes the union once it has merged.
+        if !hasJoined {
+            Log.cloud.notice("joining: merging iCloud copy of \(snapshot.archive.channels.count) channels")
+            hasJoined = true
+            lastWrittenAt = max(lastWrittenAt, snapshot.writtenAt)
+            let merge = didJoin ?? didReceive
+            allowPushes()
+            merge?(snapshot.archive)
+            return
+        }
+
         // Strictly newer: a snapshot this device wrote comes back as an external change
         // on its own devices, and adopting your own write is a pointless round trip.
         guard snapshot.writtenAt > lastWrittenAt else { return }

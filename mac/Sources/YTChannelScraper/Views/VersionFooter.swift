@@ -36,8 +36,16 @@ struct VersionFooter: View {
         }
         .padding(.horizontal, 12)
         .frame(height: 22)
-        .background(.bar)
-        .overlay(alignment: .top) { Divider() }
+        .background {
+            if Theme.active.id == .classic { Rectangle().fill(.bar) } else { Palette.ground }
+        }
+        .overlay(alignment: .top) {
+            if Theme.active.id == .classic {
+                Divider()
+            } else {
+                Rectangle().fill(Theme.active.edgeTint.opacity(0.35)).frame(height: 1)
+            }
+        }
     }
 
     private var label: String {

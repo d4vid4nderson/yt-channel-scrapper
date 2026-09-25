@@ -20,16 +20,16 @@ struct DownloadsDrawer: View {
 
         return VStack(spacing: 0) {
             head(count: jobs.count, hasFinished: hasFinished)
-            Divider().overlay(.white.opacity(0.09))
+            Divider().overlay(Palette.ink(0.09))
             jobList(jobs)
-            Divider().overlay(.white.opacity(0.09))
+            Divider().overlay(Palette.ink(0.09))
             UpdaterFooter(updater: updater)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(Palette.sheetSurface)
         .overlay(alignment: .top) {
             Rectangle()
-                .fill(Color(white: 0.2))
+                .fill(Palette.ink(0.2))
                 .frame(height: 1)
         }
         .onExitCommand(perform: close)
@@ -38,16 +38,16 @@ struct DownloadsDrawer: View {
     private func head(count: Int, hasFinished: Bool) -> some View {
         HStack(spacing: 12) {
             Text("Downloads")
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white)
+                .displayType(15, classic: .medium)
+                .foregroundStyle(Palette.ink(1))
 
             if count > 0 {
                 Text("\(count)")
                     .font(.system(size: 12).monospacedDigit())
-                    .foregroundStyle(Color(white: 0.78))
+                    .foregroundStyle(Palette.ink(0.78))
                     .padding(.horizontal, 10)
                     .padding(.vertical, 3)
-                    .background(.white.opacity(0.09), in: Capsule())
+                    .background(Palette.ink(0.09), in: ThemedCapsule())
             }
 
             Spacer()
@@ -72,13 +72,13 @@ struct DownloadsDrawer: View {
             VStack(spacing: 7) {
                 Image(systemName: "arrow.down.circle")
                     .font(.system(size: 24))
-                    .foregroundStyle(Color(white: 0.55))
+                    .foregroundStyle(Palette.ink(0.55))
                 Text("No downloads yet")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Color(white: 0.78))
+                    .foregroundStyle(Palette.ink(0.78))
                 Text("Pick some videos and they will show up here.")
                     .font(.system(size: 12))
-                    .foregroundStyle(Color(white: 0.5))
+                    .foregroundStyle(Palette.ink(0.5))
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
@@ -104,7 +104,7 @@ private struct JobRow: View {
             VStack(alignment: .leading, spacing: 7) {
                 Text(job.video.title)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.ink(1))
                     .lineLimit(1)
 
                 if job.state == .downloading || job.state == .processing {
@@ -121,12 +121,12 @@ private struct JobRow: View {
                     if job.state == .downloading, !detail.isEmpty {
                         Text(detail)
                             .font(.system(size: 11).monospacedDigit())
-                            .foregroundStyle(Color(white: 0.62))
+                            .foregroundStyle(Palette.ink(0.62))
                     }
                     if let error = job.error, job.state == .failed || job.state == .retrying {
                         Text(error)
                             .font(.system(size: 11))
-                            .foregroundStyle(job.state == .failed ? Palette.accent : Color(white: 0.62))
+                            .foregroundStyle(job.state == .failed ? Palette.accent : Palette.ink(0.62))
                             .lineLimit(1)
                     }
                     // The mp3 is reported either way once the video is down: silence
@@ -135,12 +135,12 @@ private struct JobRow: View {
                         if let audioError = job.audioError {
                             Text("no mp3 — \(audioError)")
                                 .font(.system(size: 11))
-                                .foregroundStyle(.orange)
+                                .foregroundStyle(Palette.warn)
                                 .lineLimit(1)
                         } else if job.audioFile != nil {
                             Text("+ mp3")
                                 .font(.system(size: 11, weight: .medium))
-                                .foregroundStyle(Color(white: 0.62))
+                                .foregroundStyle(Palette.ink(0.62))
                         }
                     }
                 }
@@ -161,11 +161,12 @@ private struct JobRow: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 14)
-        .background(.white.opacity(0.045), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Palette.ink(0.045), in: ThemedRect(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(.white.opacity(0.08), lineWidth: 1)
+            ThemedRect(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Palette.ink(0.08), lineWidth: 1)
         }
+        .themeEdge(radius: 14)
     }
 
     private var detail: String {
@@ -189,10 +190,10 @@ private struct JobRow: View {
 
     private var tint: Color {
         switch job.state {
-        case .done:     Color(red: 0.35, green: 0.82, blue: 0.45)
+        case .done:     Palette.good
         case .failed:   Palette.accent
-        case .retrying: .orange
-        default:        Color(white: 0.72)
+        case .retrying: Palette.warn
+        default:        Palette.ink(0.72)
         }
     }
 }
@@ -211,17 +212,17 @@ private struct UpdaterFooter: View {
                 HStack(spacing: 6) {
                     Text("yt-dlp")
                         .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(Color(white: 0.72))
+                        .foregroundStyle(Palette.ink(0.72))
                     Text(updater.current.isEmpty ? "…" : updater.current)
                         .font(.system(size: 11).monospacedDigit())
-                        .foregroundStyle(Color(white: 0.55))
+                        .foregroundStyle(Palette.ink(0.55))
                     if updater.isUsingDownloadedCopy {
                         Text("updated")
                             .font(.system(size: 9, weight: .semibold))
-                            .foregroundStyle(Color(white: 0.62))
+                            .foregroundStyle(Palette.ink(0.62))
                             .padding(.horizontal, 5)
                             .padding(.vertical, 1)
-                            .background(.white.opacity(0.1), in: Capsule())
+                            .background(Palette.ink(0.1), in: ThemedCapsule())
                     }
                 }
                 status
@@ -254,17 +255,17 @@ private struct UpdaterFooter: View {
         case .unknown:
             EmptyView()
         case .checking:
-            note("Checking…", Color(white: 0.55))
+            note("Checking…", Palette.ink(0.55))
         case .upToDate:
-            note("Up to date", Color(white: 0.55))
+            note("Up to date", Palette.ink(0.55))
         case .available(let version):
-            note("\(version) available", Color(red: 1, green: 0.72, blue: 0.35))
+            note("\(version) available", Palette.warn)
         case .downloading:
-            note("Downloading…", Color(white: 0.55))
+            note("Downloading…", Palette.ink(0.55))
         case .installing:
-            note("Installing…", Color(white: 0.55))
+            note("Installing…", Palette.ink(0.55))
         case .installed(let version):
-            note("Updated to \(version) — in use now", Color(red: 0.4, green: 0.85, blue: 0.5))
+            note("Updated to \(version) — in use now", Palette.good)
         case .failed(let message):
             note(message, Palette.accent)
         }
@@ -289,14 +290,14 @@ private struct FooterButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
                 .padding(.horizontal, 12)
                 .padding(.vertical, 6)
                 .background(
                     prominent
                         ? AnyShapeStyle(Palette.accent.opacity(hovering ? 0.85 : 1))
-                        : AnyShapeStyle(Color.white.opacity(hovering ? 0.22 : 0.1)),
-                    in: Capsule()
+                        : AnyShapeStyle(Palette.ink(hovering ? 0.22 : 0.1)),
+                    in: ThemedCapsule()
                 )
         }
         .buttonStyle(.plain)

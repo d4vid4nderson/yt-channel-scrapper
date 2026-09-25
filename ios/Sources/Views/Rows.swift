@@ -114,7 +114,7 @@ struct ChannelHeader: View {
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(channel.title)
-                    .font(.system(size: 17, weight: .semibold))
+                    .displayType(17, classic: .semibold)
                     .foregroundStyle(Color.primaryText)
                     .lineLimit(1)
                 let subtitle = channel.subtitle

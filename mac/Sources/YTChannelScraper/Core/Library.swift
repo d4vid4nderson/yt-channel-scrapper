@@ -47,6 +47,8 @@ final class Library {
         // Set before `start()`, because the first read can hand something back
         // synchronously and there would be nothing listening.
         cloud.didReceive = { [weak self] incoming in self?.adopt(incoming) }
+        // The first time, keep both sides — see `CloudMirror`'s note on joining.
+        cloud.didJoin = { [weak self] incoming in self?.merge(incoming) }
         cloud.start()
         // Seeds iCloud from a library that predates it. Harmless when iCloud is already
         // newer: `start()` will have adopted that first, and this pushes the same thing

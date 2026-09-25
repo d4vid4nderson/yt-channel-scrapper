@@ -65,12 +65,15 @@ final class ShelfReconciler {
     ///   already there or the veto is decorative. **False on an admin's**, where the
     ///   local files are their own library and the shelf is only a list of things other
     ///   people have sent them — sweeping there would delete what nobody vetoed.
+    /// - Parameter fetching: whether to download what is approved. False when the phone
+    ///   streams approved videos instead, which is the default for a child's phone now.
     func reconcile(
         for minor: Profiles.Minor,
         shelf: ShelfStore,
         downloads: Downloads,
         localFiles: LocalFiles,
-        sweeping: Bool = true
+        sweeping: Bool = true,
+        fetching: Bool = true
     ) async {
         guard !isRunning else { return }
         isRunning = true
@@ -89,7 +92,8 @@ final class ShelfReconciler {
         let allowed = Set(playable.map(\.id))
 
         lastSwept = sweeping ? sweep(keeping: allowed, localFiles: localFiles) : 0
-        awaiting = fetch(playable, downloads: downloads, localFiles: localFiles)
+        // Not fetching means approved videos are streamed instead, so nothing is owed.
+        awaiting = fetching ? fetch(playable, downloads: downloads, localFiles: localFiles) : 0
         lastRun = Date()
     }
 

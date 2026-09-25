@@ -114,7 +114,25 @@ struct MinorModeView: View {
     @ViewBuilder
     private var handOver: some View {
         Section {
-            if model.shelf.roster.isEmpty {
+            if let last = profiles.lastMinor {
+                // The usual case on a child's phone: it was theirs a minute ago.
+                Button {
+                    guard profiles.relock() else {
+                        couldNotLock = true
+                        return
+                    }
+                    model.enterMinorMode()
+                    dismiss()
+                } label: {
+                    Label("Lock again for \(last.name)", systemImage: "lock.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Palette.accent)
+                }
+                .listRowBackground(Color.card)
+            }
+            if model.shelf.roster.isEmpty && profiles.lastMinor != nil {
+                // Nothing else to offer until the family folder is connected.
+            } else if model.shelf.roster.isEmpty {
                 // Nothing to hand over yet. Said plainly rather than offering a disabled
                 // button with no explanation of what would enable it.
                 Row(icon: "person.crop.circle.badge.plus",

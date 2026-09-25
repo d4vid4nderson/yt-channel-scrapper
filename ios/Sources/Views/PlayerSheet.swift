@@ -197,6 +197,9 @@ struct PlayerSheet: View {
                         .font(.system(size: 13, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
+                // The theme sets a default ink for the whole app, which would otherwise win over
+                // the white a filled button gives its label — green on green on the Nostromo.
+                .foregroundStyle(Palette.onFill)
                 .tint(Palette.accent)
             }
         } else if let file = item.file {
@@ -208,6 +211,9 @@ struct PlayerSheet: View {
                         .font(.system(size: 13, weight: .medium))
                 }
                 .buttonStyle(.borderedProminent)
+                // The theme sets a default ink for the whole app, which would otherwise win over
+                // the white a filled button gives its label — green on green on the Nostromo.
+                .foregroundStyle(Palette.onFill)
                 .tint(Palette.accent)
             }
 

@@ -22,16 +22,26 @@ struct HomeView: View {
     var body: some View {
         NavigationStack(path: $model.homePath) {
             VStack(spacing: 0) {
-                Picker("Shelf", selection: $shelf) {
-                    ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, Metrics.gutter)
-                .padding(.vertical, 8)
+                if model.isMinor && model.childWasRemoved {
+                    Placeholder(icon: "person.crop.circle.badge.xmark",
+                                title: "This phone is not set up any more",
+                                detail: "It was removed from the family. A parent can set "
+                                    + "it up again from Command Center on the Mac.")
+                } else {
+                    if model.isMinor && model.shelf.folder == nil {
+                        ConnectFolderCard(model: model)
+                    }
+                    Picker("Shelf", selection: $shelf) {
+                        ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
+                    }
+                    .pickerStyle(.segmented)
+                    .padding(.horizontal, Metrics.gutter)
+                    .padding(.vertical, 8)
 
-                switch shelf {
-                case .channels: channels
-                case .videos: videos
+                    switch shelf {
+                    case .channels: channels
+                    case .videos: videos
+                    }
                 }
             }
             .navigationDestination(for: Channel.self) { channel in
@@ -124,15 +134,26 @@ struct HomeView: View {
         }
     }
 
+    /// Nil in Minor Mode, for the same reason as `removeChannels`.
+    private var removeVideos: ((IndexSet) -> Void)? {
+        guard !model.isMinor else { return nil }
+        return { offsets in
+            let all = model.savedVideos
+            for index in offsets { model.library.removeVideo(all[index].id) }
+        }
+    }
+
     private var videos: some View {
         Group {
-            if model.library.videos.isEmpty {
+            if model.savedVideos.isEmpty {
                 Placeholder(icon: "bookmark", title: "No saved videos",
-                            detail: "Open a channel and swipe a video right to keep it "
-                                + "here for later.")
+                            detail: model.isMinor
+                                ? "Videos a parent adds will show up here."
+                                : "Open a channel and swipe a video right to keep it "
+                                    + "here for later.")
             } else {
                 List {
-                    ForEach(model.library.videos) { video in
+                    ForEach(model.savedVideos) { video in
                         HStack(spacing: 0) {
                             Button { model.play(video) } label: {
                                 VideoRow(video: video, isSaved: true, showChannel: true)
@@ -150,10 +171,7 @@ struct HomeView: View {
                             }
                         }
                     }
-                    .onDelete { offsets in
-                        let all = model.library.videos
-                        for index in offsets { model.library.removeVideo(all[index].id) }
-                    }
+                    .onDelete(perform: removeVideos)
                 }
                 .listStyle(.plain)
                 .scrollContentBackground(.hidden)
@@ -205,15 +223,85 @@ struct HomeView: View {
 
                     Divider()
 
+                    // A child's phone that a parent has unlocked to manage: one tap to
+                    // hand it back, without going through the family list again.
+                    if model.profiles.hasPIN, let last = model.profiles.lastMinor {
+                        Button("Back to Minor Mode for \(last.name)", systemImage: "lock.fill") {
+                            if model.profiles.relock() { model.enterMinorMode() }
+                        }
+                    }
                     Button("Family…", systemImage: "person.2") {
                         settingUpFamily = true
                     }
                     Button("Minor Mode…", systemImage: "lock.shield") {
                         settingUpMinorMode = true
                     }
+
+                    Divider()
+
+                    // Per phone: a child's device can wear a different theme from the
+                    // parent's, and nothing about it travels with the library.
+                    Menu("Theme", systemImage: "paintpalette") {
+                        Picker("Theme", selection: Bindable(ThemeStore.shared).selection) {
+                            ForEach(Theme.all) { theme in
+                                Text(theme.name).tag(theme.id)
+                            }
+                        }
+                    }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+            }
+        }
+    }
+}
+
+/// The one step a child's phone cannot be given from the Mac: pointing it at the family
+/// folder. iOS only lets an app into a shared iCloud Drive folder that the person holding
+/// the phone picked.
+///
+/// Offered in Minor Mode, without the PIN, only while no folder is connected — which is
+/// the moment a parent has just set the phone up and is still holding it. Once a folder
+/// is connected this is gone, and changing it means unlocking first: a child picking some
+/// other folder would read as a shelf with nothing on it.
+private struct ConnectFolderCard: View {
+    @Bindable var model: AppModel
+    @State private var picking = false
+
+    var body: some View {
+        Button { picking = true } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "folder.badge.person.crop")
+                    .font(.system(size: 20))
+                    .foregroundStyle(Palette.accent)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Connect the family folder")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color.primaryText)
+                    Text(model.expectedFolderName.map { "Choose “\($0)” in iCloud Drive" }
+                         ?? "Choose the folder a parent shared with this phone")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.secondaryText)
+                }
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.right").foregroundStyle(Color.secondaryText)
+            }
+            .padding(14)
+            .card()
+        }
+        .buttonStyle(.plain)
+        .padding(.horizontal, Metrics.gutter)
+        .padding(.top, 8)
+        .fileImporter(isPresented: $picking, allowedContentTypes: [.folder],
+                      allowsMultipleSelection: false) { result in
+            guard case .success(let urls) = result, let url = urls.first else { return }
+            guard !model.isOwnFolder(url) else {
+                model.banner = "That is this app's own folder. Choose the family folder in iCloud Drive."
+                return
+            }
+            if model.shelf.adopt(url) {
+                model.expectedFolderName = nil
+                Task { await model.syncShelf() }
             }
         }
     }

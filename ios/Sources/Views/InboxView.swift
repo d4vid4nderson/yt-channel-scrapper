@@ -232,10 +232,10 @@ private struct InboxActions: View {
                     .padding(.horizontal, 11)
                     .frame(height: 30)
                     .background {
-                        Capsule().fill(isKept ? .clear : Palette.accent.opacity(0.16))
+                        ThemedCapsule().fill(isKept ? .clear : Palette.accent.opacity(0.16))
                     }
                     .overlay {
-                        Capsule().strokeBorder(
+                        ThemedCapsule().strokeBorder(
                             isKept ? Color.secondaryText.opacity(0.22) : .clear)
                     }
             }

@@ -53,11 +53,11 @@ struct CommandBoard: View {
                 Text("Set up your family to start sending videos")
                     .font(.system(size: 12.5))
             }
-            .foregroundStyle(.white.opacity(0.65))
+            .foregroundStyle(Palette.ink(0.65))
             .padding(.horizontal, 16)
             .padding(.vertical, 9)
-            .background(.white.opacity(0.07), in: Capsule())
-            .overlay(Capsule().strokeBorder(.white.opacity(0.10)))
+            .background(Palette.ink(0.07), in: ThemedCapsule())
+            .overlay(ThemedCapsule().strokeBorder(Palette.ink(0.10)))
         }
         .buttonStyle(.plain)
         .pointingHand()
@@ -74,7 +74,7 @@ struct CommandBoard: View {
                 .padding(.bottom, 26)
 
             Rectangle()
-                .fill(.white.opacity(0.07))
+                .fill(Palette.ink(0.07))
                 .frame(width: 1)
                 // Spans whatever the columns turn out to be, rather than demanding
                 // height of its own — a bare 1pt Rectangle is greedy vertically and was
@@ -90,10 +90,11 @@ struct CommandBoard: View {
                 .padding(.bottom, 26)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .background(.white.opacity(0.035), in: RoundedRectangle(cornerRadius: 14))
+        .background(Palette.ink(0.035), in: ThemedRect(cornerRadius: 14))
         .overlay {
-            RoundedRectangle(cornerRadius: 14).strokeBorder(.white.opacity(0.08))
+            ThemedRect(cornerRadius: 14).strokeBorder(Palette.ink(0.08))
         }
+        .themeEdge(radius: 14)
     }
 
     /// Everybody in the family, and what each of their devices is holding.
@@ -106,13 +107,38 @@ struct CommandBoard: View {
     /// happens.
     private var dispatch: some View {
         VStack(alignment: .leading, spacing: 14) {
-            title("Dispatch")
+            HStack {
+                title("Dispatch")
+                Spacer()
+                Button {
+                    model.focusedDevice = nil
+                    model.showDevices = true
+                } label: {
+                    Label("Devices", systemImage: "list.bullet.rectangle")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.ink(0.5))
+                }
+                .buttonStyle(.plain)
+                .help("What every device holds, the computer included")
+                .pointingHand()
+                .padding(.trailing, 10)
+                Button {
+                    model.showPhoneSetup = true
+                } label: {
+                    Label("Set up a child's phone", systemImage: "iphone.badge.plus")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.ink(0.5))
+                }
+                .buttonStyle(.plain)
+                .help("Install the app on a plugged-in phone and lock it to one child")
+                .pointingHand()
+            }
 
             if shelf.guardians.isEmpty && shelf.roster.isEmpty {
                 Button { model.showFamily = true } label: {
                     Text("Add someone, then drag a channel or video onto their device")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.45))
+                        .foregroundStyle(Palette.ink(0.45))
                 }
                 .buttonStyle(.plain)
                 .pointingHand()
@@ -125,6 +151,7 @@ struct CommandBoard: View {
                         devices: shelf.devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
+                        onOpen: open,
                         onDrop: { payload in
                             if let payload {
                                 send(payload, to: Profiles.Minor(id: person.id, name: person.name))
@@ -140,13 +167,41 @@ struct CommandBoard: View {
                         devices: shelf.devices(of: person.id),
                         expected: shelf.expectedDevice(for: person.id),
                         sentTitle: justSent?.minor == person.id ? justSent?.title : nil,
+                        onOpen: open,
                         onDrop: { payload in
                             if let payload { send(payload, to: person) }
                         }
                     )
                 }
             }
+
+            // Only when there is something to tidy. Every reinstall of the phone app used
+            // to leave its old record behind as a second, identical phone.
+            if !shelf.clutter.isEmpty {
+                Button {
+                    model.focusedDevice = shelf.clutter.first?.id
+                    model.showDevices = true
+                } label: {
+                    Label(clutterText, systemImage: "sparkles")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Palette.accent.opacity(0.9))
+                }
+                .buttonStyle(.plain)
+                .pointingHand()
+            }
+
+            NearbySection(model: model)
         }
+    }
+
+    private var clutterText: String {
+        let n = shelf.clutter.count
+        return "\(n) duplicate or old device\(n == 1 ? "" : "s") — review and clean up"
+    }
+
+    private func open(_ device: UUID) {
+        model.focusedDevice = device
+        model.showDevices = true
     }
 
     private var meta: some View {
@@ -155,7 +210,7 @@ struct CommandBoard: View {
             stat("\(model.library.channels.count)", "channels")
             stat("\(model.library.videos.count)", "videos kept")
 
-            Rectangle().fill(.white.opacity(0.07)).frame(height: 1).padding(.vertical, 2)
+            Rectangle().fill(Palette.ink(0.07)).frame(height: 1).padding(.vertical, 2)
 
             title("Downloads")
             stat("\(model.downloader.activeCount)",
@@ -168,6 +223,9 @@ struct CommandBoard: View {
         Task {
             guard await model.send(item, to: minor) else { return }
             justSent = (minor.id, item.title)
+            // If their phone is in reach, have it fetch now rather than whenever it is
+            // next opened.
+            Task { await model.nearby.sync(childID: minor.id, shelf: model.shelf, guardian: model.profiles.guardian) }
             // Long enough to read, short enough not to become part of the layout.
             try? await Task.sleep(for: .seconds(2.6))
             if justSent?.minor == minor.id { justSent = nil }
@@ -176,8 +234,8 @@ struct CommandBoard: View {
 
     private func title(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.35))
+            .displayType(10, classic: .semibold)
+            .foregroundStyle(Palette.ink(0.35))
             .textCase(.uppercase)
             .tracking(0.7)
     }
@@ -188,10 +246,10 @@ struct CommandBoard: View {
         HStack(alignment: .firstTextBaseline, spacing: 6) {
             Text(value)
                 .font(.system(size: 19, weight: .semibold).monospacedDigit())
-                .foregroundStyle(lit ? Palette.accent : .white.opacity(0.92))
+                .foregroundStyle(lit ? Palette.accent : Palette.ink(0.92))
             Text(label)
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(Palette.ink(0.4))
         }
     }
 }
@@ -211,6 +269,7 @@ private struct PersonBlock: View {
     let devices: [DeviceRecord]
     let expected: DeviceRecord.Kind?
     let sentTitle: String?
+    let onOpen: (UUID) -> Void
     let onDrop: ((SendPayload?) -> Void)?
 
     var body: some View {
@@ -221,20 +280,20 @@ private struct PersonBlock: View {
                                 total: approved, isMinor: isMinor)
                 } else {
                     Circle()
-                        .strokeBorder(.white.opacity(0.12), lineWidth: 2.5)
+                        .strokeBorder(Palette.ink(0.12), lineWidth: 2.5)
                         .frame(width: 30, height: 30)
                 }
 
                 Text(name)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(isMinor ? 1 : 0.7))
+                    .foregroundStyle(Palette.ink(isMinor ? 1 : 0.7))
 
                 if !isMinor {
                     Text("admin")
                         .font(.system(size: 9.5, weight: .medium))
-                        .foregroundStyle(.white.opacity(0.3))
+                        .foregroundStyle(Palette.ink(0.3))
                         .padding(.horizontal, 5).padding(.vertical, 1.5)
-                        .background(.white.opacity(0.06), in: Capsule())
+                        .background(Palette.ink(0.06), in: ThemedCapsule())
                 }
 
                 Spacer(minLength: 6)
@@ -271,6 +330,7 @@ private struct PersonBlock: View {
                         : device.lastSeen.formatted(date: .omitted, time: .shortened),
                     dim: false,
                     name: name,
+                    onOpen: { onOpen(device.id) },
                     onDrop: onDrop
                 )
             }
@@ -280,10 +340,10 @@ private struct PersonBlock: View {
             // With nothing chosen and nothing reporting, the empty slot is the invitation.
             if let awaited, !destinations.contains(where: { $0.kind == awaited }) {
                 DeviceSlot(icon: awaited.icon, text: "not seen yet", detail: nil,
-                           dim: true, name: name, onDrop: onDrop)
+                           dim: true, name: name, onOpen: nil, onDrop: onDrop)
             } else if destinations.isEmpty {
                 DeviceSlot(icon: "questionmark.circle", text: "no device yet", detail: nil,
-                           dim: true, name: name, onDrop: onDrop)
+                           dim: true, name: name, onOpen: nil, onDrop: onDrop)
             }
         }
     }
@@ -299,6 +359,9 @@ private struct DeviceSlot: View {
     let detail: String?
     let dim: Bool
     let name: String
+    /// Opens this device in the Devices list. Nil for a placeholder slot, which has no
+    /// device behind it to show.
+    let onOpen: (() -> Void)?
     let onDrop: ((SendPayload?) -> Void)?
 
     @State private var over = false
@@ -310,24 +373,27 @@ private struct DeviceSlot: View {
             if let detail {
                 Text("· " + detail)
                     .font(.system(size: 10.5).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(Palette.ink(0.3))
             }
             Spacer(minLength: 4)
         }
-        .foregroundStyle(.white.opacity(dim ? 0.28 : 0.45))
+        .foregroundStyle(Palette.ink(dim ? 0.28 : 0.45))
         .padding(.horizontal, 10)
         .frame(minHeight: 34, alignment: .leading)
         .background(
-            over ? Palette.accent.opacity(0.14) : .white.opacity(0.03),
-            in: RoundedRectangle(cornerRadius: 7)
+            over ? Palette.accent.opacity(0.14) : Palette.ink(0.03),
+            in: ThemedRect(cornerRadius: 7)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 7)
-                .strokeBorder(over ? Palette.accent.opacity(0.45) : .white.opacity(0.05))
+            ThemedRect(cornerRadius: 7)
+                .strokeBorder(over ? Palette.accent.opacity(0.45) : Palette.ink(0.05))
         }
-        .contentShape(RoundedRectangle(cornerRadius: 7))
+        .contentShape(ThemedRect(cornerRadius: 7))
+        .onTapGesture { onOpen?() }
         .modifier(DropTarget(onDrop: onDrop, over: $over))
-        .help("Drop a channel or video here to send it to " + name)
+        .help(onOpen == nil
+              ? "Drop a channel or video here to send it to " + name
+              : "Click to see what is on it. Drop a channel or video here to send it to " + name)
         .animation(.easeOut(duration: 0.12), value: over)
     }
 }
@@ -402,12 +468,12 @@ private struct ProgressArc: View {
     var body: some View {
         ZStack {
             Circle()
-                .stroke(.white.opacity(0.10), lineWidth: 2.5)
+                .stroke(Palette.ink(0.10), lineWidth: 2.5)
 
             if landed {
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.5))
+                    .foregroundStyle(Palette.ink(0.5))
                     .transition(.scale(scale: 0.6).combined(with: .opacity))
             } else {
                 Circle()
@@ -422,12 +488,116 @@ private struct ProgressArc: View {
                 // along it is; the number is better spent on the part you can act on.
                 Text(total == 0 ? "–" : "\(outstanding)")
                     .font(.system(size: 10, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(.white.opacity(total == 0 ? 0.3 : 0.85))
+                    .foregroundStyle(Palette.ink(total == 0 ? 0.3 : 0.85))
             }
         }
         .frame(width: 30, height: 30)
         .help(explanation)
         .animation(.easeOut(duration: 0.25), value: fraction)
         .animation(.easeOut(duration: 0.2), value: landed)
+    }
+}
+
+/// Phones in reach of this Mac right now — on the cable or the same Wi-Fi — each with a
+/// way to make it sync on the spot.
+///
+/// Separate from the people above on purpose. Those are who things are *for*, and come
+/// from the family folder; these are what this Mac can *touch*, and come from the cable
+/// and the network. A phone appears under its child's name once this Mac has set it up.
+private struct NearbySection: View {
+    @Bindable var model: AppModel
+
+    private var nearby: NearbyPhones { model.nearby }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Nearby")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Palette.ink(0.35))
+                    .textCase(.uppercase)
+                    .tracking(0.7)
+                Spacer()
+                Button {
+                    Task { await nearby.refresh() }
+                } label: {
+                    Image(systemName: "arrow.clockwise").font(.system(size: 10))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Palette.ink(0.4))
+                .help("Look for phones again")
+                .pointingHand()
+            }
+
+            if !nearby.isAvailable {
+                hint("Syncing over the cable or Wi-Fi needs Xcode on this Mac.")
+            } else if nearby.phones.isEmpty {
+                hint("No phones in reach. Plug one in, or turn on “Show this iPhone when on "
+                     + "Wi-Fi” for it in Finder.")
+            } else {
+                ForEach(nearby.phones) { phone in row(phone) }
+            }
+        }
+        .padding(.top, 6)
+        .onAppear { nearby.startWatching() }
+        .onDisappear { nearby.stopWatching() }
+    }
+
+    private func row(_ phone: PhoneDeployer.Phone) -> some View {
+        let owner = nearby.owner(of: phone).flatMap { id in
+            model.shelf.roster.first { $0.id == id }
+        }
+        return HStack(spacing: 8) {
+            Image(systemName: phone.model.contains("iPad") ? "ipad" : "iphone")
+                .font(.system(size: 13))
+                .foregroundStyle(Palette.ink(0.6))
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(phone.name)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Palette.ink(0.9))
+                Text([owner.map { "\($0.name)'s" }, phone.isWired ? "Cable" : "Wi-Fi", statusText(phone)]
+                        .compactMap { $0 }.joined(separator: " · "))
+                    .font(.system(size: 10.5))
+                    .foregroundStyle(isFailed(phone) ? Palette.warn : Palette.ink(0.42))
+                    .lineLimit(2)
+                    .help(statusText(phone) ?? "")
+            }
+            Spacer(minLength: 6)
+            if case .syncing = nearby.status[phone.id] {
+                ProgressView().controlSize(.mini)
+            } else {
+                // Offered on every phone, not only ones this Mac set up: all it does is
+                // open the app, which is harmless anywhere it is installed.
+                if owner == nil {
+                    Button("Set up…") { model.showPhoneSetup = true }
+                        .font(.system(size: 11))
+                        .help("Make this a child's phone")
+                }
+                Button("Sync") { Task { await nearby.sync(phone, shelf: model.shelf, guardian: model.profiles.guardian) } }
+                    .font(.system(size: 11))
+                    .help("Open the app on \(phone.name) so it fetches what has been sent")
+            }
+        }
+    }
+
+    private func statusText(_ phone: PhoneDeployer.Phone) -> String? {
+        switch nearby.status[phone.id] {
+        case .syncing: "syncing…"
+        case .synced(let at): "synced \(at.formatted(date: .omitted, time: .shortened))"
+        case .failed(let why): why
+        case nil: nil
+        }
+    }
+
+    private func isFailed(_ phone: PhoneDeployer.Phone) -> Bool {
+        if case .failed = nearby.status[phone.id] { true } else { false }
+    }
+
+    private func hint(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11))
+            .foregroundStyle(Palette.ink(0.4))
+            .fixedSize(horizontal: false, vertical: true)
     }
 }

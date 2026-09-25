@@ -119,7 +119,7 @@ struct PINPad: View {
         HStack(spacing: 20) {
             ForEach(0..<Self.length, id: \.self) { index in
                 Circle()
-                    .strokeBorder(wrong ? Palette.accent : Color.white.opacity(0.35), lineWidth: 1.5)
+                    .strokeBorder(wrong ? Palette.accent : Palette.ink(0.35), lineWidth: 1.5)
                     .background(Circle().fill(fill(at: index)))
                     .frame(width: 15, height: 15)
             }

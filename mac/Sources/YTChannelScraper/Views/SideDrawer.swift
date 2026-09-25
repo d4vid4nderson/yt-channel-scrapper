@@ -41,7 +41,7 @@ struct SideDrawer<Content: View>: View {
             // cast across that boundary would be sheared off at the seam anyway.
             .overlay(alignment: side.innerEdge) {
                 Rectangle()
-                    .fill(Color(white: 0.2))
+                    .fill(Palette.ink(0.2))
                     .frame(width: 1)
             }
             .onExitCommand { isPresented = false }
@@ -82,9 +82,9 @@ struct SheetButton: View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
                 .frame(width: 28, height: 28)
-                .background(.white.opacity(hovering ? 0.22 : 0.1), in: Circle())
+                .background(Palette.ink(hovering ? 0.22 : 0.1), in: Circle())
         }
         .buttonStyle(.plain)
         .help(title)
@@ -104,13 +104,13 @@ struct RemoveButton: View {
         Button(action: action) {
             Image(systemName: "xmark")
                 .font(.system(size: 7.5, weight: .bold))
-                .foregroundStyle(.white.opacity(hovering ? 1 : 0.7))
+                .foregroundStyle(Palette.ink(hovering ? 1 : 0.7))
                 .frame(width: 18, height: 18)
                 .background(
-                    Circle().fill(hovering ? Palette.accent : Color(white: 0.22))
+                    Circle().fill(hovering ? Palette.accent : Palette.ink(0.22))
                 )
                 .overlay {
-                    Circle().strokeBorder(.white.opacity(0.12), lineWidth: 1)
+                    Circle().strokeBorder(Palette.ink(0.12), lineWidth: 1)
                 }
         }
         .buttonStyle(.plain)

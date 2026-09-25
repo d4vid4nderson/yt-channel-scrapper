@@ -21,7 +21,7 @@ struct ChannelAvatar: View {
         .frame(width: size, height: size)
         .clipShape(Circle())
         .overlay {
-            Circle().strokeBorder(Color.primary.opacity(0.10), lineWidth: 1)
+            Circle().strokeBorder(Palette.ink(0.10), lineWidth: 1)
         }
     }
 
@@ -37,7 +37,7 @@ struct ChannelAvatar: View {
             )
             Text(channel.monogram)
                 .font(.system(size: size * 0.34, weight: .semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
         }
     }
 }
@@ -55,7 +55,7 @@ struct SaveMark: View {
     /// What this one keeps, for the tooltip — the same control serves both lists.
     var noun = "channel"
     /// On a dark surface an outline mark in `.secondary` all but vanishes.
-    var onDarkSurface = false
+    var onPickedSurface = false
     let action: () -> Void
 
     @State private var hovering = false
@@ -93,7 +93,7 @@ struct SaveMark: View {
 
     private var tint: Color {
         if isSaved { return Palette.accent }
-        if onDarkSurface { return .white.opacity(hovering ? 0.95 : 0.6) }
+        if onPickedSurface { return Palette.ink(hovering ? 0.95 : 0.6) }
         return hovering ? .primary.opacity(0.75) : .secondary
     }
 }
@@ -130,31 +130,32 @@ struct ChannelRow: View {
 
             // Only on hover, the way the video card only shows its download button once
             // the row is picked — the mark is for the row you are looking at.
-            if hovering || isSaved {
-                SaveMark(isSaved: isSaved, action: toggleSaved)
-                    .transition(.opacity)
-            }
+            // Laid out always and faded in, so the title's width holds still on hover.
+            SaveMark(isSaved: isSaved, action: toggleSaved)
+                .opacity(hovering || isSaved ? 1 : 0)
+                .allowsHitTesting(hovering || isSaved)
 
             Text("Open")
                 .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(hovering ? .white : Color.secondary)
+                .foregroundStyle(hovering ? Palette.ink(1) : Palette.ink(0.55))
                 .padding(.horizontal, 13)
                 .padding(.vertical, 6)
                 .background(
-                    Capsule().fill(hovering ? AnyShapeStyle(Palette.accent)
-                                            : AnyShapeStyle(Color.primary.opacity(0.06)))
+                    ThemedCapsule().fill(hovering ? AnyShapeStyle(Palette.accent)
+                                            : AnyShapeStyle(Palette.ink(0.06)))
                 )
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
         .frame(minHeight: 84)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .background(Palette.rowPlate)
+        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: corner, style: .continuous)
-                .strokeBorder(hovering ? Color.primary.opacity(0.22) : Color.primary.opacity(0.12),
+            ThemedRect(cornerRadius: corner, style: .continuous)
+                .strokeBorder(hovering ? Palette.ink(0.22) : Palette.ink(0.12),
                               lineWidth: 1)
         }
+        .themeEdge(radius: corner, lit: hovering)
         .shadow(color: .black.opacity(hovering ? 0.10 : 0.05), radius: hovering ? 9 : 6,
                 y: hovering ? 5 : 3)
         .offset(y: hovering ? -1 : 0)

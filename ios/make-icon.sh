@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Rasterise Support/icon-ios.svg into the asset catalog. Run once after cloning; the
-# generated PNG is committed, so this only needs re-running when the artwork changes.
+# Rasterise Support/icon-ios.svg into the asset catalog, and each theme's icon from
+# ../icons/themes (see tools/theme-icons.py) into its own alternate icon set. The
+# generated PNGs are committed, so this only needs re-running when the artwork changes.
 #
 # Deliberately does not require Homebrew: the fallback renders the SVG through CoreSVG,
 # which every Mac already has. App Store Connect rejects an icon with an alpha channel,
@@ -8,9 +9,9 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-OUT="Support/Assets.xcassets/AppIcon.appiconset/icon-1024.png"
-SRC="Support/icon-ios.svg"
-
+render() {
+SRC="$1"
+OUT="$2"
 if command -v rsvg-convert >/dev/null 2>&1; then
   echo "==> rasterising with rsvg-convert"
   rsvg-convert -w 1024 -h 1024 -b '#090909' "$SRC" -o "$OUT"
@@ -76,3 +77,23 @@ assert (width, height) == (1024, 1024), f"expected 1024x1024, got {width}x{heigh
 assert colour in (0, 2, 3), f"icon has an alpha channel (colour type {colour})"
 print(f"==> {path}: {width}x{height}, no alpha — good")
 PY
+}
+
+render Support/icon-ios.svg Support/Assets.xcassets/AppIcon.appiconset/icon-1024.png
+
+# One alternate icon set per theme, named AppIcon-<theme id> — the name
+# `ThemeChrome.applyIcon` asks UIKit for, and the list in project.yml.
+for SVG in ../icons/themes/*-ios.svg; do
+  THEME="$(basename "$SVG" -ios.svg)"
+  SET="Support/Assets.xcassets/AppIcon-$THEME.appiconset"
+  mkdir -p "$SET"
+  cat > "$SET/Contents.json" <<JSON
+{
+  "images" : [
+    { "filename" : "icon-1024.png", "idiom" : "universal", "platform" : "ios", "size" : "1024x1024" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+  render "$SVG" "$SET/icon-1024.png"
+done

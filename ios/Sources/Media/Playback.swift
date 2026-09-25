@@ -105,6 +105,25 @@ final class Playback {
 
     var isOpen: Bool { item != nil }
 
+    /// Whether this phone may stream a given video.
+    ///
+    /// The enforcement behind Minor Mode: a child's phone streams only what a parent has
+    /// approved by name. The screens only ever offer approved videos, but that cannot be
+    /// the whole of it — this is the last place a stream can be refused, so it is refused
+    /// here too. Asked on every open rather than stored, so it cannot go stale when the
+    /// shelf or the mode changes, and defaulting to no if nobody has said otherwise.
+    ///
+    /// Streaming here is ad-free: `StreamResolver` hands `AVPlayer` the media itself, not
+    /// YouTube's player, so there is nothing for an ad to be served into.
+    var allowsStreaming: @MainActor (_ videoID: String) -> Bool = { _ in false }
+
+    /// Refusing a stream on a minor's phone.
+    struct StreamingNotAllowed: LocalizedError {
+        var errorDescription: String? {
+            "This video has not been approved for this phone."
+        }
+    }
+
     /// What is playing and the player playing it, once there is one. The bar above the
     /// tab bar stands on this: something is going, and the screen it started on is gone.
     var current: (item: Playable, player: AVPlayer)? {
@@ -159,6 +178,7 @@ final class Playback {
                 let built: Built
                 switch item {
                 case .stream(let video):
+                    guard self.allowsStreaming(video.id) else { throw StreamingNotAllowed() }
                     let resolved = try await self.timed(Self.resolveTimeout, "finding a stream") {
                         try await StreamResolver.resolve(
                             videoID: video.id, for: .playback, refused: refused)

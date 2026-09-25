@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Foundation
 
 @MainActor
@@ -25,6 +26,12 @@ final class AppModel {
         set { newValue ? openFamilyDrawer() : (showFamilyDrawer = false) }
     }
     var showChannelsDrawer = false
+    /// Setting up a child's phone over the cable — see `PhoneSetupSheet`.
+    var showPhoneSetup = false
+    /// Every device and what it holds — see `DevicesSheet`. `focusedDevice` is the one it
+    /// opens on, when it was opened by clicking a particular device.
+    var showDevices = false
+    var focusedDevice: UUID?
     var showFamilyDrawer = false
     /// Whether the results area is listing a channel's videos or a search's channels.
     /// Held rather than derived, so it flips on submit instead of when results land —
@@ -39,6 +46,15 @@ final class AppModel {
     /// What the island is playing, so it can be put back where it came from.
     var islandVideo: Video?
 
+    /// A video still playing after its preview card was closed, shown in the window's
+    /// Now Playing bar. The island is only for when the window itself is put away.
+    struct NowPlaying {
+        let video: Video
+        let player: AVPlayer
+        let ratio: CGFloat
+    }
+    private(set) var nowPlaying: NowPlaying?
+
     let scraper = Scraper()
     let search = ChannelSearch()
     let library = Library()
@@ -49,6 +65,8 @@ final class AppModel {
     /// worth curating on, which is the whole reason the store was promoted out of the
     /// iOS target.
     let shelf = ShelfStore()
+    /// Phones this Mac can reach over the cable or Wi-Fi, for syncing them on the spot.
+    let nearby = NearbyPhones()
     let downloader = Downloader()
     let updater = Updater()
     let appUpdater = AppUpdater()
@@ -71,7 +89,14 @@ final class AppModel {
         await shelf.announce(guardian: guardian)
         // And say this machine exists. Every refresh, not once: `lastSeen` is the field
         // that makes the row worth showing, and one written at setup would go stale.
-        await shelf.announce(person: (guardian.id, guardian.name), isMinor: false)
+        // With what it holds, so the family list can show the computer alongside the phones.
+        let folder = Paths.downloads
+        let files = await Task.detached { DeviceRecord.scan(folder) }.value
+        await shelf.announce(person: (guardian.id, guardian.name), isMinor: false,
+                             files: files,
+                             freeBytes: DeviceRecord.freeSpace(at: folder),
+                             library: .init(channels: library.channels.count,
+                                            videos: library.videos.count))
     }
 
     /// Put an approval — or its withdrawal — in this guardian's file.
@@ -95,25 +120,75 @@ final class AppModel {
     @discardableResult
     func send(_ channel: Channel, to minor: Profiles.Minor, approve: Bool) async -> Bool {
         guard let guardian = profiles.guardian else { return false }
-        return await shelf.record([ShelfEntry(
+        let entry = ShelfEntry(
             kind: .channel, id: channel.id,
             state: approve ? .approved : .removed,
             guardian: guardian.name,
             title: channel.title
-        )], for: minor, as: guardian)
+        )
+        // A removal needs nothing else: blocking a channel already takes its videos off
+        // the phone. An approval brings the newest videos with it — see `withLatestVideos`.
+        let entries = approve ? await withLatestVideos(entry, as: guardian) : [entry]
+        return await shelf.record(entries, for: minor, as: guardian)
     }
 
     /// Send whatever was dragged onto somebody.
     @discardableResult
     func send(_ item: SendPayload, to minor: Profiles.Minor) async -> Bool {
         guard let guardian = profiles.guardian else { return false }
-        return await shelf.record([ShelfEntry(
+        let entry = ShelfEntry(
             kind: item.kind, id: item.id,
             state: .approved,
             guardian: guardian.name,
             title: item.title,
             channelID: item.channelID
-        )], for: minor, as: guardian)
+        )
+        let entries = item.kind == .channel ? await withLatestVideos(entry, as: guardian) : [entry]
+        return await shelf.record(entries, for: minor, as: guardian)
+    }
+
+    /// How many of a channel's newest videos go with it when it is sent.
+    static let videosPerChannelSend = 25
+
+    /// A channel approval, plus an approval naming each of its newest videos.
+    ///
+    /// Approving a channel on its own approves none of its videos — deliberately, so that
+    /// something the channel posts next week cannot reach a child unseen (see
+    /// `ShelfMerge.playable`). That left sending a channel doing nothing a child could
+    /// watch. This keeps the rule and makes sending useful: each video here is named in
+    /// its own decision, made now, by the parent who sent it. Anything posted after this
+    /// still needs sending.
+    ///
+    /// If the listing fails the channel still goes, alone, rather than the send failing.
+    private func withLatestVideos(_ channel: ShelfEntry, as guardian: Profiles.Guardian) async -> [ShelfEntry] {
+        let videos = await latestVideos(ofChannel: channel.id, count: Self.videosPerChannelSend)
+        return [channel] + videos.map {
+            ShelfEntry(kind: .video, id: $0.id, state: .approved,
+                       guardian: guardian.name, title: $0.title, channelID: channel.id)
+        }
+    }
+
+    /// A channel's newest uploads, newest first, straight from its Videos tab.
+    private func latestVideos(ofChannel id: String, count: Int) async -> [Video] {
+        let stream = ProcessStream(
+            executable: Paths.ytdlp,
+            arguments: YtDlp.scrapeArguments(url: "https://www.youtube.com/channel/\(id)/videos",
+                                             offset: 0, count: count),
+            environment: YtDlp.environment
+        )
+        var videos: [Video] = []
+        do {
+            for try await line in stream.lines() {
+                guard line.hasPrefix("{"), let data = line.data(using: .utf8),
+                      let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let video = Video(json: json)
+                else { continue }
+                videos.append(video)
+            }
+        } catch {
+            Log.shelf.error("could not list \(id, privacy: .public) to send: \(error)")
+        }
+        return videos
     }
 
     /// Whether this item is on that child's shelf right now.
@@ -381,16 +456,33 @@ final class AppModel {
     /// Put the preview card away without stopping what it was playing.
     ///
     /// Every way out of the card comes through here — the X, Escape, a click on the
-    /// backdrop, and queueing a download. Closing a window is not the same as saying
-    /// stop: a three-hour mix cut off mid-bar because you wanted the list back is the
-    /// app taking something away for no reason. So the picture moves up to the island,
-    /// which is where a video that has outlived its window already goes, and the sound
-    /// carries on until you pull it back down or press the island's own X.
+    /// backdrop, and queueing a download. Closing a card is not the same as saying stop:
+    /// a three-hour mix cut off mid-bar because you wanted the list back is the app
+    /// taking something away for no reason. So it carries on in the Now Playing bar at
+    /// the foot of the window. The island is for when the window goes away, not the
+    /// card — see `popOutToIsland`.
     ///
     /// Nothing to hand over if the stream never started — there this is just a close.
     func dismissPreview() {
-        popOutToIsland()
+        if let handed = preview.handOff() {
+            nowPlaying?.player.pause()
+            nowPlaying = NowPlaying(video: handed.video, player: handed.player, ratio: handed.ratio)
+        }
         preview.close()
+    }
+
+    /// Back into the full card, from the bar.
+    func reopenNowPlaying() {
+        guard let now = nowPlaying else { return }
+        nowPlaying = nil
+        preview.adopt(video: now.video, player: now.player, ratio: now.ratio)
+    }
+
+    func stopNowPlaying() {
+        guard let now = nowPlaying else { return }
+        nowPlaying = nil
+        now.player.pause()
+        now.player.replaceCurrentItem(with: nil)
     }
 
     /// Queue what the preview is playing, and leave it playing. The downloads panel the
@@ -449,7 +541,10 @@ extension AppModel {
     /// window sitting behind it would be answering half the request — so that one takes
     /// the window down as well.
     func popOutToIsland(tuckingWindowAway: Bool = false) {
-        guard let handed = preview.handOff() else { return }
+        // The open card first; failing that, whatever is going on in the bar.
+        let fromBar = nowPlaying.map { (player: $0.player, ratio: $0.ratio, video: $0.video) }
+        guard let handed = preview.handOff() ?? fromBar else { return }
+        nowPlaying = nil
         islandVideo = handed.video
         miniPlayer.onRestore = { [weak self] in self?.restoreFromIsland() }
         miniPlayer.onClose = { [weak self] in self?.closeIsland() }
@@ -489,6 +584,17 @@ extension AppModel {
         preview.adopt(video: video, player: player, ratio: ratio)
         NSApp.windows.first { $0.isMiniaturized }?.deminiaturize(nil)
         NSApp.activate(ignoringOtherApps: true)
+    }
+
+    /// The window is back — deminiaturised, or the app unhidden — so the island folds
+    /// back into it, as the Now Playing bar. A no-op when the island's own restore
+    /// button brought it back, which has already put the video into the card.
+    func windowCameBack() {
+        guard let video = islandVideo, miniPlayer.isShowing else { return }
+        let ratio = miniPlayer.aspectRatio
+        guard let player = miniPlayer.release() else { return }
+        islandVideo = nil
+        nowPlaying = NowPlaying(video: video, player: player, ratio: ratio)
     }
 
     func closeIsland() {

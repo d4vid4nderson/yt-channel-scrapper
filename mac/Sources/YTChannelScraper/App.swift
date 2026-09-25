@@ -10,6 +10,7 @@ struct YTChannelScraperApp: App {
     var body: some Scene {
         WindowGroup {
             RootView(model: model)
+                .themed()
         }
         .defaultSize(width: 1020, height: 700)
         .commands {
@@ -20,6 +21,13 @@ struct YTChannelScraperApp: App {
                 .disabled(model.appUpdater.isBusy)
             }
             CommandGroup(replacing: .newItem) {}
+            CommandMenu("Theme") {
+                Picker("Theme", selection: Bindable(ThemeStore.shared).selection) {
+                    ForEach(Theme.all) { Text($0.name).tag($0.id) }
+                }
+                .pickerStyle(.inline)
+                .labelsHidden()
+            }
             CommandGroup(after: .toolbar) {
                 Button("Saved Channels") { model.toggleChannelsDrawer() }
                     .keyboardShortcut("1", modifiers: .command)
@@ -77,6 +85,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.activate(ignoringOtherApps: true)
 
         applyIcon()
+        ThemeChrome.onIconChange = { [weak self] in self?.applyIcon() }
         // The bundle's .icns can only carry one appearance, so the running app swaps its
         // own Dock icon instead — and keeps swapping if the system flips mode while it
         // is open. At rest macOS still shows the dark .icns; an appearance-aware icon on
@@ -103,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @MainActor
     fileprivate static func setIcon(dark isDark: Bool) {
+        // A theme's icon wins over the appearance swap: it has one look, like the theme.
+        if let themed = ThemeChrome.dockIcon(for: Theme.active) {
+            NSApp.applicationIconImage = themed
+            return
+        }
         let name = isDark ? "AppIconDark" : "AppIconLight"
         guard let url = Bundle.main.url(forResource: name, withExtension: "png"),
               let image = NSImage(contentsOf: url)

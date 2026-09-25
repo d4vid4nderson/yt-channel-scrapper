@@ -22,6 +22,8 @@ struct RootView: View {
     /// The panels take room from the page rather than covering it, so whatever you were
     /// looking at is still there — and still usable — while you dig through what you have
     /// kept. Nothing is dimmed, because nothing is blocked.
+    private var isClassic: Bool { Theme.active.id == .classic }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack(spacing: 0) {
@@ -30,6 +32,21 @@ struct RootView: View {
 
                 VStack(spacing: 0) {
                     page
+                        .overlay(alignment: .bottom) {
+                            if let now = model.nowPlaying {
+                                NowPlayingBar(
+                                    video: now.video,
+                                    player: now.player,
+                                    reopen: model.reopenNowPlaying,
+                                    toNotch: { model.popOutToIsland(tuckingWindowAway: true) },
+                                    stop: model.stopNowPlaying
+                                )
+                                .padding(.horizontal, Layout.gutter)
+                                .padding(.bottom, 14)
+                                .transition(.move(edge: .bottom).combined(with: .opacity))
+                            }
+                        }
+                        .animation(.easeOut(duration: 0.22), value: model.nowPlaying?.video.id)
                     DownloadsDrawer(
                         downloader: model.downloader,
                         updater: model.updater,
@@ -45,10 +62,31 @@ struct RootView: View {
             VersionFooter(updater: model.appUpdater)
         }
         .frame(minWidth: 860, minHeight: 560)
+        // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
+        // own grey in the strip between the toolbar and the header.
+        .background {
+            if !isClassic { Palette.ground.ignoresSafeArea() }
+        }
         .animation(Layout.drawerEase, value: model.showChannelsDrawer)
         .animation(Layout.drawerEase, value: model.showFamilyDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
         .toolbar { chrome }
+        // The title bar is the system's in Classic. A theme paints it in its own ground
+        // and swaps the system title for one in its lettering — the grey strip otherwise
+        // sits over the whole window like a lid from a different app.
+        .toolbarBackground(Palette.ground, for: .windowToolbar)
+        .toolbarBackgroundVisibility(isClassic ? .automatic : .visible, for: .windowToolbar)
+        .toolbar(removing: isClassic ? nil : .title)
+        .toolbar {
+            if !isClassic {
+                ToolbarItem(placement: .navigation) {
+                    Text(Paths.displayName)
+                        .displayType(13, classic: .semibold)
+                        .foregroundStyle(Palette.ink(0.85))
+                        .fixedSize()
+                }
+            }
+        }
         // Dismissal goes through the model rather than straight at the flag, so closing
         // the sheet also clears whatever one-off answer it was showing.
         .sheet(isPresented: Binding(
@@ -56,6 +94,15 @@ struct RootView: View {
             set: { if !$0 { model.appUpdater.dismissResult() } }
         )) {
             AppUpdateSheet(updater: model.appUpdater)
+                .themedButtons()
+        }
+        .sheet(isPresented: $model.showPhoneSetup) {
+            PhoneSetupSheet(model: model)
+                .themedButtons()
+        }
+        .sheet(isPresented: $model.showDevices, onDismiss: { model.focusedDevice = nil }) {
+            DevicesSheet(model: model)
+                .themedButtons()
         }
         // The other guardian writes into the shared folder and nothing here is told, so
         // the honest moment to re-read is whenever this window comes back to the front.
@@ -99,9 +146,20 @@ struct RootView: View {
             .clipped()
         }
         .animation(Self.morph, value: collapsed)
+        // The island is for when the window is put away: minimised, or the app hidden.
+        // Minimising should not stop what you are watching, so it goes up there; the
+        // window coming back takes it back down, into the Now Playing bar.
         .onReceive(NotificationCenter.default.publisher(for: NSWindow.willMiniaturizeNotification)) { _ in
-            // Minimising should not stop what you are watching.
             model.popOutToIsland()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.willHideNotification)) { _ in
+            model.popOutToIsland()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didDeminiaturizeNotification)) { _ in
+            model.windowCameBack()
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didUnhideNotification)) { _ in
+            model.windowCameBack()
         }
         .onReceive(NotificationCenter.default.publisher(for: .openLibrary)) { _ in
             model.drainOpenedLibraries()
@@ -134,6 +192,11 @@ struct RootView: View {
     /// lit one is a panel that is open, and pressing it again is how you put it away.
     @ToolbarContentBuilder
     private var chrome: some ToolbarContent {
+        // The system title used to be what pushed this cluster to the trailing end. A
+        // theme swaps that title for its own, so the gap has to be asked for.
+        if #available(macOS 26, *), !isClassic {
+            ToolbarSpacer(.flexible, placement: .primaryAction)
+        }
         ToolbarItemGroup(placement: .primaryAction) {
             PanelToggle(
                 icon: "bookmark.fill",
@@ -204,9 +267,12 @@ struct RootView: View {
                         BrandMark(width: 62)
                             .matchedGeometryEffect(id: "brand", in: hero)
                         Text(Paths.displayName)
-                            .font(.system(size: 40, weight: .bold))
-                            .foregroundStyle(.white)
-                            .fixedSize()
+                            .displayType(40)
+                            .foregroundStyle(Palette.ink(1))
+                            // Wide lettering (Nostromo's, Dune's) runs past the window
+                            // at 40pt; it shrinks rather than being cut off.
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.4)
                             .transition(.opacity)
                     }
                     SearchPill(model: model, compact: false)
@@ -232,21 +298,21 @@ struct RootView: View {
         Group {
             if model.isBusy {
                 HStack(spacing: 8) {
-                    ProgressView().controlSize(.small).tint(.white)
+                    ProgressView().controlSize(.small).tint(Palette.ink(1))
                     Text(model.mode == .videos ? "Reading the channel…" : "Searching channels…")
                 }
-                .foregroundStyle(.white.opacity(0.75))
+                .foregroundStyle(Palette.ink(0.75))
             } else if let error = model.statusError {
                 Text(error)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.onFill)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 560)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
-                    .background(Palette.accent.opacity(0.9), in: RoundedRectangle(cornerRadius: 9))
+                    .background(Palette.accent.opacity(0.9), in: ThemedRect(cornerRadius: 9))
             } else {
                 Text("Paste a channel, or search for one by name.")
-                    .foregroundStyle(.white.opacity(0.55))
+                    .foregroundStyle(Palette.ink(0.55))
             }
         }
         .font(.system(size: 13))
@@ -289,12 +355,13 @@ private struct SearchPill: View {
             ZStack(alignment: .leading) {
                 if model.urlText.isEmpty {
                     Text("Paste a channel URL or @handle — or type a name to search")
-                        .foregroundStyle(.black.opacity(0.42))
+                        .foregroundStyle(Palette.fieldInk.opacity(0.42))
                         .lineLimit(1)
                 }
                 TextField("", text: $model.urlText)
                     .textFieldStyle(.plain)
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Palette.fieldInk)
+                    .tint(Palette.accent)
                     .focused($focused)
                     .onSubmit { model.submit() }
             }
@@ -314,18 +381,18 @@ private struct SearchPill: View {
                 // because a foregroundStyle on the Menu does not reach inside.
                 Text(model.tab.label)
                     .font(.system(size: compact ? 12 : 13, weight: .medium))
-                    .foregroundStyle(.black)
+                    .foregroundStyle(Palette.fieldInk)
                     + Text("  ")
                     + Text(Image(systemName: "chevron.down"))
                     .font(.system(size: compact ? 8 : 9, weight: .bold))
-                    .foregroundStyle(.black.opacity(0.55))
+                    .foregroundStyle(Palette.fieldInk.opacity(0.55))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)
             .fixedSize()
             .padding(.horizontal, compact ? 10 : 12)
             .padding(.vertical, compact ? 5 : 8)
-            .background(.white, in: Capsule())
+            .background(Palette.fieldRaised, in: ThemedCapsule())
             .help("Which tab of the channel to list")
             .pointingHand()
 
@@ -336,7 +403,7 @@ private struct SearchPill: View {
                 // typed?", so it has to track the field rather than sit on one word.
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.onFill)
                     // Stop/Search/Scrape all fit today. The frame is fixed, so anything
                     // longer would wrap inside the capsule rather than overflow it —
                     // truncating is the failure worth having.
@@ -345,7 +412,7 @@ private struct SearchPill: View {
                     .padding(.vertical, compact ? 7 : 10)
                     .background(
                         Palette.accent.opacity(model.canScrape || model.isBusy ? 1 : 0.45),
-                        in: Capsule()
+                        in: ThemedCapsule()
                     )
             }
             .buttonStyle(.plain)
@@ -355,7 +422,9 @@ private struct SearchPill: View {
             .pointingHand()
         }
         .padding(compact ? 5 : 7)
-        .background(Color(white: 0.89), in: Capsule())
+        .background(Palette.field, in: ThemedCapsule())
+        .overlay(ThemedCapsule().strokeBorder(Palette.ink(0.10), lineWidth: 1))
+        .themeEdge(ThemedCapsule(), lit: focused)
         .shadow(color: .black.opacity(compact ? 0.2 : 0.35), radius: compact ? 8 : 22, y: compact ? 3 : 8)
         // Landing on the hero, the one thing to do is type a URL.
         .onAppear { if !compact { focused = true } }
@@ -384,7 +453,7 @@ private struct ErrorBanner: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Palette.warn)
             Text(message).font(.system(size: 12)).lineLimit(2)
             Spacer(minLength: 8)
             Button("Start over", action: reset)
@@ -394,7 +463,7 @@ private struct ErrorBanner: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 8)
-        .background(.orange.opacity(0.12))
+        .background(Palette.warn.opacity(0.12))
     }
 }
 
@@ -434,7 +503,7 @@ private struct ResultsList: View {
                 .padding(.bottom, 22)
                 .animation(.easeOut(duration: 0.24), value: model.keptVisible.count)
             }
-            .background(Color(nsColor: .underPageBackgroundColor))
+            .background(Palette.page)
             // Once the page has settled, put its first row at the top: that is what
             // "load 25 more" is asking for, and it is the only way the result of
             // pressing it is visible from where you pressed it.
@@ -626,14 +695,14 @@ private struct ResultsList: View {
             } label: {
                 Text(model.picked.isEmpty ? "Download" : "Download \(model.picked.count)")
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.onFill)
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 7)
                     .background(
                         Palette.accent.opacity(model.picked.isEmpty ? 0.4 : 1),
-                        in: Capsule()
+                        in: ThemedCapsule()
                     )
             }
             .buttonStyle(.plain)
@@ -705,7 +774,7 @@ private struct ChannelResults: View {
                 .padding(.top, 14)
                 .padding(.bottom, 22)
             }
-            .background(Color(nsColor: .underPageBackgroundColor))
+            .background(Palette.page)
         }
     }
 
@@ -772,18 +841,56 @@ private struct PanelToggle: View {
     let toggle: () -> Void
 
     var body: some View {
+        if Theme.active.id == .classic { system } else { themed }
+    }
+
+    /// A theme draws its own lit state. The toolbar's pressed fill is the system's and
+    /// ignores the tint on a themed window, so an icon in `onFill` — near-black on the
+    /// Nostromo — was being drawn on a dark pill and vanished.
+    private var themed: some View {
+        Button(action: toggle) {
+            glyph
+                .foregroundStyle(isOn ? Palette.onFill : Palette.ink(0.7))
+                .padding(.horizontal, 7)
+                .padding(.vertical, 5)
+                .background(isOn ? Palette.accent : .clear,
+                            in: ThemedRect(cornerRadius: 7, style: .continuous))
+                .themeEdge(radius: 7, lit: isOn)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(isOn ? .isSelected : [])
+        .pointingHand()
+    }
+
+    private var glyph: some View {
+        Image(systemName: icon)
+            .font(.system(size: 14, weight: .medium))
+            .frame(width: 21, height: 16)
+            .overlay(alignment: .topTrailing) {
+                if busy {
+                    Circle()
+                        .fill(isOn ? Palette.onFill : Palette.accent)
+                        .frame(width: 5.5, height: 5.5)
+                }
+            }
+    }
+
+    private var system: some View {
         Toggle(isOn: Binding(get: { isOn }, set: { _ in toggle() })) {
             Image(systemName: icon)
                 .font(.system(size: 14, weight: .medium))
                 // White on the lit one, because the lit one is filled with the accent.
-                .foregroundStyle(isOn ? AnyShapeStyle(.white) : AnyShapeStyle(.primary))
+                .foregroundStyle(isOn ? AnyShapeStyle(Palette.onFill) : AnyShapeStyle(.primary))
                 // The frame leaves the corner the dot sits in, so it is never clipped by
                 // the button drawn around it.
                 .frame(width: 21, height: 16)
                 .overlay(alignment: .topTrailing) {
                     if busy {
                         Circle()
-                            .fill(isOn ? .white : Palette.accent)
+                            .fill(isOn ? Palette.onFill : Palette.accent)
                             .frame(width: 5.5, height: 5.5)
                     }
                 }

@@ -23,3 +23,7 @@ ios/.last-release
 ios/*.xcodeproj/
 ios/build/
 ios/DerivedData/
+
+# Mac signing: personal certificate choice and provisioning profile
+mac/Local.signing.env
+mac/signing/

@@ -54,6 +54,9 @@ targets:
         name: Shared-Archive
       - path: ../mac/Sources/YTChannelScraper/Views/Palette.swift
         name: Shared-Palette
+      # The themes Palette reads its colours from, shared for the same reason.
+      - path: ../mac/Sources/YTChannelScraper/Views/Theme.swift
+        name: Shared-Theme
       # The iCloud mirror, shared for the same reason as the archive above: both apps
       # write the same library to the same key-value container, and one implementation
       # is the only way that stays true.
@@ -72,6 +75,10 @@ targets:
         name: Shared-Shelf
       - path: ../mac/Sources/YTChannelScraper/Core/ShelfStore.swift
         name: Shared-ShelfStore
+      # What the Mac hands a child's phone over the cable. Shared because the two halves
+      # have to agree on the bytes.
+      - path: ../mac/Sources/YTChannelScraper/Core/ChildSetup.swift
+        name: Shared-ChildSetup
     info:
       path: Support/Info.plist
       properties:
@@ -155,6 +162,9 @@ targets:
         PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper)
         INFOPLIST_KEY_CFBundleDisplayName: Command Center
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # One per theme, switched to with the theme — see ThemeChrome.applyIcon and
+        # make-icon.sh, which generates them.
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-bladeRunner AppIcon-dune AppIcon-middleEarth AppIcon-prancingPony AppIcon-synthwave AppIcon-grid AppIcon-nostromo AppIcon-nostromoTeal"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad
 

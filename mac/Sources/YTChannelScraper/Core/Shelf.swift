@@ -309,12 +309,170 @@ struct DeviceRecord: Codable, Sendable, Identifiable {
     var approved: Int
     var downloaded: Int
 
+    /// What is actually on its disk, one entry per playable file. The counts above say
+    /// how far along it is; this says *what* it is holding, which is the question a
+    /// parent is really asking when they open a child's device.
+    ///
+    /// Optional, like everything added after the first version, so a report from an
+    /// older build still decodes — and reads as "didn't say", not as "holds nothing".
+    var files: [File]?
+    /// Room left on the device, so a row can warn before a phone fills rather than after.
+    var freeBytes: Int64?
+    /// How big this device's own library is. Counts only, deliberately: the folder this
+    /// record sits in is shared with the other admin, and a personal library is not
+    /// theirs to read. The library's contents follow its owner through `CloudMirror`.
+    var library: LibraryCounts?
+
+    struct File: Codable, Hashable, Sendable, Identifiable {
+        var title: String
+        /// Nil for something somebody put on the device by hand.
+        var videoID: String?
+        var bytes: Int64
+        var added: Date
+        var isAudio: Bool
+
+        var id: String { (videoID ?? title) + "|\(added.timeIntervalSinceReferenceDate)" }
+    }
+
+    struct LibraryCounts: Codable, Hashable, Sendable {
+        var channels: Int
+        var videos: Int
+    }
+
+    /// Room left on the volume holding `url`, as the system would count it for something
+    /// the user asked for — the figure Settings shows, not the smaller raw free space.
+    static func freeSpace(at url: URL) -> Int64? {
+        let values = try? url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey])
+        return values?.volumeAvailableCapacityForImportantUsage
+    }
+
+    /// The playable files in a download folder, read the way both apps name them:
+    /// `Title [videoID].ext`. The Mac's reporter uses this; the phone already has
+    /// `LocalFiles` doing the same scan for its own screens and maps from that instead.
+    static func scan(_ folder: URL) -> [File] {
+        let audio: Set<String> = ["m4a", "mp3", "aac", "wav", "opus", "flac"]
+        let video: Set<String> = ["mp4", "m4v", "mov", "mkv", "webm"]
+        let keys: [URLResourceKey] = [.fileSizeKey, .creationDateKey, .isRegularFileKey]
+        let found = (try? FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])) ?? []
+        return found.compactMap { url -> File? in
+            let ext = url.pathExtension.lowercased()
+            guard audio.contains(ext) || video.contains(ext) else { return nil }
+            let values = try? url.resourceValues(forKeys: Set(keys))
+            guard values?.isRegularFile != false else { return nil }
+            let base = url.deletingPathExtension().lastPathComponent
+            var title = base
+            var videoID: String?
+            if base.hasSuffix("]"), let open = base.range(of: " [", options: .backwards) {
+                let id = String(base[open.upperBound..<base.index(before: base.endIndex)])
+                if id.count == 11, id.allSatisfy({ $0.isLetter || $0.isNumber || $0 == "_" || $0 == "-" }) {
+                    videoID = id
+                    title = String(base[..<open.lowerBound])
+                }
+            }
+            return File(title: title.isEmpty ? (videoID ?? base) : title,
+                        videoID: videoID,
+                        bytes: Int64(values?.fileSize ?? 0),
+                        added: values?.creationDate ?? .distantPast,
+                        isAudio: audio.contains(ext))
+        }
+    }
+
+    /// Everything its files take up. Nil when it did not report files at all.
+    var usedBytes: Int64? { files.map { $0.reduce(0) { $0 + $1.bytes } } }
+
+    /// The most files a report will carry. A device holding more is not a case this
+    /// family has, and a report that could grow without bound is a sync file that
+    /// eventually stops syncing.
+    static let fileLimit = 2_000
+
     var id: UUID { deviceID }
 
     /// The prefix is what keeps these out of the shelf reader, which decodes every other
     /// `.json` in the folder as a `ShelfFile`.
     static let prefix = "device-"
     var filename: String { "\(Self.prefix)\(deviceID.uuidString).json" }
+}
+
+/// A device somebody took off the list, and how recent its report was at the time.
+///
+/// Deleting the record's file is not enough, for the same reason deleting a shelf entry
+/// would not be: copies of it live elsewhere. A Mac collecting a child's reports brings
+/// back *every* `device-` file in that phone's delivered folder, including this one, and
+/// would relay it straight back. So removal is a tombstone, kept in the remover's own
+/// people file like every other thing they decide.
+///
+/// It hides reports up to `lastSeen` and no further. A device that really is still in
+/// use reports again with a newer time and comes back on its own — which makes removing
+/// the wrong one a mistake that heals itself instead of a phone that silently vanishes.
+struct ForgottenDevice: Codable, Hashable, Sendable {
+    let deviceID: UUID
+    let lastSeen: Date
+}
+
+/// Which device records are clutter: pure, so the rules can be tested without a folder.
+enum DeviceTidy {
+
+    /// Not seen for this long and it is offered for cleanup. A month, because a child's
+    /// phone that sits in a drawer over a school break is still their phone.
+    static let staleAfter: TimeInterval = 30 * 24 * 60 * 60
+
+    /// Records still worth showing, once every admin's removals are applied.
+    static func visible(_ devices: [DeviceRecord],
+                        forgotten: some Sequence<ForgottenDevice>) -> [DeviceRecord] {
+        var hiddenUpTo: [UUID: Date] = [:]
+        for tombstone in forgotten {
+            hiddenUpTo[tombstone.deviceID] = max(hiddenUpTo[tombstone.deviceID] ?? .distantPast,
+                                                 tombstone.lastSeen)
+        }
+        return devices.filter { record in
+            guard let cutoff = hiddenUpTo[record.deviceID] else { return true }
+            return record.lastSeen > cutoff
+        }
+    }
+
+    /// Records that look like an older copy of another device: same person, same kind,
+    /// same name, and not the one that reported most recently.
+    ///
+    /// This is what an app reinstall leaves behind. The device id used to live in
+    /// `UserDefaults`, which iOS deletes with the app, so every reinstall came back as a
+    /// new device beside the old one. Name is part of the key so a child who genuinely
+    /// has two phones — named apart — is not offered for cleanup.
+    ///
+    /// `aliases` maps an id to the person it is really the same as, so a phone that
+    /// reported under an older identity for the same child still counts as theirs.
+    static func duplicates(in devices: [DeviceRecord],
+                           aliases: [UUID: UUID] = [:]) -> [DeviceRecord] {
+        struct Key: Hashable { let person: UUID; let kind: DeviceRecord.Kind; let name: String }
+        var groups: [Key: [DeviceRecord]] = [:]
+        for record in devices {
+            guard let person = record.personID else { continue }
+            let key = Key(person: aliases[person] ?? person,
+                          kind: record.kind,
+                          name: record.name.lowercased())
+            groups[key, default: []].append(record)
+        }
+        return groups.values.flatMap { group -> [DeviceRecord] in
+            guard group.count > 1 else { return [] }
+            let newest = group.max { ($0.lastSeen, $0.deviceID.uuidString) < ($1.lastSeen, $1.deviceID.uuidString) }
+            return group.filter { $0.deviceID != newest?.deviceID }
+        }
+        .sorted { $0.lastSeen < $1.lastSeen }
+    }
+
+    /// Records nothing has heard from in a month.
+    static func stale(in devices: [DeviceRecord], now: Date = Date()) -> [DeviceRecord] {
+        devices.filter { now.timeIntervalSince($0.lastSeen) > staleAfter }
+            .sorted { $0.lastSeen < $1.lastSeen }
+    }
+
+    /// Everything the Clean up button would take off the list, each once.
+    static func clutter(in devices: [DeviceRecord], aliases: [UUID: UUID] = [:],
+                        now: Date = Date()) -> [DeviceRecord] {
+        var seen = Set<UUID>()
+        return (duplicates(in: devices, aliases: aliases) + stale(in: devices, now: now))
+            .filter { seen.insert($0.deviceID).inserted }
+    }
 }
 
 
@@ -393,6 +551,10 @@ struct PeopleFile: Codable, Sendable {
     /// one-writer-per-file rule as everything else; last writer wins, which is right for
     /// a label everybody sees the same way.
     var familyName: String?
+
+    /// Devices this admin took off the family list. Never pruned, for the same reason a
+    /// shelf's tombstones are not: see `ForgottenDevice`. Optional so older files decode.
+    var forgottenDevices: [ForgottenDevice]?
 
     static let prefix = "people-"
     var filename: String { "\(Self.prefix)\(guardianID.uuidString).json" }

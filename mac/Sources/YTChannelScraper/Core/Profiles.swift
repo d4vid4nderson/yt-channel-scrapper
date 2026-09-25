@@ -84,6 +84,21 @@ final class Profiles {
     /// looks like a sync failure.
     var needsMinorAssignment: Bool { if case .minor(nil) = mode { true } else { false } }
 
+    /// The child this device was last locked to, kept through an unlock.
+    ///
+    /// A parent unlocks a child's phone to manage it and then needs to hand it back.
+    /// Without this, locking again meant picking the child from the family list — which
+    /// a phone with no adult identity of its own, or no folder connected yet, cannot
+    /// show — so there was no way back into Minor Mode at all.
+    var lastMinor: Minor? { Keychain.decode(Minor.self, for: Key.lastMinor) }
+
+    /// Lock again as whoever this phone belonged to last.
+    @discardableResult
+    func relock() -> Bool {
+        guard let lastMinor else { return false }
+        return lock(as: lastMinor)
+    }
+
     init() {
         hasPIN = Keychain.data(for: Key.pin) != nil
         useFaceID = Keychain.string(for: Key.faceID) == "1"
@@ -155,8 +170,7 @@ final class Profiles {
     /// this one value being on disk.
     @discardableResult
     func setPIN(_ pin: String) -> Bool {
-        let salt = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
-        guard Keychain.set(salt + Self.hash(pin, salt: salt), for: Key.pin) else {
+        guard Keychain.set(Self.pinRecord(for: pin), for: Key.pin) else {
             hasPIN = Keychain.data(for: Key.pin) != nil
             return false
         }
@@ -165,8 +179,18 @@ final class Profiles {
         return true
     }
 
+    /// Salt then hash: what the Keychain holds, and what `ChildSetup` carries so a Mac can
+    /// set a phone's PIN without the digits ever leaving the Mac.
+    nonisolated static func pinRecord(for pin: String) -> Data {
+        let salt = Data((0..<16).map { _ in UInt8.random(in: .min ... .max) })
+        return salt + hash(pin, salt: salt)
+    }
+
+    nonisolated static let pinRecordLength = 16 + 32
+
     func matches(_ pin: String) -> Bool {
-        guard let stored = Keychain.data(for: Key.pin), stored.count == 16 + 32 else { return false }
+        guard let stored = Keychain.data(for: Key.pin), stored.count == Self.pinRecordLength
+        else { return false }
         let expected = Self.hash(pin, salt: stored.prefix(16))
         // Every byte, every time. `==` and `elementsEqual` both stop at the first
         // difference, which leaks how much of a guess was right through how long the
@@ -184,7 +208,7 @@ final class Profiles {
     /// determined attacker with the keychain item in hand — `attempts` and the device's
     /// own passcode are. It stops the PIN being readable in a backup or a dump, which is
     /// worth the four lines it costs.
-    private static func hash(_ pin: String, salt: Data) -> Data {
+    private nonisolated static func hash(_ pin: String, salt: Data) -> Data {
         Data(SHA256.hash(data: salt + Data(pin.utf8)))
     }
 
@@ -203,7 +227,53 @@ final class Profiles {
         // handed the phone over will not be there to see it come back.
         guard persistMode(.minor(minor)) else { return false }
         mode = .minor(minor)
+        Keychain.encode(minor, for: Key.lastMinor)
         return true
+    }
+
+    /// What applying a setup from the Mac did.
+    enum SetupOutcome: Equatable {
+        /// Locked as that child. `keptPIN` when the phone already had a PIN, which is
+        /// left alone and is still the one that unlocks it.
+        case locked(keptPIN: Bool)
+        /// Already that child's phone; nothing changed.
+        case alreadyThisChild
+        /// Already another child's phone. Changing whose it is needs the PIN, on the
+        /// phone, so a file cannot do it.
+        case refused
+        case failed
+    }
+
+    /// Become a child's phone because the Mac said so.
+    ///
+    /// Only ever locks, which is why it needs no PIN: a phone that is still a parent's is
+    /// already fully open to whoever is holding it, so locking it takes nothing away from
+    /// them. What it will not do is the two things a stray file could abuse — replace a
+    /// PIN that exists, or move a phone that is already locked to a different child.
+    ///
+    /// The adult identity is dropped. A child's phone that had been set up as an adult
+    /// first would otherwise keep announcing that adult whenever a parent unlocked it,
+    /// and the child would reappear in the Admins list.
+    @discardableResult
+    func apply(_ setup: ChildSetup) -> SetupOutcome {
+        if case .minor(let current?) = mode {
+            return current.id == setup.minor.id ? .alreadyThisChild : .refused
+        }
+        let keptPIN = hasPIN
+        if !keptPIN {
+            guard setup.pinRecord.count == Self.pinRecordLength,
+                  Keychain.set(setup.pinRecord, for: Key.pin)
+            else { return .failed }
+            hasPIN = true
+            clearAttempts()
+        }
+        guard persistMode(.minor(setup.minor)) else { return .failed }
+        mode = .minor(setup.minor)
+        Keychain.encode(setup.minor, for: Key.lastMinor)
+        Keychain.remove(Key.guardian)
+        guardian = nil
+        Log.profiles.notice("set up from the Mac as a child's phone")
+        return .locked(keptPIN: keptPIN)
     }
 
     /// Attach a child to a device that was locked before identities existed. Behind the
@@ -338,6 +408,7 @@ final class Profiles {
         static let mode = "profile.mode.v2"
         static let guardian = "profile.guardian"
         static let faceID = "profile.faceID"
+        static let lastMinor = "profile.lastMinor"
     }
 }
 

@@ -39,6 +39,7 @@ struct FamilyView: View {
                 folder
                 if profiles.guardian != nil, shelf.folder != nil {
                     people
+                    devicesLink
                     if !profiles.isMinor { inbox }
                 }
             }
@@ -56,6 +57,10 @@ struct FamilyView: View {
                           allowedContentTypes: [.folder],
                           allowsMultipleSelection: false) { result in
                 guard case .success(let urls) = result, let url = urls.first else { return }
+                guard !model.isOwnFolder(url) else {
+                    model.banner = "That is this app's own folder. Choose the family folder in iCloud Drive."
+                    return
+                }
                 if shelf.adopt(url) {
                     Task { await model.syncShelf() }
                 }
@@ -220,6 +225,36 @@ struct FamilyView: View {
         return "Last read \(read.formatted(date: .omitted, time: .shortened))."
     }
 
+    // MARK: - Devices
+
+    /// Every device and what it holds, one tap away. Says when there is something to
+    /// tidy, because that is the reason most people will open it.
+    private var devicesLink: some View {
+        Section {
+            NavigationLink {
+                DevicesView(model: model)
+            } label: {
+                HStack {
+                    Label("Devices", systemImage: "iphone.gen3")
+                        .foregroundStyle(Color.primaryText)
+                    Spacer()
+                    if !shelf.clutter.isEmpty {
+                        Text("\(shelf.clutter.count) to clean up")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Palette.accent)
+                    } else {
+                        Text("\(shelf.devices.count)")
+                            .font(.system(size: 13).monospacedDigit())
+                            .foregroundStyle(Color.secondaryText)
+                    }
+                }
+            }
+            .listRowBackground(Color.card)
+        } footer: {
+            Text("What each device holds — shelf, files, free space — as it last reported.")
+        }
+    }
+
     // MARK: - Children
 
     /// Always shown, even at zero. The badge on Home appears only when something is
@@ -323,7 +358,7 @@ struct FamilyView: View {
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(Color.secondaryText)
                     .padding(.horizontal, 6).padding(.vertical, 2)
-                    .background(Color.white.opacity(0.08), in: Capsule())
+                    .background(Palette.ink(0.08), in: ThemedCapsule())
             }
             Spacer()
             devices(for: id)

@@ -27,22 +27,51 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.22), value: model.playback.item?.id)
         .animation(.easeOut(duration: 0.22), value: model.playing?.id)
+        // Over everything on the page, tab bar included. The player is a sheet and so is
+        // not under it: a video with scanlines drawn through it is not the point.
+        .overlay { CRTGlass().ignoresSafeArea() }
+        // Below `model`, which must survive a theme change: `themed()` rebuilds what it
+        // wraps.
+        .themed()
         // Belt to `enterMinorMode()`'s braces. That method handles the ordinary route in,
         // but the mode also comes back off disk at launch — a minor's phone starts here
         // with `.search` never having been a valid selection.
         .onChange(of: model.isMinor) { _, isMinor in
-            if isMinor && model.tab == .search { model.tab = .home }
+            if isMinor && (model.tab == .search || model.tab == .inbox) { model.tab = .home }
         }
+        .task { await model.diagnoseIfAsked() }
         .task {
-            if model.isMinor && model.tab == .search { model.tab = .home }
+            model.applyChildSetup()
+            if model.isMinor && (model.tab == .search || model.tab == .inbox) { model.tab = .home }
             await model.syncShelf()
         }
         // The shelf is a folder other devices write to, so the only honest time to read
         // it is when this one comes back to the front. A minor's device reconciles on the
         // same beat: coming back from the lock screen is when a withdrawn video should
         // stop being there.
+        // A Mac delivering the family folder over the cable does not bring the app to the
+        // front if it is already there, so a sync that only ran on foreground would sit
+        // unread until the child next left and came back. Watched only while on screen.
+        .task(id: scenePhase) {
+            guard scenePhase == .active else { return }
+            var seen = model.deliveredStamp
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(8))
+                let now = model.deliveredStamp
+                if now != seen {
+                    seen = now
+                    await model.syncShelf()
+                }
+            }
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
+            // The icon is matched to the theme on every return to the front, not only
+            // when the theme is picked: a phone that was already on a theme when an
+            // update brought the icons would otherwise never get its own. A no-op when
+            // they already match, so iOS only says "icon changed" when it has.
+            ThemeChrome.applyIcon(ThemeStore.shared.theme)
+            model.applyChildSetup()
             Task { await model.syncShelf() }
         }
     }
@@ -67,13 +96,16 @@ struct RootView: View {
                     .tag(AppModel.Tab.search)
             }
 
-            // What has been sent to this device. Third for an admin, second for a minor,
-            // because a minor has no Search tab — the same position in the list either
-            // way, which is what keeps the two layouts feeling like one app.
-            InboxView(model: model)
-                .tabItem { Label("Inbox", systemImage: "tray") }
-                .badge(model.isMinor ? 0 : model.inboxCount)
-                .tag(AppModel.Tab.inbox)
+            // What other admins have sent this device, to keep or ignore. Not on a minor's
+            // phone: there, what a parent sends goes straight onto Home — it has already
+            // been decided, and asking the child to accept it again was a step with
+            // nothing behind it.
+            if !model.isMinor {
+                InboxView(model: model)
+                    .tabItem { Label("Inbox", systemImage: "tray") }
+                    .badge(model.inboxCount)
+                    .tag(AppModel.Tab.inbox)
+            }
 
             DownloadsView(model: model)
                 .tabItem {
@@ -102,8 +134,9 @@ struct RootView: View {
                 .lineLimit(2)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color.card, in: Capsule())
-                .overlay(Capsule().stroke(Color.hairline))
+                .background(Color.card, in: ThemedCapsule())
+                .overlay(ThemedCapsule().stroke(Color.hairline))
+                .themeEdge(ThemedCapsule())
                 .shadow(color: .black.opacity(0.4), radius: 12, y: 4)
                 .padding(.horizontal, Metrics.gutter)
                 .transition(.move(edge: .top).combined(with: .opacity))
@@ -175,11 +208,7 @@ private struct NowPlayingBar: View {
         .padding(.leading, 8)
         .padding(.trailing, 4)
         .padding(.vertical, 6)
-        .background(Color.card, in: RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: Metrics.corner, style: .continuous)
-                .stroke(Color.hairline)
-        }
+        .card()
         .shadow(color: .black.opacity(0.35), radius: 10, y: 3)
         // The row itself is the way back into the player; the two buttons keep their own
         // taps, so the target for reopening is everything that is not one of them.
@@ -200,6 +229,6 @@ private struct NowPlayingBar: View {
             }
         }
         .frame(width: 52, height: 30)
-        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: 6, style: .continuous))
     }
 }

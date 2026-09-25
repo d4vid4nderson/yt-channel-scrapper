@@ -2,8 +2,8 @@ import SwiftUI
 
 /// What the phone adds to the shared `Palette`.
 ///
-/// `Views/Palette.swift` comes over from the Mac unchanged and carries the brand: the
-/// red accent, the near-black ground, the surfaces. What it cannot carry is anything
+/// `Views/Palette.swift` comes over from the Mac unchanged and carries the brand — the
+/// accent, the ground, the surfaces — read from the active `Theme`. What it cannot carry is anything
 /// sized for a pointer. A 24pt checkbox and a hover state are fine with a cursor on them
 /// and useless under a thumb, so the metrics below are the phone's own, and every
 /// tappable thing is built to Apple's 44pt minimum.
@@ -11,6 +11,7 @@ enum Metrics {
     /// Apple's minimum comfortable target. Rows are taller; icon buttons are exactly it.
     static let tap: CGFloat = 44
     static let gutter: CGFloat = 16
+    /// Asked of `ThemedRect`, which cuts it however the theme cuts corners.
     static let corner: CGFloat = 12
     /// A 16:9 thumbnail at the width a phone row can spare.
     static let thumbWidth: CGFloat = 124
@@ -18,20 +19,32 @@ enum Metrics {
 }
 
 extension Color {
-    /// Text on the dark ground: full strength for titles, dimmed for the metadata line.
-    static let primaryText = Color.white
-    static let secondaryText = Color.white.opacity(0.58)
-    static let hairline = Color.white.opacity(0.10)
-    /// A card sitting on the ground — rows, headers, the downloads panel.
-    static let card = Color(red: 0.094, green: 0.094, blue: 0.094)
+    /// Text on the ground: full strength for titles, dimmed for the metadata line. The
+    /// theme's ink — white in Classic, phosphor green on the Nostromo.
+    static var primaryText: Color { Palette.ink(1) }
+    static var secondaryText: Color { Palette.ink(0.58) }
+    static var hairline: Color { Palette.ink(0.10) }
+    /// A card sitting on the ground — rows, headers, the downloads panel. A little
+    /// translucent outside Classic, so the theme's scenery shows faintly through a list.
+    static var card: Color { Palette.card }
 }
 
-/// The dark ground the whole app sits on, ignoring safe areas so it reaches the edges.
+/// The ground the whole app sits on, ignoring safe areas so it reaches the edges, with
+/// the theme's scenery drawn into it.
+///
+/// Classic is dark on the phone whatever the system says — it always has been; the
+/// other themes pick their own appearance.
 struct Ground: ViewModifier {
     func body(content: Content) -> some View {
         content
-            .background(Palette.ground.ignoresSafeArea())
-            .preferredColorScheme(.dark)
+            .background {
+                ZStack {
+                    Palette.ground
+                    ThemeBackdrop(strength: 0.8)
+                }
+                .ignoresSafeArea()
+            }
+            .preferredColorScheme(Theme.active.colorScheme ?? .dark)
     }
 }
 
@@ -43,6 +56,17 @@ extension View {
     func tappable() -> some View {
         frame(minWidth: Metrics.tap, minHeight: Metrics.tap)
             .contentShape(Rectangle())
+    }
+}
+
+extension View {
+    /// A card: the themed shape, filled, with its hairline and the theme's edge.
+    func card(radius: CGFloat = Metrics.corner) -> some View {
+        background(Color.card, in: ThemedRect(cornerRadius: radius, style: .continuous))
+            .overlay {
+                ThemedRect(cornerRadius: radius, style: .continuous).strokeBorder(Color.hairline)
+            }
+            .themeEdge(radius: radius)
     }
 }
 
@@ -97,7 +121,7 @@ struct Thumbnail: View {
                 if let image = phase.image {
                     image.resizable().scaledToFill()
                 } else {
-                    Color.white.opacity(0.06)
+                    Palette.ink(0.06)
                 }
             }
             .frame(width: width, height: height)
@@ -109,13 +133,13 @@ struct Thumbnail: View {
                     .monospacedDigit()
                     .padding(.horizontal, 4)
                     .padding(.vertical, 2)
-                    .background(.black.opacity(0.78), in: RoundedRectangle(cornerRadius: 4))
+                    .background(.black.opacity(0.78), in: ThemedRect(cornerRadius: 4))
                     .foregroundStyle(.white)
                     .padding(4)
             }
         }
         .frame(width: width, height: height)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(ThemedRect(cornerRadius: 8))
     }
 }
 
@@ -131,7 +155,8 @@ struct Placeholder: View {
                 .font(.system(size: 34, weight: .light))
                 .foregroundStyle(Color.secondaryText)
             Text(title)
-                .font(.headline)
+                .displayType(17, classic: .semibold)
+                .multilineTextAlignment(.center)
                 .foregroundStyle(Color.primaryText)
             if let detail {
                 Text(detail)
@@ -157,7 +182,7 @@ struct Artwork: View {
 
     var body: some View {
         ZStack {
-            Color.white.opacity(0.06)
+            Palette.ink(0.06)
             if let url {
                 AsyncImage(url: url) { phase in
                     if let image = phase.image {
@@ -172,7 +197,7 @@ struct Artwork: View {
         }
         .frame(width: width, height: height)
         .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: corner))
+        .clipShape(ThemedRect(cornerRadius: corner))
     }
 
     private var fallback: some View {

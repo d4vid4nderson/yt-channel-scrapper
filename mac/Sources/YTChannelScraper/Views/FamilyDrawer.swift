@@ -43,7 +43,7 @@ struct FamilyDrawer: View {
                     count: shelf.roster.count + shelf.guardians.count,
                     close: { model.showFamilyDrawer = false }
                 )
-                Divider().overlay(.white.opacity(0.09))
+                Divider().overlay(Palette.ink(0.09))
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 22) {
@@ -53,11 +53,21 @@ struct FamilyDrawer: View {
                     }
                     .padding(.horizontal, 6)
                     .padding(.vertical, 18)
+                    // A click on empty space. macOS leaves the cursor in a text field when
+                    // you click on nothing, so the field's own blur never fires for it.
+                    .background(
+                        Color.clear.contentShape(Rectangle()).onTapGesture {
+                            if addingMinor != nil,
+                               newName.trimmingCharacters(in: .whitespaces).isEmpty {
+                                cancelAdding()
+                            }
+                        }
+                    )
                 }
                 .scrollIndicators(.visible)
 
                 if let problem = shelf.problem {
-                    Divider().overlay(.white.opacity(0.09))
+                    Divider().overlay(Palette.ink(0.09))
                     DrawerNote(text: problem) {}
                 }
             }
@@ -93,16 +103,27 @@ struct FamilyDrawer: View {
                 Button("Remove", role: .destructive) { confirmRemove() }
                 Button("Cancel", role: .cancel) { removing = nil }
             } message: {
-                Text("They stop appearing for everyone. Nothing is destroyed — a minor's "
-                     + "shelf stays in the folder, and past approvals keep the name they "
-                     + "were signed with.")
+                Text(removalMessage)
             }
         }
     }
 
     // MARK: - You
 
+    @ViewBuilder
     private var you: some View {
+        // Normally your name is edited from your own row under Admins — but that section
+        // only exists once you have one, so a fresh device has to be asked here first.
+        if profiles.guardian == nil {
+            section("Your name") {
+                CapsuleField(text: $name, prompt: "David", onSubmit: saveName)
+                    .help("The name your approvals are signed with. If you already set "
+                          + "yourself up on another device, use the same name.")
+                if nameChanged {
+                    QuietButton(title: "Save", accent: true, action: saveName)
+                }
+            }
+        }
         section("Family name") {
             CapsuleField(text: $family, prompt: "Anderson", onSubmit: saveFamily)
                 .help("What this household is called. A label everybody sees — it is not "
@@ -111,14 +132,33 @@ struct FamilyDrawer: View {
                 QuietButton(title: "Save", accent: true, action: saveFamily)
             }
         }
+        if let blocked = familyBlocked {
+            Text(blocked)
+                .font(.system(size: 10.5))
+                .foregroundStyle(Palette.accent.opacity(0.85))
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 
     private var familyChanged: Bool {
         family.trimmingCharacters(in: .whitespaces) != shelf.familyName
     }
 
+    /// Why Save on the family name did nothing, if it did. Shown only after a press —
+    /// a first-run drawer should not open on a warning.
+    @State private var familyBlocked: String?
+
     private func saveFamily() {
-        guard familyChanged, let guardian = profiles.guardian else { return }
+        guard familyChanged else { return }
+        guard let guardian = profiles.guardian else {
+            familyBlocked = "Save your own name first."
+            return
+        }
+        guard shelf.folder != nil else {
+            familyBlocked = "Choose the shared folder first — the family name is kept there."
+            return
+        }
+        familyBlocked = nil
         Task { await shelf.setFamilyName(family, as: guardian) }
     }
 
@@ -143,6 +183,7 @@ struct FamilyDrawer: View {
         }
 
         _ = profiles.setGuardianName(trimmed)
+        familyBlocked = nil
         Task { await model.syncShelf() }
     }
 
@@ -154,10 +195,10 @@ struct FamilyDrawer: View {
             HStack(spacing: 8) {
                 Image(systemName: shelf.folder == nil ? "folder.badge.plus" : "folder")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(Palette.ink(0.4))
                 Text(folderLabel)
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(shelf.folder == nil ? 0.35 : 0.8))
+                    .foregroundStyle(Palette.ink(shelf.folder == nil ? 0.35 : 0.8))
                     .lineLimit(1)
                     .truncationMode(.head)
                 Spacer(minLength: 6)
@@ -183,7 +224,7 @@ struct FamilyDrawer: View {
                 Text("Last read \(read.formatted(date: .omitted, time: .shortened)) · "
                      + "\(counts.shelves) shelf · \(counts.people) people · \(counts.devices) device")
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(Palette.ink(0.3))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -306,7 +347,7 @@ struct FamilyDrawer: View {
                 Text("Same person as somebody above? Attach it and anything you send them "
                      + "reaches this device too.")
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(Palette.ink(0.3))
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
@@ -336,22 +377,44 @@ struct FamilyDrawer: View {
             if isEmpty && addingMinor != isMinor {
                 Text(empty)
                     .font(.system(size: 11))
-                    .foregroundStyle(.white.opacity(0.28))
+                    .foregroundStyle(Palette.ink(0.28))
             }
 
             if addingMinor == isMinor {
                 HStack(spacing: 8) {
                     CapsuleField(text: $newName,
                                  prompt: isMinor ? "Minor's name" : "Admin's name",
-                                 onSubmit: addPerson)
+                                 onSubmit: addPerson,
+                                 autoFocus: true,
+                                 onCancel: cancelAdding,
+                                 // Clicking away from an empty field is changing your
+                                 // mind; one with a name typed in is kept, not lost.
+                                 onBlur: { if newName.trimmingCharacters(in: .whitespaces).isEmpty { cancelAdding() } })
                     if !newName.trimmingCharacters(in: .whitespaces).isEmpty {
                         QuietButton(title: "Add", accent: true, action: addPerson)
                             .disabled(working)
                     }
+                    QuietButton(title: "Cancel", action: cancelAdding)
                 }
                 .help(isMinor
                       ? "A minor appears on every admin's device as soon as iCloud catches up"
                       : "Creates the identity their approvals are signed with — on their own device they claim it")
+            }
+
+            // Where you look for a child, so where setting up their phone is offered.
+            // Adds the child too if they are not here yet, so it works from empty.
+            if isMinor {
+                Button {
+                    model.showPhoneSetup = true
+                } label: {
+                    Label("Set up a child's phone…", systemImage: "iphone.badge.plus")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Palette.accent)
+                }
+                .buttonStyle(.plain)
+                .help("Install the app on a plugged-in phone and lock it to one child")
+                .pointingHand()
+                .padding(.top, 4)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -361,10 +424,10 @@ struct FamilyDrawer: View {
         .padding(.vertical, 8)
         .background(
             (dropTarget == isMinor ? Palette.accent.opacity(0.10) : .clear),
-            in: RoundedRectangle(cornerRadius: 10)
+            in: ThemedRect(cornerRadius: 10)
         )
         .overlay {
-            RoundedRectangle(cornerRadius: 10)
+            ThemedRect(cornerRadius: 10)
                 .strokeBorder(dropTarget == isMinor ? Palette.accent.opacity(0.35) : .clear)
         }
         .dropDestination(for: String.self) { items, _ in
@@ -387,6 +450,11 @@ struct FamilyDrawer: View {
     }
 
     // MARK: - Actions
+
+    private func cancelAdding() {
+        newName = ""
+        addingMinor = nil
+    }
 
     private func addPerson() {
         guard let guardian = profiles.guardian, let isMinor = addingMinor else { return }
@@ -429,15 +497,38 @@ struct FamilyDrawer: View {
     private func confirmRemove() {
         guard let target = removing, let guardian = profiles.guardian else { return }
         removing = nil
-        Task { await shelf.removePerson(target.id, as: guardian) }
+        let isMinor = shelf.roster.contains { $0.id == target.id }
+        Task {
+            guard await shelf.removePerson(target.id, as: guardian) else { return }
+            // A child's phone is cleaned up with them. An adult's phone is their own and
+            // is never touched.
+            if isMinor { await model.nearby.retire(childID: target.id) }
+        }
+    }
+
+    /// What removing this person does, said before it is done — including, for a child,
+    /// that the app comes off their phone.
+    private var removalMessage: String {
+        guard let target = removing else { return "" }
+        let base = "They stop appearing for everyone. Past approvals keep the name they "
+            + "were signed with."
+        guard shelf.roster.contains(where: { $0.id == target.id }) else { return base }
+        let phones = model.nearby.phoneIDs(ownedBy: target.id).count
+        let phoneNote = phones == 0
+            ? " Their phone stops playing anything. This Mac did not set that phone up, so "
+                + "delete Command Center from it by hand."
+            : " Command Center is also deleted from \(target.name)'s phone — now if it is on "
+                + "the cable or this Wi-Fi, otherwise the next time it is. Until then it "
+                + "stops playing anything."
+        return base + phoneNote
     }
 
     // MARK: - Furniture
 
     private func heading(_ text: String) -> some View {
         Text(text)
-            .font(.system(size: 10.5, weight: .semibold))
-            .foregroundStyle(.white.opacity(0.35))
+            .displayType(10.5, classic: .semibold)
+            .foregroundStyle(Palette.ink(0.35))
             .textCase(.uppercase)
             .tracking(0.6)
     }
@@ -458,6 +549,12 @@ private struct CapsuleField: View {
     @Binding var text: String
     let prompt: String
     var onSubmit: () -> Void = {}
+    /// Take the cursor as soon as it appears — for a field somebody just asked to open.
+    var autoFocus = false
+    /// Escape.
+    var onCancel: (() -> Void)?
+    /// Focus moved somewhere else.
+    var onBlur: (() -> Void)?
 
     @FocusState private var focused: Bool
 
@@ -466,25 +563,30 @@ private struct CapsuleField: View {
             if text.isEmpty {
                 Text(prompt)
                     .font(.system(size: 12))
-                    .foregroundStyle(.white.opacity(0.3))
+                    .foregroundStyle(Palette.ink(0.3))
             }
             TextField("", text: $text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
                 .focused($focused)
                 .onSubmit(onSubmit)
+                .onExitCommand { onCancel?() }
         }
         .padding(.horizontal, 11)
         .frame(height: 28)
-        .background(.white.opacity(focused ? 0.10 : 0.06), in: Capsule())
+        .background(Palette.ink(focused ? 0.10 : 0.06), in: ThemedCapsule())
         .overlay {
-            Capsule().strokeBorder(
-                focused ? Palette.accent.opacity(0.45) : .white.opacity(0.09),
+            ThemedCapsule().strokeBorder(
+                focused ? Palette.accent.opacity(0.45) : Palette.ink(0.09),
                 lineWidth: 1
             )
         }
         .animation(.easeOut(duration: 0.14), value: focused)
+        .onAppear { if autoFocus { focused = true } }
+        .onChange(of: focused) { _, isFocused in
+            if !isFocused { onBlur?() }
+        }
     }
 }
 
@@ -501,10 +603,10 @@ private struct QuietButton: View {
         Button(action: action) {
             Text(title)
                 .font(.system(size: 11.5, weight: .medium))
-                .foregroundStyle(accent ? Palette.accent : .white.opacity(hovering ? 0.9 : 0.55))
+                .foregroundStyle(accent ? Palette.accent : Palette.ink(hovering ? 0.9 : 0.55))
                 .padding(.horizontal, 10)
                 .frame(height: 24)
-                .background(.white.opacity(hovering ? 0.10 : 0.06), in: Capsule())
+                .background(Palette.ink(hovering ? 0.10 : 0.06), in: ThemedCapsule())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -555,7 +657,7 @@ private struct PersonRow: View {
             if let count {
                 Text("\(count)")
                     .font(.system(size: 11.5).monospacedDigit())
-                    .foregroundStyle(.white.opacity(count == 0 ? 0.25 : 0.55))
+                    .foregroundStyle(Palette.ink(count == 0 ? 0.25 : 0.55))
             }
 
             removeButton
@@ -566,7 +668,7 @@ private struct PersonRow: View {
             Text(name)
                 .font(.system(size: 12, weight: .medium))
                 .padding(.horizontal, 10).padding(.vertical, 6)
-                .background(.black.opacity(0.7), in: Capsule())
+                .background(.black.opacity(0.7), in: ThemedCapsule())
         }
         .onHover { hovering = $0 }
         // Claiming an identity somebody else created happens once, on one machine, ever.
@@ -585,7 +687,7 @@ private struct PersonRow: View {
             .overlay {
                 Text(String(name.prefix(1)).uppercased())
                     .font(.system(size: 11.5, weight: .semibold))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Palette.ink(0.9))
             }
     }
 
@@ -595,14 +697,14 @@ private struct PersonRow: View {
             TextField("Your name", text: rename.text)
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
                 .lineLimit(1)
                 .onSubmit(rename.save)
                 .help("Shown against what you approve, so other admins can see who decided what")
         } else {
             Text(name)
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.ink(1))
                 .lineLimit(1)
         }
     }
@@ -634,7 +736,7 @@ private struct PersonRow: View {
             }
         }
         .font(.system(size: 10.5))
-        .foregroundStyle(.white.opacity(0.38))
+        .foregroundStyle(Palette.ink(0.38))
     }
 
     private var removeButton: some View {
@@ -646,7 +748,7 @@ private struct PersonRow: View {
                 Button(action: remove) {
                     Image(systemName: "minus.circle")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(hovering ? 0.55 : 0.25))
+                        .foregroundStyle(Palette.ink(hovering ? 0.55 : 0.25))
                 }
                 .buttonStyle(.plain)
                 .help("Remove " + name)
@@ -711,7 +813,7 @@ private struct DeviceMenu: View {
                         .font(.system(size: 10.5))
                 }
             }
-            .foregroundStyle(.white.opacity(0.32))
+            .foregroundStyle(Palette.ink(0.32))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -735,9 +837,9 @@ private struct AddButton: View {
         Button(action: action) {
             Image(systemName: "plus")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.45))
+                .foregroundStyle(Palette.ink(hovering ? 0.9 : 0.45))
                 .frame(width: 20, height: 20)
-                .background(.white.opacity(hovering ? 0.12 : 0.06), in: Circle())
+                .background(Palette.ink(hovering ? 0.12 : 0.06), in: Circle())
         }
         .buttonStyle(.plain)
         .onHover { hovering = $0 }
@@ -761,18 +863,18 @@ private struct StrayRow: View {
         HStack(spacing: 10) {
             Image(systemName: device.kind.icon)
                 .font(.system(size: 12))
-                .foregroundStyle(.white.opacity(0.45))
+                .foregroundStyle(Palette.ink(0.45))
                 .frame(width: 28, height: 28)
-                .background(.white.opacity(0.05), in: Circle())
+                .background(Palette.ink(0.05), in: Circle())
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(device.name)
                     .font(.system(size: 12.5, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Palette.ink(0.85))
                     .lineLimit(1)
                 Text("set up as " + (device.personName ?? "somebody else"))
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.white.opacity(0.38))
+                    .foregroundStyle(Palette.ink(0.38))
                     .lineLimit(1)
             }
 
@@ -785,11 +887,11 @@ private struct StrayRow: View {
             } label: {
                 Text("Attach")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.white.opacity(hovering ? 0.8 : 0.55))
+                    .foregroundStyle(Palette.ink(hovering ? 0.8 : 0.55))
                     .padding(.horizontal, 9)
                     .padding(.vertical, 3.5)
-                    .background(.white.opacity(hovering ? 0.10 : 0.06), in: Capsule())
-                    .overlay(Capsule().strokeBorder(.white.opacity(0.10)))
+                    .background(Palette.ink(hovering ? 0.10 : 0.06), in: ThemedCapsule())
+                    .overlay(ThemedCapsule().strokeBorder(Palette.ink(0.10)))
             }
             .menuStyle(.borderlessButton)
             .menuIndicator(.hidden)

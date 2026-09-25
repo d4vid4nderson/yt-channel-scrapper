@@ -112,9 +112,14 @@ never sees your library.
 
 ### Not built — the feature is not reachable from the UI yet
 
-1. **The `Playback` guard.** Nothing stops a minor's device playing a `.stream`. Until
-   `Playback` refuses one in Minor Mode, "ad-free" depends on what the UI happens to offer
-   rather than on anything the app enforces. **Do this first.**
+1. ~~**The `Playback` guard.**~~ Built 2026-09-24. **Decision changed that day:** a
+   minor's phone *streams* approved videos rather than downloading them (the owner does
+   not want the child's storage filled). Streaming stays ad-free because it is this app's
+   own `AVPlayer` fed by `StreamResolver`, never YouTube's player or app. `Playback`
+   refuses any stream whose video id is not on the child's shelf
+   (`AppModel.approvedIDs`), and `ShelfReconciler` runs with `fetching: false` so it only
+   sweeps. Never route a minor to the YouTube app or website — that brings the ads,
+   recommendations and search back.
 2. **Family settings screen** — name yourself as a guardian (`Profiles.setGuardianName`),
    pick the shared folder (`ShelfStore.adopt`), add a child (`ShelfStore.createMinor`).
    Nothing else can be used without it.
@@ -163,6 +168,18 @@ unseen. A channel *removal*, however, does cascade to its videos — blocking a 
 expected to take what is already on the phone with it. The asymmetry is intentional; see
 `ShelfMerge.playable`.
 
+**Removing a device is a tombstone too.** `ShelfStore.forget` writes a `ForgottenDevice`
+into the admin's own people file, and deleting the `device-` file is only tidying. A Mac's
+Nearby sync brings back every `device-` file in a phone's delivered copy and would relay a
+deleted one straight back. The tombstone hides reports up to its `lastSeen`, so a device
+that is actually still in use comes back on its next report. Never prune them.
+
+**The first iCloud snapshot a device sees is merged, not adopted.** `CloudMirror` is
+last-writer-wins on the whole library, which is only safe between copies that started out
+the same. Before a device has joined (`library.cloudJoined.v1`), it unions iCloud's copy
+into its own (`didJoin`) and holds back its own pushes for a short grace period. Without
+this, the first Mac↔phone sync would replace one diverged library with the other wholesale.
+
 **Never sweep a file with no `videoID`.** Anything the user put in the folder themselves
 has none, plays fine, and is not the reconciler's business.
 
@@ -196,3 +213,25 @@ overlap to resolve:
   Face ID. The shelf work *extended* that rather than replacing it — the PIN hashing,
   attempt throttling, `PINPad` and biometric paths are all the original code, with
   `Guardian`/`Minor` identity added on top and a fail-closed v1 migration.
+
+---
+
+## 7. Themes
+
+`mac/Sources/YTChannelScraper/Views/Theme.swift` is shared by both apps (`Shared-Theme` in
+`ios/project.yml`). `Palette` reads every colour from `Theme.active`, so call sites never
+mention themes. Classic is the original look, token for token — keep it that way.
+
+- **Switching rebuilds the tree** via `.id` in `ThemedRoot`. On iOS that sits *below*
+  `AppModel` in `RootView`; never wrap anything that owns state that must survive.
+- **Shapes:** use `ThemedRect` / `ThemedCapsule`, not `RoundedRectangle` / `Capsule`
+  (the notch island files excepted). Decoration is opt-in: `.themeEdge(radius:)`,
+  `.displayType(size)`.
+- **A root `foregroundStyle` of the theme's ink** overrides system label colours, so a
+  filled control must set `Palette.onFill` itself (see the `.borderedProminent` buttons).
+- **Mac sheets don't inherit the button style**; add `.themedButtons()` to a new sheet.
+- **Backdrops animate** from a clock, capped at 30 fps, and hold still under Reduce Motion
+  and Low Power Mode. Nothing may flash or flicker — this is on a child's screen.
+- **Icons:** `python3 tools/theme-icons.py`, then `ios/make-icon.sh`; the Mac build
+  rasterises its own. A new theme also needs its name in
+  `ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES`.

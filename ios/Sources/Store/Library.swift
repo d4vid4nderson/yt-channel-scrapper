@@ -40,6 +40,17 @@ final class Library {
         // Set before `start()`, because the first read can hand something back
         // synchronously and there would be nothing listening.
         cloud.didReceive = { [weak self] incoming in self?.adopt(incoming) }
+        // The first time, keep both sides — see `CloudMirror`'s note on joining.
+        cloud.didJoin = { [weak self] incoming in
+            guard let self else { return }
+            let before = (self.channels.count, self.videos.count)
+            _ = self.merge(incoming, contents: .both)
+            // Merging always pushes, even when nothing was added, so iCloud ends up
+            // holding the union rather than whichever copy it had.
+            self.mirror()
+            // Only worth a word if the other device actually brought something.
+            if (self.channels.count, self.videos.count) == before { self.note = nil }
+        }
         cloud.start()
         // Seeds iCloud from a library that predates it. Harmless when iCloud is already
         // newer: `start()` will have adopted that first, and this then pushes the same

@@ -74,9 +74,9 @@ struct SavedChannelsDrawer: View {
                 if model.library.channels.count > 6 {
                     DrawerFilterField(text: $filter, prompt: "Filter channels…")
                 }
-                Divider().overlay(.white.opacity(0.09))
+                Divider().overlay(Palette.ink(0.09))
                 list
-                Divider().overlay(.white.opacity(0.09))
+                Divider().overlay(Palette.ink(0.09))
                 if let note = model.library.note {
                     DrawerNote(text: note) { model.library.report(nil) }
                 }
@@ -243,10 +243,10 @@ private struct SectionBar: View {
                     .font(.system(size: 11, weight: .semibold))
                 Text("\(count)")
                     .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(.white.opacity(0.35))
+                    .foregroundStyle(Palette.ink(0.35))
                 Spacer()
             }
-            .foregroundStyle(.white.opacity(0.55))
+            .foregroundStyle(Palette.ink(0.55))
             .padding(.vertical, 8)
             .padding(.top, 6)
             .contentShape(Rectangle())
@@ -262,7 +262,7 @@ private struct SectionEmpty: View {
     var body: some View {
         Text(text)
             .font(.system(size: 11))
-            .foregroundStyle(.white.opacity(0.35))
+            .foregroundStyle(Palette.ink(0.35))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.vertical, 6)
     }
@@ -282,7 +282,7 @@ private struct DrawerChannelRow: View {
     // Button outranks a parent's tap gesture.
     var body: some View {
         card
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .onTapGesture(perform: open)
             .help("List \(channel.title)'s videos")
             .pointingHand()
@@ -303,7 +303,7 @@ private struct DrawerChannelRow: View {
                 ChannelAvatar(channel: channel, size: 34)
                     .overlay {
                         Circle().strokeBorder(
-                            hovering ? Palette.accent.opacity(0.65) : .white.opacity(0.14),
+                            hovering ? Palette.accent.opacity(0.65) : Palette.ink(0.14),
                             lineWidth: 1
                         )
                     }
@@ -311,13 +311,13 @@ private struct DrawerChannelRow: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(channel.title)
                         .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundStyle(.white.opacity(hovering ? 1 : 0.92))
+                        .foregroundStyle(Palette.ink(hovering ? 1 : 0.92))
                         .lineLimit(1)
                         .truncationMode(.tail)
                     if !channel.shelfSubtitle.isEmpty {
                         Text(channel.shelfSubtitle)
                             .font(.system(size: 10.5, weight: .medium).monospacedDigit())
-                            .foregroundStyle(.white.opacity(0.40))
+                            .foregroundStyle(Palette.ink(0.40))
                             .lineLimit(1)
                     }
                 }
@@ -329,11 +329,12 @@ private struct DrawerChannelRow: View {
             .padding(.horizontal, 10)
             .frame(height: 54)
             .background(Palette.tileSurface(active: hovering))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.white.opacity(hovering ? 0.16 : 0.075), lineWidth: 1)
+                ThemedRect(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
+            .themeEdge(radius: 12, lit: hovering)
     }
 }
 
@@ -352,7 +353,7 @@ private struct DrawerVideoRow: View {
     // Button outranks a parent's tap gesture.
     var body: some View {
         card
-            .contentShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .onTapGesture(perform: preview)
             .help("Preview “\(video.title)”")
             .pointingHand()
@@ -379,7 +380,7 @@ private struct DrawerVideoRow: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(video.title)
                         .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(.white.opacity(hovering ? 1 : 0.92))
+                        .foregroundStyle(Palette.ink(hovering ? 1 : 0.92))
                         .lineLimit(2)
                         .multilineTextAlignment(.leading)
                         .fixedSize(horizontal: false, vertical: true)
@@ -387,7 +388,7 @@ private struct DrawerVideoRow: View {
                     // has to say where it came from.
                     Text(video.metaText(showingChannel: true))
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.white.opacity(0.40))
+                        .foregroundStyle(Palette.ink(0.40))
                         .lineLimit(1)
                 }
 
@@ -397,11 +398,12 @@ private struct DrawerVideoRow: View {
             .padding(.vertical, 8)
             .frame(minHeight: 66)
             .background(Palette.tileSurface(active: hovering))
-            .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .overlay {
-                RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(.white.opacity(hovering ? 0.16 : 0.075), lineWidth: 1)
+                ThemedRect(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
+            .themeEdge(radius: 12, lit: hovering)
         .animation(.easeOut(duration: 0.14), value: hovering)
     }
 
@@ -411,31 +413,33 @@ private struct DrawerVideoRow: View {
             case .success(let image):
                 image.resizable().aspectRatio(contentMode: .fill)
             default:
-                Rectangle().fill(.white.opacity(0.06))
+                Rectangle().fill(Palette.ink(0.06))
             }
         }
         .frame(width: 84, height: 84 * 9 / 16)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: 8, style: .continuous))
         .overlay {
             if hovering {
                 ZStack {
                     Color.black.opacity(0.35)
                     Image(systemName: "play.fill")
                         .font(.system(size: 12))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onFill)
                         .shadow(color: .black.opacity(0.5), radius: 3)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .clipShape(ThemedRect(cornerRadius: 8, style: .continuous))
             }
         }
         .overlay(alignment: .bottomTrailing) {
             if !video.durationText.isEmpty {
                 Text(video.durationText)
                     .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                    // White on the scrim in every theme: the scrim is black over a
+                    // photograph, and a theme's onFill can be near-black.
                     .foregroundStyle(.white)
                     .padding(.horizontal, 4)
                     .padding(.vertical, 0.5)
-                    .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 3))
+                    .background(.black.opacity(0.8), in: ThemedRect(cornerRadius: 3))
                     .padding(3)
             }
         }
@@ -451,10 +455,10 @@ private struct DownloadDot: View {
         Button(action: action) {
             Image(systemName: "arrow.down")
                 .font(.system(size: 10, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
                 .frame(width: 22, height: 22)
                 .background(
-                    Circle().fill(hovering ? Color(red: 1, green: 0.13, blue: 0.2) : Palette.accent)
+                    Circle().fill(hovering ? Palette.accentHot : Palette.accent)
                 )
                 .shadow(color: Palette.accent.opacity(hovering ? 0.65 : 0), radius: 7)
                 .scaleEffect(hovering ? 1.1 : 1)
@@ -478,16 +482,16 @@ struct DrawerHead: View {
     var body: some View {
         HStack(spacing: 9) {
             Text(title)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(.white)
+                .displayType(15, classic: .medium)
+                .foregroundStyle(Palette.ink(1))
                 .fixedSize()
             if count > 0 {
                 Text("\(count)")
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(Color(white: 0.78))
+                    .foregroundStyle(Palette.ink(0.78))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 2)
-                    .background(.white.opacity(0.09), in: Capsule())
+                    .background(Palette.ink(0.09), in: ThemedCapsule())
             }
             Spacer(minLength: 4)
             SheetButton(title: "Close", icon: "xmark", action: close)
@@ -505,23 +509,23 @@ private struct DrawerFilterField: View {
         HStack(spacing: 7) {
             Image(systemName: "line.3.horizontal.decrease")
                 .font(.system(size: 10))
-                .foregroundStyle(.white.opacity(0.4))
+                .foregroundStyle(Palette.ink(0.4))
             ZStack(alignment: .leading) {
                 if text.isEmpty {
                     Text(prompt)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.32))
+                        .foregroundStyle(Palette.ink(0.32))
                 }
                 TextField("", text: $text)
                     .textFieldStyle(.plain)
                     .font(.system(size: 12))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(Palette.ink(1))
             }
             if !text.isEmpty {
                 Button { text = "" } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.system(size: 11))
-                        .foregroundStyle(.white.opacity(0.4))
+                        .foregroundStyle(Palette.ink(0.4))
                 }
                 .buttonStyle(.plain)
                 .help("Clear the filter")
@@ -530,9 +534,9 @@ private struct DrawerFilterField: View {
         }
         .padding(.horizontal, 11)
         .frame(height: 30)
-        .background(.white.opacity(0.07), in: Capsule())
+        .background(Palette.ink(0.07), in: ThemedCapsule())
         .overlay {
-            Capsule().strokeBorder(.white.opacity(0.09), lineWidth: 1)
+            ThemedCapsule().strokeBorder(Palette.ink(0.09), lineWidth: 1)
         }
         .padding(.horizontal, 16)
         .padding(.bottom, 13)
@@ -550,13 +554,13 @@ private struct DrawerEmpty: View {
         VStack(spacing: 8) {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundStyle(Color(white: 0.45))
+                .foregroundStyle(Palette.ink(0.45))
             Text(title)
                 .font(.system(size: 12.5, weight: .medium))
-                .foregroundStyle(Color(white: 0.78))
+                .foregroundStyle(Palette.ink(0.78))
             Text(detail)
                 .font(.system(size: 11.5))
-                .foregroundStyle(Color(white: 0.45))
+                .foregroundStyle(Palette.ink(0.45))
                 .multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -586,10 +590,10 @@ private struct DrawerFooterButton: View {
                 if !hint.isEmpty {
                     Text(hint)
                         .font(.system(size: 10.5))
-                        .foregroundStyle(.white.opacity(0.28))
+                        .foregroundStyle(Palette.ink(0.28))
                 }
             }
-            .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.6))
+            .foregroundStyle(Palette.ink(hovering ? 0.9 : 0.6))
             .padding(.horizontal, 16)
             .padding(.vertical, 13)
             .contentShape(Rectangle())
@@ -615,13 +619,13 @@ struct DrawerNote: View {
         HStack(alignment: .top, spacing: 8) {
             Text(text)
                 .font(.system(size: 11))
-                .foregroundStyle(.white.opacity(0.62))
+                .foregroundStyle(Palette.ink(0.62))
                 .fixedSize(horizontal: false, vertical: true)
             Spacer(minLength: 4)
             Button(action: dismiss) {
                 Image(systemName: "xmark")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundStyle(.white.opacity(0.45))
+                    .foregroundStyle(Palette.ink(0.45))
             }
             .buttonStyle(.plain)
             .help("Dismiss")
@@ -629,7 +633,7 @@ struct DrawerNote: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 10)
-        .background(.white.opacity(0.04))
+        .background(Palette.ink(0.04))
     }
 }
 
@@ -646,7 +650,7 @@ private struct LibraryMenu: View {
         } label: {
             Image(systemName: "ellipsis.circle")
                 .font(.system(size: 13))
-                .foregroundStyle(.white.opacity(hovering ? 0.9 : 0.5))
+                .foregroundStyle(Palette.ink(hovering ? 0.9 : 0.5))
         }
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
@@ -672,6 +676,6 @@ private struct DragChip: View {
             .frame(maxWidth: 220)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
-            .background(.black.opacity(0.75), in: Capsule())
+            .background(.black.opacity(0.75), in: ThemedCapsule())
     }
 }

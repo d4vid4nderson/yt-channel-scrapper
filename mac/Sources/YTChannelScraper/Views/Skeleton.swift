@@ -50,7 +50,7 @@ struct ChannelListSkeleton: View {
             ForEach(0..<4, id: \.self) { index in
                 SkeletonCard(minHeight: 84, verticalPadding: 12) {
                     Circle()
-                        .fill(Color.primary.opacity(0.09))
+                        .fill(Palette.ink(0.09))
                         .frame(width: 56, height: 56)
                     VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 0) {
@@ -84,11 +84,11 @@ private struct SkeletonCard<Content: View>: View {
         .padding(.horizontal, 14)
         .padding(.vertical, verticalPadding)
         .frame(minHeight: minHeight)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+        .background(Palette.rowPlate)
+        .clipShape(ThemedRect(cornerRadius: 14, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(Color.primary.opacity(0.12), lineWidth: 1)
+            ThemedRect(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Palette.ink(0.12), lineWidth: 1)
         }
         .shadow(color: .black.opacity(0.05), radius: 6, y: 3)
     }
@@ -104,16 +104,16 @@ private struct Bone: View {
     var corner: CGFloat = 5
     @State private var swept = false
 
-    private var shape: RoundedRectangle { RoundedRectangle(cornerRadius: corner, style: .continuous) }
+    private var shape: ThemedRect { ThemedRect(cornerRadius: corner, style: .continuous) }
 
     var body: some View {
         shape
-            .fill(Color.primary.opacity(0.10))
+            .fill(Palette.ink(0.10))
             .overlay {
                 GeometryReader { geo in
                     let width = geo.size.width
                     LinearGradient(
-                        colors: [.clear, Color.primary.opacity(0.13), .clear],
+                        colors: [.clear, Palette.ink(0.13), .clear],
                         startPoint: .leading,
                         endPoint: .trailing
                     )

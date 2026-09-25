@@ -1,3 +1,4 @@
+import Network
 import Foundation
 import SwiftUI
 
@@ -36,6 +37,11 @@ final class AppModel {
         // A finished job leaves a new file in Documents, and the on-disk list is a scan
         // rather than an index — so it has to be told to look again.
         downloads.didSave = { [weak self] in self?.localFiles.reload() }
+        // Fails closed: with the model gone there is nobody to say this is a parent.
+        playback.allowsStreaming = { [weak self] id in
+            guard let self else { return false }
+            return !self.isMinor || self.approvedIDs.contains(id)
+        }
     }
 
     /// Re-read the shared folder and, on a minor's phone, make the disk match it.
@@ -45,16 +51,25 @@ final class AppModel {
     /// on a stale read would act on decisions that have since changed. Called on every
     /// foreground.
     func syncShelf() async {
+        // What will play on a minor's phone is decided by what is on disk, so the list
+        // has to be current before Home is — not only once somebody opens Downloads.
+        localFiles.reload()
+        chooseFamilyFolder()
         await shelf.refresh()
 
         // A minor's phone: reconcile, then say what it actually holds. The gap between
         // approved and downloaded is the number a parent wants — it is the download that
         // has not finished — and this device is the only thing that can report it.
         if let minor = profiles.minor {
+            // Streams rather than downloads: approved videos play straight from YouTube in
+            // this app's own player, so nothing fills the phone. The reconciler still runs
+            // for its other half — deleting any file a parent has since withdrawn.
             await reconciler.reconcile(for: minor,
                                        shelf: shelf,
                                        downloads: downloads,
-                                       localFiles: localFiles)
+                                       localFiles: localFiles,
+                                       fetching: false)
+            localFiles.reload()
             // The shelf is this device's library, so anything on it belongs on the
             // shelves the child actually browses.
             claimSent()
@@ -63,7 +78,9 @@ final class AppModel {
             await shelf.announce(person: (minor.id, minor.name),
                                  isMinor: true,
                                  approved: approved,
-                                 downloaded: max(0, approved - reconciler.awaiting))
+                                 downloaded: max(0, approved - reconciler.awaiting),
+                                 files: reportedFiles,
+                                 freeBytes: DeviceRecord.freeSpace(at: Paths.downloads))
             return
         }
 
@@ -84,7 +101,20 @@ final class AppModel {
         await shelf.announce(person: (guardian.id, guardian.name),
                              isMinor: false,
                              approved: approved,
-                             downloaded: approved - inboxCount)
+                             downloaded: approved - inboxCount,
+                             files: reportedFiles,
+                             freeBytes: DeviceRecord.freeSpace(at: Paths.downloads),
+                             library: .init(channels: library.channels.count,
+                                            videos: library.videos.count))
+    }
+
+    /// What this device is holding, in the shape the family list reads. From the scan
+    /// `LocalFiles` already keeps, so the report cannot disagree with the Downloads tab.
+    private var reportedFiles: [DeviceRecord.File] {
+        localFiles.files.map {
+            DeviceRecord.File(title: $0.title, videoID: $0.videoID, bytes: $0.bytes,
+                              added: $0.added, isAudio: $0.kind == .audio)
+        }
     }
 
     // MARK: - Input
@@ -135,6 +165,177 @@ final class AppModel {
         case .home:      homePath.append(channel)
         case .search where !isMinor: searchPath.append(channel)
         default:         tab = .home; homePath.append(channel)
+        }
+    }
+
+    // MARK: - Which family folder
+
+    /// Where a Mac delivers the family folder over the cable or Wi-Fi — see
+    /// `PhoneDeployer.deliver`.
+    static let deliveredFamily = Paths.downloads.appendingPathComponent(".family", isDirectory: true)
+
+    /// When the delivered copy last changed, for noticing a new delivery. A Mac replaces
+    /// the whole folder each time, so its own date moves with every one.
+    var deliveredStamp: Date? {
+        (try? Self.deliveredFamily.resourceValues(forKeys: [.contentModificationDateKey]))?
+            .contentModificationDate
+    }
+
+    /// Whether a folder is this app's own Documents or inside it. That is where the Files
+    /// picker opens on a phone that cannot see the shared folder, so it is the easiest
+    /// wrong answer to give — and one that reads as a family with nobody in it, forever.
+    func isOwnFolder(_ url: URL) -> Bool {
+        let own = Paths.downloads.resolvingSymlinksInPath().standardizedFileURL.path
+        let picked = url.resolvingSymlinksInPath().standardizedFileURL.path
+        return picked == own || picked.hasPrefix(own + "/")
+    }
+
+    /// Settle which folder the family is read from: the shared one if a real one was
+    /// picked, otherwise the copy a Mac delivered, if there is one.
+    private func chooseFamilyFolder() {
+        if let folder = shelf.folder, !shelf.isDeliveredCopy, isOwnFolder(folder) {
+            Log.shelf.notice("family folder was the app's own Documents; forgetting it")
+            shelf.forgetFolder()
+        }
+        if shelf.folder == nil,
+           FileManager.default.fileExists(atPath: Self.deliveredFamily.path) {
+            shelf.useDeliveredCopy(at: Self.deliveredFamily)
+        }
+    }
+
+    // MARK: - Connection check
+
+    /// Try each address the app depends on and write down what came back, for a Mac to
+    /// read over the cable. Only when launched with `-ytcsDiagnose`: a child's phone that
+    /// cannot load pictures or streams gives no other clue, because the reason — a
+    /// content filter, data switched off, no network — is outside the app.
+    func diagnoseIfAsked() async {
+        guard ProcessInfo.processInfo.arguments.contains("-ytcsDiagnose") else { return }
+        let targets = [
+            "https://i.ytimg.com/vi/dQw4w9WgXcQ/mqdefault.jpg",
+            "https://www.youtube.com/",
+            "https://www.youtube.com/youtubei/v1/player",
+            "https://yt3.ggpht.com/",
+            "https://redirector.googlevideo.com/",
+            "https://www.apple.com/",
+        ]
+        var results: [[String: String]] = [["started": Date().formatted()]]
+        let out = Paths.downloads.appendingPathComponent(".diagnostics.json")
+        // Saved after every step, so a step that never returns still shows how far it got.
+        func save() {
+            if let data = try? JSONSerialization.data(withJSONObject: results, options: [.prettyPrinted]) {
+                try? data.write(to: out)
+            }
+        }
+        save()
+        for target in targets {
+            var request = URLRequest(url: URL(string: target)!)
+            request.timeoutInterval = 12
+            let started = Date()
+            do {
+                let (data, response) = try await URLSession.shared.data(for: request)
+                let code = (response as? HTTPURLResponse)?.statusCode ?? -1
+                results.append(["url": target, "status": "\(code)", "bytes": "\(data.count)",
+                                "seconds": String(format: "%.1f", Date().timeIntervalSince(started))])
+            } catch {
+                let ns = error as NSError
+                results.append(["url": target, "error": "\(ns.domain) \(ns.code): \(ns.localizedDescription)",
+                                "detail": ns.userInfo.map { "\($0.key)=\($0.value)" }.sorted().joined(separator: " | "),
+                                "seconds": String(format: "%.1f", Date().timeIntervalSince(started))])
+            }
+            save()
+        }
+        // The same request through a session of its own, with nothing shared.
+        do {
+            let session = URLSession(configuration: .ephemeral)
+            let (_, response) = try await session.data(from: URL(string: "https://www.apple.com/")!)
+            results.append(["url": "ephemeral apple.com", "status": "\((response as? HTTPURLResponse)?.statusCode ?? -1)"])
+        } catch {
+            results.append(["url": "ephemeral apple.com", "error": "\(error)"])
+        }
+        save()
+        // Below URLSession entirely: a bare TCP connection.
+        results.append(["url": "tcp www.apple.com:443", "status": await Self.tcpProbe(host: "www.apple.com")])
+        results.append(["url": "tcp i.ytimg.com:443", "status": await Self.tcpProbe(host: "i.ytimg.com")])
+        let info = Bundle.main.infoDictionary ?? [:]
+        results.append(["url": "info", "status": "ATS=\(String(describing: info["NSAppTransportSecurity"])) proxy=\(String(describing: CFNetworkCopySystemProxySettings()?.takeRetainedValue()))"])
+        save()
+        results.append(["url": "resolve", "status": "started"])
+        save()
+        // And one real stream lookup, which is what "Finding a stream…" is waiting on.
+        do {
+            let resolved = try await StreamResolver.resolve(videoID: "dQw4w9WgXcQ", for: .playback, refused: [])
+            results.append(["url": "resolve", "status": "ok via \(resolved.client)"])
+        } catch {
+            results.append(["url": "resolve", "error": "\(error)"])
+        }
+        save()
+    }
+
+    private nonisolated static func tcpProbe(host: String) async -> String {
+        final class Once: @unchecked Sendable {
+            private let lock = NSLock()
+            private var continuation: CheckedContinuation<String, Never>?
+            let connection: NWConnection
+            init(_ c: CheckedContinuation<String, Never>, _ n: NWConnection) { continuation = c; connection = n }
+            func finish(_ text: String) {
+                lock.lock(); let c = continuation; continuation = nil; lock.unlock()
+                guard let c else { return }
+                connection.cancel()
+                c.resume(returning: text)
+            }
+        }
+        return await withCheckedContinuation { continuation in
+            let connection = NWConnection(host: NWEndpoint.Host(host), port: 443, using: .tls)
+            let once = Once(continuation, connection)
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready: once.finish("ready")
+                case .failed(let error): once.finish("failed: \(error)")
+                case .waiting(let error): once.finish("waiting: \(error)")
+                default: break
+                }
+            }
+            connection.start(queue: .global())
+            DispatchQueue.global().asyncAfter(deadline: .now() + 10) { once.finish("timeout") }
+        }
+    }
+
+    // MARK: - Set up from the Mac
+
+    /// The folder the Mac said to pick, shown on the connect prompt until one is picked.
+    var expectedFolderName: String? {
+        get { UserDefaults.standard.string(forKey: "childSetup.folderName") }
+        set { UserDefaults.standard.set(newValue, forKey: "childSetup.folderName") }
+    }
+
+    /// Become a child's phone if the Mac has said so, by file or on the command line.
+    ///
+    /// Checked at launch and on every return to the front, because the Mac drops the
+    /// file while the app may be running. The file is deleted whatever happens to it: one
+    /// that was refused should not be retried forever, and one that worked is spent.
+    private var launchSetupPending = true
+
+    func applyChildSetup() {
+        let file = Paths.downloads.appendingPathComponent(ChildSetup.filename)
+        let fromFile = (try? Data(contentsOf: file)).flatMap(ChildSetup.decode)
+        try? FileManager.default.removeItem(at: file)
+
+        // The launch argument stays in `ProcessInfo` for the life of the process, so it is
+        // read once. Otherwise a parent who unlocked the phone would be locked out again
+        // the next time the app came back to the front.
+        let fromLaunch = launchSetupPending ? ChildSetup.fromLaunchArguments() : nil
+        launchSetupPending = false
+
+        guard let setup = fromLaunch ?? fromFile else { return }
+        switch profiles.apply(setup) {
+        case .locked:
+            if let name = setup.folderName { expectedFolderName = name }
+            enterMinorMode()
+            banner = "This phone is now \(setup.minor.name)'s."
+            Task { await syncShelf() }
+        case .alreadyThisChild, .refused, .failed:
+            break
         }
     }
 
@@ -399,7 +600,68 @@ final class AppModel {
 
     // MARK: - Playing
 
-    func play(_ video: Video) { playing = .stream(video) }
+    /// A parent plays anything. A minor plays what has been approved for them: the file
+    /// if one happens to be on the phone, otherwise a stream.
+    func play(_ video: Video) {
+        guard isMinor else { playing = .stream(video); return }
+        if let file = localFile(for: video) {
+            playing = .local(file)
+        } else if approvedIDs.contains(video.id) {
+            playing = .stream(video)
+        } else {
+            banner = "“\(video.title)” has not been approved for this phone."
+        }
+    }
+
+    /// What this child may watch: every video a parent approved by name, minus any under
+    /// a channel that has since been blocked. Newest decision first.
+    ///
+    /// Read from the shelf rather than the library, so a withdrawn video disappears the
+    /// moment the shelf says so rather than whenever the library catches up.
+    var approvedVideos: [Video] {
+        guard let minor = profiles.minor, !childWasRemoved else { return [] }
+        return ShelfMerge.playable(shelf.entries(for: minor.id)).compactMap(Self.video(from:))
+    }
+
+    var approvedIDs: Set<String> { Set(approvedVideos.map(\.id)) }
+
+    /// Whether the child this phone is locked to has been taken out of the family.
+    ///
+    /// Their shelf files are deliberately left in the folder when that happens, so
+    /// without this the phone would carry on playing everything it was ever sent. It
+    /// stops instead, until a Mac deletes the app or a parent sets it up for somebody.
+    /// Only on a successful read, and only on an explicit removal — a family that could
+    /// not be read is not one that removed anybody.
+    var childWasRemoved: Bool {
+        guard let minor = profiles.minor, shelf.lastRead != nil else { return false }
+        let id = shelf.aliases[minor.id] ?? minor.id
+        return shelf.declared.first { $0.id == id }?.removed == true
+    }
+
+    /// A `Video` from a shelf entry alone — the same construction `ShelfReconciler` uses.
+    private static func video(from entry: ShelfEntry) -> Video? {
+        var json: [String: Any] = ["id": entry.id, "title": entry.title ?? entry.id]
+        if let channelID = entry.channelID { json["channel_id"] = channelID }
+        return Video(json: json)
+    }
+
+    /// The file on this phone for a video, preferring the video over an audio-only copy.
+    func localFile(for video: Video) -> LocalFile? {
+        let matches = localFiles.files.filter { $0.videoID == video.id }
+        return matches.first { $0.kind == .video } ?? matches.first
+    }
+
+    /// A channel's videos as a minor sees them: the ones approved from it. Never the
+    /// channel's live listing — approving a channel approves none of its videos, and a
+    /// child browsing everything it has ever posted is the Search tab by another route.
+    func approvedVideos(of channel: Channel) -> [Video] {
+        approvedVideos.filter { $0.channelId == channel.id }
+    }
+
+    /// Home's videos: a parent's saved ones, or on a minor's phone the approved ones.
+    var savedVideos: [Video] {
+        isMinor ? approvedVideos : library.videos
+    }
     func play(_ file: LocalFile) { playing = .local(file) }
 
     /// What the sheet asks for when it appears.

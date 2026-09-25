@@ -1,6 +1,12 @@
 import SwiftUI
+#if canImport(AppKit)
+import AppKit
+#else
+import UIKit
+#endif
 
 /// The web app's tokens, kept in one place so the native app reads as the same product.
+/// Colour comes from the active `Theme`; see `Views/Theme.swift`.
 enum Layout {
     /// The header band, shared by the search header and the downloads panel so the
     /// dark strip lines up across the window.
@@ -25,18 +31,175 @@ enum Layout {
 }
 
 enum Palette {
-    static let accent = Color(red: 1, green: 0, blue: 0)          // --accent #ff0000
-    static let ground = Color(red: 0.059, green: 0.059, blue: 0.059)  // #0f0f0f
+
+    // MARK: - Light and dark
+
+    /// One colour that knows both appearances.
+    ///
+    /// Classic's tokens are built through here (see `Theme.classic`), so "what does this
+    /// look like in light mode" is answered once per token and never at a call site.
+    /// Resolved by the system at draw time, which is also what makes the app follow the
+    /// Mac live when you flip the setting rather than needing a relaunch. The other
+    /// themes each fix one appearance and need none of this.
+    ///
+    /// Two implementations because this file is compiled into the iPhone app as well —
+    /// see `ios/project.yml`.
+    static func dynamic(dark: Color, light: Color) -> Color {
+        #if canImport(AppKit)
+        Color(nsColor: NSColor(name: nil) { appearance in
+            NSColor(appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua ? dark : light)
+        })
+        #else
+        Color(uiColor: UIColor { traits in
+            UIColor(traits.userInterfaceStyle == .dark ? dark : light)
+        })
+        #endif
+    }
+
+    static func adaptive(_ dark: Color, _ light: Color) -> Color { dynamic(dark: dark, light: light) }
+
+    /// Built tokens, kept rather than rebuilt.
+    ///
+    /// A `Color` made fresh inside a view body is a new value every time as far as
+    /// SwiftUI's diffing is concerned, so a view that draws one would never compare
+    /// equal to itself and would redraw on every pass. There are a few dozen of these
+    /// in the whole app, per theme — the key carries the theme for that reason.
+    private static let cache = Cache()
+
+    private final class Cache: @unchecked Sendable {
+        private let lock = NSLock()
+        private var made: [String: Color] = [:]
+
+        func colour(_ key: String, _ build: () -> Color) -> Color {
+            let key = "\(Theme.active.id.rawValue).\(key)"
+            lock.lock()
+            defer { lock.unlock() }
+            if let hit = made[key] { return hit }
+            let colour = build()
+            made[key] = colour
+            return colour
+        }
+    }
+
+    private static var theme: Theme { Theme.active }
+
+    // MARK: - Ink
+
+    /// Content on a surface, at `weight` of full strength.
+    ///
+    /// In the dark that is the theme's ink — white in Classic; in the light it is
+    /// near-black, or Middle-earth's sepia — but not at the same weight, which is the
+    /// part worth writing down. Dark on light bites harder than light on dark at the
+    /// same opacity, so the top of the range comes down a little and the bottom comes
+    /// up: a hairline at 0.09 white would all but vanish at 0.09 black, and text at full
+    /// white would be a harsher black than anything else on the screen. One curve,
+    /// `0.92 · w^0.85`, holds the whole ramp — from body text down through captions to
+    /// hairlines and resting fills — in the same relationship to its background in both
+    /// modes.
+    static func ink(_ weight: Double) -> Color {
+        cache.colour("ink\(weight)") {
+            let t = theme
+            let lightWeight = 0.92 * pow(weight, 0.85)
+            switch t.appearance {
+            case .adaptive:
+                return dynamic(dark: .white.opacity(weight), light: .black.opacity(lightWeight))
+            case .dark:
+                return t.ink.opacity(weight)
+            case .light:
+                return t.ink.opacity(lightWeight)
+            }
+        }
+    }
+
+    /// The highlight where light falls on a surface.
+    ///
+    /// White in the dark. On a light surface there is nothing brighter to go to, so it
+    /// becomes the faintest shade instead — the same modelling of a surface, lit from
+    /// the other side.
+    static func sheen(_ weight: Double) -> Color {
+        cache.colour("sheen\(weight)") {
+            let t = theme
+            switch t.appearance {
+            case .adaptive:
+                return dynamic(dark: .white.opacity(weight), light: .black.opacity(weight * 0.55))
+            case .dark:
+                return t.ink.opacity(weight)
+            case .light:
+                return t.ink.opacity(weight * 0.55)
+            }
+        }
+    }
+
+    // MARK: - Brand
+
+    /// The theme's accent: Classic's `--accent #ff0000`.
+    static var accent: Color { theme.accent }
+
+    /// The theme's second colour, where it has one.
+    static var accent2: Color { theme.accent2 }
+
+    /// The brand badge's fill.
+    static var brand: Color { theme.brand }
+
+    /// The page under everything.
+    static var ground: Color { theme.ground }
+
+    /// A panel or a row standing on the ground.
+    static var surface: Color { theme.surface }
+
+    /// A row or card on the phone's ground.
+    static var card: Color { theme.card }
+
+    /// The light this app pools into a corner, at `weight` of full strength: the hot
+    /// core of it.
+    static func glow(_ weight: Double) -> Color {
+        cache.colour("glow\(weight)") { theme.glow.opacity(weight) }
+    }
+
+    /// The deeper falloff behind `glow`.
+    static func glowDeep(_ weight: Double) -> Color {
+        cache.colour("glowDeep\(weight)") { theme.glowDeep.opacity(weight) }
+    }
+
+    /// The accent with the lamp turned up, for a control under the pointer.
+    static var accentHot: Color { theme.accentHot }
+
+    /// The outline around a picked row.
+    static func pickedEdge(hot: Bool) -> Color {
+        hot ? theme.pickedEdgeHot : theme.pickedEdge
+    }
+
+    /// The search pill, and the text typed into it.
+    static var field: Color { theme.field }
+    static var fieldInk: Color { theme.fieldInk }
+    static var fieldRaised: Color { theme.fieldRaised }
+
+    /// Content on top of something filled: the accent, a coloured avatar, a scrim
+    /// laid over artwork.
+    ///
+    /// A named token rather than a bare `.white` so it cannot be mistaken for one again.
+    /// White in Classic in both appearances — what is underneath these does not change
+    /// with the appearance, so neither does what sits on them. A theme with a very
+    /// bright accent darkens it.
+    static var onFill: Color { theme.onFill }
+
+    /// Something finished, something wrong.
+    static var good: Color { theme.good }
+    static var warn: Color { theme.warn }
+
+    /// Where a picked row's gradient goes as it crosses to the light.
+    private static var pickedMid: Color { theme.pickedMid }
+    private static var pickedFar: Color { theme.pickedFar }
 
     /// The drawer's surface: near-black with red light pooling in from the bottom-right
     /// and a faint sheen top-left, same as the hero and picked rows.
     static var sheetSurface: some View {
         ZStack {
-            Color(red: 0.071, green: 0.071, blue: 0.071)     // #121212
+            surface
             RadialGradient(
                 stops: [
-                    .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.34), location: 0),
-                    .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.12), location: 0.45),
+                    .init(color: glow(0.34), location: 0),
+                    .init(color: glowDeep(0.12), location: 0.45),
                     .init(color: .clear, location: 0.76),
                 ],
                 center: UnitPoint(x: 1.04, y: 1.06),
@@ -45,7 +208,7 @@ enum Palette {
             )
             RadialGradient(
                 stops: [
-                    .init(color: .white.opacity(0.06), location: 0),
+                    .init(color: sheen(0.06), location: 0),
                     .init(color: .clear, location: 0.62),
                 ],
                 center: UnitPoint(x: -0.08, y: -0.14),
@@ -68,13 +231,33 @@ enum Palette {
     /// compiles this file in place and draws its own saved rows in `Views/Style.swift`,
     /// so the conditional costs iOS nothing and leaves the Mac's appearance untouched.
     #if os(macOS)
+    /// A row's plate. AppKit's control background in Classic, which is what it always
+    /// was; a theme's own surface otherwise, since AppKit's grey belongs to neither.
+    static var rowPlate: Color {
+        Theme.active.id == .classic ? Color(nsColor: .controlBackgroundColor) : surface
+    }
+
+    /// Behind the results lists: AppKit's under-page grey in Classic, the theme's ground
+    /// and a faint trace of its scenery otherwise.
+    @ViewBuilder
+    static var page: some View {
+        if Theme.active.id == .classic {
+            Color(nsColor: .underPageBackgroundColor)
+        } else {
+            ZStack {
+                ground
+                ThemeBackdrop(strength: 0.45)
+            }
+        }
+    }
+
     static func savedSurface(height: CGFloat) -> some View {
         ZStack {
-            Color(nsColor: .controlBackgroundColor)
+            rowPlate
             RadialGradient(
                 stops: [
-                    .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.22), location: 0),
-                    .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.08), location: 0.42),
+                    .init(color: glow(0.22), location: 0),
+                    .init(color: glowDeep(0.08), location: 0.42),
                     .init(color: .clear, location: 0.8),
                 ],
                 center: UnitPoint(x: 1.0, y: 0.5),
@@ -91,12 +274,12 @@ enum Palette {
     /// surface; the light arrives on hover.
     static func tileSurface(active: Bool) -> some View {
         ZStack {
-            Color.white.opacity(active ? 0.075 : 0.04)
+            ink(active ? 0.075 : 0.04)
             if active {
                 RadialGradient(
                     stops: [
-                        .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.30), location: 0),
-                        .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.10), location: 0.48),
+                        .init(color: glow(0.30), location: 0),
+                        .init(color: glowDeep(0.10), location: 0.48),
                         .init(color: .clear, location: 0.78),
                     ],
                     center: UnitPoint(x: 1.02, y: 1.18),
@@ -113,17 +296,17 @@ enum Palette {
         ZStack {
             LinearGradient(
                 stops: [
-                    .init(color: Color(red: 0.071, green: 0.071, blue: 0.071), location: 0),
-                    .init(color: Color(red: 0.098, green: 0.067, blue: 0.075), location: 0.55),
-                    .init(color: Color(red: 0.169, green: 0.071, blue: 0.094), location: 1),
+                    .init(color: surface, location: 0),
+                    .init(color: pickedMid, location: 0.55),
+                    .init(color: pickedFar, location: 1),
                 ],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )
             RadialGradient(
                 stops: [
-                    .init(color: Color(red: 1, green: 0.18, blue: 0.24).opacity(0.42), location: 0),
-                    .init(color: Color(red: 0.75, green: 0.08, blue: 0.14).opacity(0.16), location: 0.45),
+                    .init(color: glow(0.42), location: 0),
+                    .init(color: glowDeep(0.16), location: 0.45),
                     .init(color: .clear, location: 0.72),
                 ],
                 center: UnitPoint(x: 1, y: 1.25),
@@ -132,7 +315,7 @@ enum Palette {
             )
             RadialGradient(
                 stops: [
-                    .init(color: .white.opacity(0.07), location: 0),
+                    .init(color: sheen(0.07), location: 0),
                     .init(color: .clear, location: 0.6),
                 ],
                 center: UnitPoint(x: 0, y: -0.3),
@@ -153,8 +336,8 @@ struct ChipBackground: ViewModifier {
             .padding(.vertical, 7)
             .background(
                 active ? AnyShapeStyle(Palette.accent.opacity(0.14))
-                       : AnyShapeStyle(Color.primary.opacity(0.06)),
-                in: Capsule()
+                       : AnyShapeStyle(Palette.ink(0.06)),
+                in: ThemedCapsule()
             )
     }
 }

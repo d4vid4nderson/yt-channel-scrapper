@@ -33,7 +33,7 @@ struct VideoRow: View {
     var body: some View {
         HStack(spacing: 14) {
             Button(action: toggle) {
-                CheckBox(isOn: isPicked, onDarkSurface: isPicked)
+                CheckBox(isOn: isPicked, onPickedSurface: isPicked)
             }
             .buttonStyle(.plain)
             .accessibilityLabel(video.title)
@@ -51,35 +51,40 @@ struct VideoRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(video.title)
                     .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(isPicked ? .white : .primary)
+                    .foregroundStyle(isPicked ? Palette.ink(1) : .primary)
                     .lineLimit(2)
                     .multilineTextAlignment(.leading)
                     .fixedSize(horizontal: false, vertical: true)
                 Text(video.metaText(showingChannel: inSavedList))
                     .font(.system(size: 11.5))
-                    .foregroundStyle(isPicked ? Color(white: 0.70) : .secondary)
+                    .foregroundStyle(isPicked ? Palette.ink(0.70) : .secondary)
             }
 
             Spacer(minLength: 8)
 
             // Same rule as the save mark below: an always-visible menu on every row is
             // clutter, and the row under the cursor is the one being considered.
-            if let shelfMenu, hovering {
-                shelfMenu.transition(.opacity)
+            //
+            // Both are always laid out and only faded in, so the title's width never
+            // changes under the pointer — inserting them on hover narrowed it and the
+            // title re-wrapped every time the cursor crossed a row.
+            if let shelfMenu {
+                shelfMenu
+                    .opacity(hovering ? 1 : 0)
+                    .allowsHitTesting(hovering)
             }
 
             // Keeping a video is a quieter act than picking one to download, so the mark
             // only shows for the row under the cursor — or for one already kept.
-            if hovering || isSaved {
-                SaveMark(
-                    isSaved: isSaved,
-                    size: 15,
-                    noun: "video",
-                    onDarkSurface: isPicked,
-                    action: toggleSaved
-                )
-                .transition(.opacity)
-            }
+            SaveMark(
+                isSaved: isSaved,
+                size: 15,
+                noun: "video",
+                onPickedSurface: isPicked,
+                action: toggleSaved
+            )
+            .opacity(hovering || isSaved ? 1 : 0)
+            .allowsHitTesting(hovering || isSaved)
 
             // Only picked rows offer it, matching `.item.sel .row-dl { display: grid }`.
             if isPicked {
@@ -96,14 +101,15 @@ struct VideoRow: View {
             } else if marksSaved {
                 Palette.savedSurface(height: rowHeight)
             } else {
-                Color(nsColor: .controlBackgroundColor)
+                Palette.rowPlate
             }
         }
-        .clipShape(RoundedRectangle(cornerRadius: corner, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous))
         .overlay {
-            RoundedRectangle(cornerRadius: corner, style: .continuous)
+            ThemedRect(cornerRadius: corner, style: .continuous)
                 .strokeBorder(borderColor, lineWidth: 1)
         }
+        .themeEdge(radius: corner, lit: isPicked || hovering)
         .shadow(color: shadowColor, radius: hovering ? 9 : 6, y: hovering ? 5 : 3)
         .offset(y: hovering ? -1 : 0)
         .animation(.easeOut(duration: 0.15), value: hovering)
@@ -119,14 +125,12 @@ struct VideoRow: View {
 
     private var borderColor: Color {
         if isPicked {
-            return hovering
-                ? Color(red: 0.29, green: 0.13, blue: 0.15)
-                : Color(red: 0.20, green: 0.10, blue: 0.11)
+            return Palette.pickedEdge(hot: hovering)
         }
         if marksSaved {
             return Palette.accent.opacity(hovering ? 0.5 : 0.32)
         }
-        return hovering ? Color.primary.opacity(0.22) : Color.primary.opacity(0.12)
+        return hovering ? Palette.ink(0.22) : Palette.ink(0.12)
     }
 
     private var shadowColor: Color {
@@ -145,17 +149,17 @@ struct VideoRow: View {
             }
         }
         .frame(width: 124, height: 124 * 9 / 16)
-        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: 10, style: .continuous))
         .overlay {
             if hoveringThumb {
                 ZStack {
                     Color.black.opacity(0.35)
                     Image(systemName: "play.fill")
                         .font(.system(size: 15))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(Palette.onFill)
                         .shadow(color: .black.opacity(0.5), radius: 3)
                 }
-                .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .clipShape(ThemedRect(cornerRadius: 10, style: .continuous))
             }
         }
         .onHover { hoveringThumb = $0 }
@@ -166,10 +170,12 @@ struct VideoRow: View {
                 // metadata line.
                 Text(video.durationText)
                     .font(.system(size: 11, weight: .medium).monospacedDigit())
+                    // White on the scrim in every theme: the scrim is black over a
+                    // photograph, and a theme's onFill can be near-black.
                     .foregroundStyle(.white)
                     .padding(.horizontal, 5)
                     .padding(.vertical, 1)
-                    .background(.black.opacity(0.8), in: RoundedRectangle(cornerRadius: 4))
+                    .background(.black.opacity(0.8), in: ThemedRect(cornerRadius: 4))
                     .padding(6)
             }
         }
@@ -185,10 +191,10 @@ private struct RowDownloadButton: View {
         Button(action: action) {
             Image(systemName: "arrow.down")
                 .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
+                .foregroundStyle(Palette.onFill)
                 .frame(width: 32, height: 32)
                 .background(
-                    Circle().fill(hovering ? Color(red: 1, green: 0.13, blue: 0.2) : Palette.accent)
+                    Circle().fill(hovering ? Palette.accentHot : Palette.accent)
                 )
                 .shadow(color: Palette.accent.opacity(hovering ? 0.65 : 0), radius: 8)
                 .scaleEffect(hovering ? 1.1 : 1)
