@@ -343,6 +343,77 @@ private struct HomeButton: View {
     }
 }
 
+/// The search pill's Videos / Shorts / Live / Music choice, for a themed window.
+private struct TabChooser: View {
+    @Binding var tab: ChannelTab
+    let compact: Bool
+    @State private var open = false
+
+    var body: some View {
+        Button { open.toggle() } label: {
+            HStack(spacing: 6) {
+                Text(tab.label)
+                    .font(.system(size: compact ? 12 : 13, weight: .medium))
+                Image(systemName: "chevron.down")
+                    .font(.system(size: compact ? 8 : 9, weight: .bold))
+                    .foregroundStyle(Palette.fieldInk.opacity(0.55))
+                    .rotationEffect(.degrees(open ? 180 : 0))
+            }
+            .foregroundStyle(Palette.fieldInk)
+            .padding(.horizontal, compact ? 10 : 12)
+            .padding(.vertical, compact ? 5 : 8)
+            .background(Palette.fieldRaised, in: ThemedCapsule())
+            .contentShape(ThemedCapsule())
+        }
+        .buttonStyle(.plain)
+        .help("Which tab of the channel to list")
+        .pointingHand()
+        .animation(.easeOut(duration: 0.15), value: open)
+        .popover(isPresented: $open, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 2) {
+                ForEach(ChannelTab.allCases) { option in
+                    Row(option: option, isOn: option == tab) {
+                        tab = option
+                        open = false
+                    }
+                }
+            }
+            .padding(6)
+            .frame(width: 150)
+            .themeEdge(radius: 10)
+            .presentationBackground(Palette.surface)
+        }
+    }
+
+    private struct Row: View {
+        let option: ChannelTab
+        let isOn: Bool
+        let pick: () -> Void
+        @State private var hovering = false
+
+        var body: some View {
+            Button(action: pick) {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10, weight: .bold))
+                        .opacity(isOn ? 1 : 0)
+                    Text(option.label)
+                        .font(.system(size: 13, weight: isOn ? .semibold : .regular))
+                    Spacer(minLength: 0)
+                }
+                .foregroundStyle(hovering ? Palette.onFill : (isOn ? Palette.accent : Palette.ink(0.9)))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(hovering ? Palette.accent : .clear,
+                            in: ThemedRect(cornerRadius: 6, style: .continuous))
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .onHover { hovering = $0 }
+        }
+    }
+}
+
 /// The one rounded bar holding the URL field, the tab menu and Scrape. It is the same
 /// view in both states — that is what lets it travel rather than cut.
 private struct SearchPill: View {
@@ -368,33 +439,39 @@ private struct SearchPill: View {
             .font(.system(size: compact ? 13 : 14))
             .padding(.leading, compact ? 14 : 18)
 
-            Menu {
-                Picker("Type", selection: $model.tab) {
-                    ForEach(ChannelTab.allCases) { Text($0.label).tag($0) }
+            if Theme.active.id == .classic {
+                Menu {
+                    Picker("Type", selection: $model.tab) {
+                        ForEach(ChannelTab.allCases) { Text($0.label).tag($0) }
+                    }
+                    .pickerStyle(.inline)
+                    .labelsHidden()
+                } label: {
+                    // The borderless style draws no indicator over a custom background, and
+                    // it renders only a single Text — an HStack label comes out blank. So
+                    // the chevron is concatenated in, and each run carries its own colour
+                    // because a foregroundStyle on the Menu does not reach inside.
+                    Text(model.tab.label)
+                        .font(.system(size: compact ? 12 : 13, weight: .medium))
+                        .foregroundStyle(Palette.fieldInk)
+                        + Text("  ")
+                        + Text(Image(systemName: "chevron.down"))
+                        .font(.system(size: compact ? 8 : 9, weight: .bold))
+                        .foregroundStyle(Palette.fieldInk.opacity(0.55))
                 }
-                .pickerStyle(.inline)
-                .labelsHidden()
-            } label: {
-                // The borderless style draws no indicator over a custom background, and
-                // it renders only a single Text — an HStack label comes out blank. So
-                // the chevron is concatenated in, and each run carries its own colour
-                // because a foregroundStyle on the Menu does not reach inside.
-                Text(model.tab.label)
-                    .font(.system(size: compact ? 12 : 13, weight: .medium))
-                    .foregroundStyle(Palette.fieldInk)
-                    + Text("  ")
-                    + Text(Image(systemName: "chevron.down"))
-                    .font(.system(size: compact ? 8 : 9, weight: .bold))
-                    .foregroundStyle(Palette.fieldInk.opacity(0.55))
+                .menuStyle(.borderlessButton)
+                .menuIndicator(.hidden)
+                .fixedSize()
+                .padding(.horizontal, compact ? 10 : 12)
+                .padding(.vertical, compact ? 5 : 8)
+                .background(Palette.fieldRaised, in: ThemedCapsule())
+                .help("Which tab of the channel to list")
+                .pointingHand()
+            } else {
+                // A theme cannot reach inside a native menu, so it gets a picker of its
+                // own — same choices, in the theme's lettering and edge.
+                TabChooser(tab: $model.tab, compact: compact)
             }
-            .menuStyle(.borderlessButton)
-            .menuIndicator(.hidden)
-            .fixedSize()
-            .padding(.horizontal, compact ? 10 : 12)
-            .padding(.vertical, compact ? 5 : 8)
-            .background(Palette.fieldRaised, in: ThemedCapsule())
-            .help("Which tab of the channel to list")
-            .pointingHand()
 
             Button {
                 model.isBusy ? model.stop() : model.submit()
