@@ -23,9 +23,11 @@ struct RootView: View {
     /// looking at is still there — and still usable — while you dig through what you have
     /// kept. Nothing is dimmed, because nothing is blocked.
     private var isClassic: Bool { Theme.active.id == .classic }
+    @State private var isFullScreen = false
 
     var body: some View {
         VStack(spacing: 0) {
+            if themedFullScreen { fullScreenBar }
             HStack(spacing: 0) {
                 SavedChannelsDrawer(model: model)
                     .drawerSlot(open: model.showChannelsDrawer, side: .leading)
@@ -76,6 +78,17 @@ struct RootView: View {
         .animation(Layout.drawerEase, value: model.showFamilyDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
         .toolbar { chrome }
+        .toolbar(themedFullScreen ? .hidden : .visible, for: .windowToolbar)
+        // Read back on appearing as well: a theme change rebuilds this view mid-full-screen.
+        .onAppear {
+            isFullScreen = NSApp.windows.contains { $0.styleMask.contains(.fullScreen) }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didEnterFullScreenNotification)) { _ in
+            isFullScreen = true
+        }
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.willExitFullScreenNotification)) { _ in
+            isFullScreen = false
+        }
         // The title bar is the system's in Classic. A theme paints it in its own ground
         // and swaps the system title for one in its lettering — the grey strip otherwise
         // sits over the whole window like a lid from a different app.
@@ -210,6 +223,14 @@ struct RootView: View {
             ToolbarSpacer(.flexible, placement: .primaryAction)
         }
         ToolbarItemGroup(placement: .primaryAction) {
+            panelToggles
+        }
+    }
+
+    /// The three panel buttons: in the window toolbar, or in `fullScreenBar` when a
+    /// theme has taken the toolbar down in full screen.
+    @ViewBuilder
+    private var panelToggles: some View {
             PanelToggle(
                 icon: "bookmark.fill",
                 title: "Saved",
@@ -234,8 +255,29 @@ struct RootView: View {
                 help: "Who you can send videos to  (⌘3)",
                 toggle: model.toggleFamilyDrawer
             )
+    }
+
+    /// Full screen puts the toolbar in a strip of the system's own drawing, which no
+    /// toolbar background reaches — it came up AppKit grey over a themed window. So a
+    /// theme hides it there and draws this in its place: its lettering, the same three
+    /// buttons, its ground and its edge.
+    private var fullScreenBar: some View {
+        HStack(spacing: 8) {
+            Text(Paths.displayName)
+                .displayType(13, classic: .semibold)
+                .foregroundStyle(Palette.ink(0.85))
+            Spacer()
+            panelToggles
+        }
+        .padding(.horizontal, Layout.gutter)
+        .frame(height: 40)
+        .background(Palette.ground)
+        .overlay(alignment: .bottom) {
+            Rectangle().fill(Theme.active.edgeTint.opacity(0.35)).frame(height: 1)
         }
     }
+
+    private var themedFullScreen: Bool { isFullScreen && !isClassic }
 
     /// Always mounted, so its offset can animate. Off-screen below the hero until the
     /// header collapses and lifts it into view.
