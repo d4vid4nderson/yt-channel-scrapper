@@ -53,7 +53,17 @@ final class AppModel {
         let player: AVPlayer
         let ratio: CGFloat
     }
-    private(set) var nowPlaying: NowPlaying?
+    private(set) var nowPlaying: NowPlaying? {
+        didSet {
+            guard nowPlaying?.video.id != oldValue?.video.id else { return }
+            presentNowPlaying()
+        }
+    }
+
+    /// The drawer under the window that shows `nowPlaying`, and whether it could: in full
+    /// screen, or with no room below the window, the in-window bar stands in for it.
+    let nowPlayingDrawer = NowPlayingDrawer()
+    private(set) var nowPlayingInDrawer = false
 
     let scraper = Scraper()
     let search = ChannelSearch()
@@ -476,6 +486,32 @@ final class AppModel {
         guard let now = nowPlaying else { return }
         nowPlaying = nil
         preview.adopt(video: now.video, player: now.player, ratio: now.ratio)
+    }
+
+    /// Put `nowPlaying` wherever it can be shown: the drawer if it will open, the bar if
+    /// not, nowhere when nothing is playing. Called again when full screen ends.
+    func presentNowPlaying() {
+        guard let now = nowPlaying else {
+            nowPlayingDrawer.hide()
+            nowPlayingInDrawer = false
+            return
+        }
+        guard let window = NSApp.windows.first(where: {
+            $0.isVisible && !$0.isMiniaturized && $0.canBecomeMain
+        }) else {
+            nowPlayingInDrawer = false
+            return
+        }
+        nowPlayingDrawer.onPlacementChanged = { [weak self] in self?.nowPlayingInDrawer = false }
+        nowPlayingInDrawer = nowPlayingDrawer.show(
+            under: window,
+            content: NowPlayingMonitor(
+                video: now.video, player: now.player, ratio: now.ratio,
+                expand: { [weak self] in self?.reopenNowPlaying() },
+                toNotch: { [weak self] in self?.popOutToIsland(tuckingWindowAway: true) },
+                stop: { [weak self] in self?.stopNowPlaying() }
+            )
+        )
     }
 
     func stopNowPlaying() {

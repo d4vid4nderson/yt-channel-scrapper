@@ -33,7 +33,9 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     page
                         .overlay(alignment: .bottom) {
-                            if let now = model.nowPlaying {
+                            // Only when the drawer under the window could not open —
+                            // in full screen, or with no room below.
+                            if let now = model.nowPlaying, !model.nowPlayingInDrawer {
                                 NowPlayingBar(
                                     video: now.video,
                                     player: now.player,
@@ -160,6 +162,10 @@ struct RootView: View {
         }
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didUnhideNotification)) { _ in
             model.windowCameBack()
+        }
+        // Out of full screen there is a "below the window" again.
+        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
+            if model.nowPlaying != nil, !model.nowPlayingInDrawer { model.presentNowPlaying() }
         }
         .onReceive(NotificationCenter.default.publisher(for: .openLibrary)) { _ in
             model.drainOpenedLibraries()
