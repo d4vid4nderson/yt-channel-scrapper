@@ -1,8 +1,8 @@
 import AVFoundation
 import SwiftUI
 
-/// What the Now Playing drawer shows: the picture itself, live, and a readout beside it —
-/// a second screen hung under the window rather than a bar across it.
+/// What the Now Playing module shows: the picture itself, live, and a readout beside it —
+/// its own unit between the page and the footer, rather than a bar laid across the list.
 struct NowPlayingMonitor: View {
     let video: Video
     let player: AVPlayer
@@ -40,7 +40,7 @@ struct NowPlayingMonitor: View {
         .onReceive(player.publisher(for: \.timeControlStatus)) { isPlaying = $0 != .paused }
     }
 
-    /// Where the drawer meets the window: a darker strip carrying a row of status lights,
+    /// Where the module meets the page: a darker strip carrying a row of status lights,
     /// the one that is lit being whether it is playing.
     private var hinge: some View {
         HStack(spacing: 6) {

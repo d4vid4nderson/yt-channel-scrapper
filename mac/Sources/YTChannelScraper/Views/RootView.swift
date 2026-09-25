@@ -32,23 +32,6 @@ struct RootView: View {
 
                 VStack(spacing: 0) {
                     page
-                        .overlay(alignment: .bottom) {
-                            // Only when the drawer under the window could not open —
-                            // in full screen, or with no room below.
-                            if let now = model.nowPlaying, !model.nowPlayingInDrawer {
-                                NowPlayingBar(
-                                    video: now.video,
-                                    player: now.player,
-                                    reopen: model.reopenNowPlaying,
-                                    toNotch: { model.popOutToIsland(tuckingWindowAway: true) },
-                                    stop: model.stopNowPlaying
-                                )
-                                .padding(.horizontal, Layout.gutter)
-                                .padding(.bottom, 14)
-                                .transition(.move(edge: .bottom).combined(with: .opacity))
-                            }
-                        }
-                        .animation(.easeOut(duration: 0.22), value: model.nowPlaying?.video.id)
                     DownloadsDrawer(
                         downloader: model.downloader,
                         updater: model.updater,
@@ -61,8 +44,28 @@ struct RootView: View {
                     .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
             }
 
+            // Its own module, full width, between the page and the footer: the window
+            // grows to make room, so it reads as a unit bolted in rather than something
+            // laid over the list.
+            if let now = model.nowPlaying {
+                NowPlayingMonitor(
+                    video: now.video, player: now.player, ratio: now.ratio,
+                    analysis: model.trackAnalysis,
+                    expand: model.reopenNowPlaying,
+                    toNotch: { model.popOutToIsland(tuckingWindowAway: true) },
+                    stop: model.stopNowPlaying
+                )
+                .frame(height: AppModel.nowPlayingHeight - 12)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(Palette.ground)
+                .overlay(alignment: .top) { Rectangle().fill(Palette.ink(0.10)).frame(height: 1) }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+            }
+
             VersionFooter(updater: model.appUpdater)
         }
+        .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id)
         .frame(minWidth: 820, minHeight: 520)
         // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
         // own grey in the strip between the toolbar and the header.
@@ -169,10 +172,7 @@ struct RootView: View {
         .onReceive(NotificationCenter.default.publisher(for: NSApplication.didUnhideNotification)) { _ in
             model.windowCameBack()
         }
-        // Out of full screen there is a "below the window" again.
-        .onReceive(NotificationCenter.default.publisher(for: NSWindow.didExitFullScreenNotification)) { _ in
-            if model.nowPlaying != nil, !model.nowPlayingInDrawer { model.presentNowPlaying() }
-        }
+
         .onReceive(NotificationCenter.default.publisher(for: .openLibrary)) { _ in
             model.drainOpenedLibraries()
         }

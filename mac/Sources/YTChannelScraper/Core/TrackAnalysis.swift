@@ -9,7 +9,7 @@ import Foundation
 /// the track plays. Nothing is saved; it is a picture of the sound, rebuilt per track.
 ///
 /// Costs a second download of the audio (about 1 MB a minute), and only runs for what
-/// is in the Now Playing drawer.
+/// is in the Now Playing module.
 @MainActor
 @Observable
 final class TrackAnalysis {

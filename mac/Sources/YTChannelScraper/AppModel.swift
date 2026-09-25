@@ -63,14 +63,10 @@ final class AppModel {
         }
     }
 
-    /// The drawer under the window that shows `nowPlaying`, and whether it could: in full
-    /// screen, or with no room below the window, the in-window bar stands in for it.
-    let nowPlayingDrawer = NowPlayingDrawer()
     /// Pre-reads the saved channels, so opening one from the drawer is instant.
     let listingWarmer = ListingWarmer()
-    /// The waveform and tempo of whatever is in the drawer.
+    /// The waveform and tempo of whatever is in the Now Playing module.
     let trackAnalysis = TrackAnalysis()
-    private(set) var nowPlayingInDrawer = false
 
     let scraper = Scraper()
     let search = ChannelSearch()
@@ -499,32 +495,37 @@ final class AppModel {
         listingWarmer.warm(library.recent, tab: tab)
     }
 
-    /// Put `nowPlaying` wherever it can be shown: the drawer if it will open, the bar if
-    /// not, nowhere when nothing is playing. Called again when full screen ends.
+    /// The Now Playing module's height, which the window grows by to make room for it.
+    static let nowPlayingHeight: CGFloat = 148
+
+    /// How much the window was actually grown for the module, so closing it gives back
+    /// exactly that — no more, if the screen only had room for part of it.
+    private var grownForNowPlaying: CGFloat = 0
+
+    /// Make room for the module, or give the room back. The window grows downward, so the
+    /// page keeps its size and the footer is what moves; against the foot of the screen,
+    /// or in full screen, the module takes its height from the page instead.
     func presentNowPlaying() {
-        guard let now = nowPlaying else {
-            nowPlayingDrawer.hide()
-            nowPlayingInDrawer = false
-            return
-        }
+        if let now = nowPlaying { trackAnalysis.analyse(now.video) }
         guard let window = NSApp.windows.first(where: {
             $0.isVisible && !$0.isMiniaturized && $0.canBecomeMain
-        }) else {
-            nowPlayingInDrawer = false
+        }), !window.styleMask.contains(.fullScreen) else { return }
+        var frame = window.frame
+        if nowPlaying != nil, grownForNowPlaying == 0 {
+            let floor = (window.screen ?? NSScreen.main)?.visibleFrame.minY ?? frame.minY
+            let grow = min(Self.nowPlayingHeight, max(0, frame.minY - floor))
+            guard grow > 0 else { return }
+            frame.origin.y -= grow
+            frame.size.height += grow
+            grownForNowPlaying = grow
+        } else if nowPlaying == nil, grownForNowPlaying > 0 {
+            frame.origin.y += grownForNowPlaying
+            frame.size.height -= grownForNowPlaying
+            grownForNowPlaying = 0
+        } else {
             return
         }
-        nowPlayingDrawer.onPlacementChanged = { [weak self] in self?.nowPlayingInDrawer = false }
-        trackAnalysis.analyse(now.video)
-        nowPlayingInDrawer = nowPlayingDrawer.show(
-            under: window,
-            content: NowPlayingMonitor(
-                video: now.video, player: now.player, ratio: now.ratio,
-                analysis: trackAnalysis,
-                expand: { [weak self] in self?.reopenNowPlaying() },
-                toNotch: { [weak self] in self?.popOutToIsland(tuckingWindowAway: true) },
-                stop: { [weak self] in self?.stopNowPlaying() }
-            )
-        )
+        window.setFrame(frame, display: true, animate: true)
     }
 
     func stopNowPlaying() {
