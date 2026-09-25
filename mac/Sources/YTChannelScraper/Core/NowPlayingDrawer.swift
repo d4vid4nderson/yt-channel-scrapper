@@ -14,10 +14,10 @@ import SwiftUI
 /// the caller falls back to the in-window bar.
 @MainActor
 final class NowPlayingDrawer {
-    /// How far the drawer stands in from the window's sides, so it reads as a drawer and
-    /// not as the window having grown.
-    private let inset: CGFloat = 28
-    let height: CGFloat = 176
+    /// How far the drawer stands in from the window's sides. None: it is the window's own
+    /// width, a second screen the same size as the first, hung beneath it.
+    private let inset: CGFloat = 0
+    let height: CGFloat = 132
 
     private var panel: NSPanel?
     private weak var parent: NSWindow?

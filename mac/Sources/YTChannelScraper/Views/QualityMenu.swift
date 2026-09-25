@@ -34,7 +34,7 @@ struct QualityMenu: View {
             .padding(.trailing, 7)
             .padding(.vertical, 5)
         }
-        .buttonStyle(.bordered)
+        .modifier(FaceStyle())
         .fixedSize()
         .background(MenuAnchor { anchor = $0 })
     }
@@ -101,4 +101,16 @@ private struct MenuAnchor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
+}
+
+/// The system's bordered button in Classic, the theme's own otherwise — a grey AppKit
+/// bezel was the one control on the results bar still wearing the system's look.
+private struct FaceStyle: ViewModifier {
+    func body(content: Content) -> some View {
+        if Theme.active.id == .classic {
+            content.buttonStyle(.bordered)
+        } else {
+            content.buttonStyle(ThemedButtonStyle())
+        }
+    }
 }

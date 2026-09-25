@@ -63,7 +63,7 @@ struct RootView: View {
 
             VersionFooter(updater: model.appUpdater)
         }
-        .frame(minWidth: 860, minHeight: 560)
+        .frame(minWidth: 820, minHeight: 520)
         // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
         // own grey in the strip between the toolbar and the header.
         .background {
@@ -112,6 +112,12 @@ struct RootView: View {
             Task { await model.syncShelf() }
         }
         .task { await model.syncShelf() }
+        // A few seconds after launch, once the window has settled: read the saved
+        // channels ahead of the first click on one.
+        .task {
+            try? await Task.sleep(for: .seconds(4))
+            model.warmSavedChannels()
+        }
         // Over everything, panels included: previewing something from a drawer has to
         // land on top of the panel it was started from.
         .overlay {
@@ -270,10 +276,10 @@ struct RootView: View {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
                     HStack(spacing: 16) {
-                        BrandMark(width: 62)
+                        BrandMark(width: 44)
                             .matchedGeometryEffect(id: "brand", in: hero)
                         Text(Paths.displayName)
-                            .displayType(40)
+                            .displayType(30)
                             .foregroundStyle(Palette.ink(1))
                             // Wide lettering (Nostromo's, Dune's) runs past the window
                             // at 40pt; it shrinks rather than being cut off.
@@ -284,7 +290,7 @@ struct RootView: View {
                     SearchPill(model: model, compact: false)
                         .matchedGeometryEffect(id: "pill", in: hero)
                         .frame(maxWidth: 680)
-                        .padding(.top, 46)
+                        .padding(.top, 26)
                     statusLine
                     // What is going on, before anything has been typed. A search box with
                     // a row of chips under it was not a command centre; this is.
@@ -322,8 +328,8 @@ struct RootView: View {
             }
         }
         .font(.system(size: 13))
-        .padding(.top, 22)
-        .frame(height: 48, alignment: .top)
+        .padding(.top, 14)
+        .frame(height: 38, alignment: .top)
         .transition(.opacity)
     }
 }

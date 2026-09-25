@@ -33,6 +33,16 @@ final class Scraper {
     private var task: Task<Void, Never>?
     private var stream: ProcessStream?
 
+    /// True while a fresh read is walking behind a list shown from `ListingCache`. The
+    /// walk collects into `incoming` and swaps it in whole when it settles, so the list
+    /// on screen never empties and refills under the reader.
+    private(set) var isRefreshing = false
+    private var incoming: [Video] = []
+    private var cacheKey: String?
+
+    /// What the walk is collecting into — the list on screen, or the one behind it.
+    private var collected: [Video] { isRefreshing ? incoming : videos }
+
     var canLoadMore: Bool { status == .paused }
     var isBusy: Bool { status == .running }
 
@@ -40,6 +50,9 @@ final class Scraper {
 
     func reset() {
         stop()
+        isRefreshing = false
+        incoming = []
+        cacheKey = nil
         videos = []
         seen = []
         channel = ""
@@ -56,18 +69,37 @@ final class Scraper {
         task = nil
         stream?.terminate()
         stream = nil
+        // Stopping a refresh leaves the cached list up, which is still a real list.
+        if isRefreshing {
+            isRefreshing = false
+            incoming = []
+            if status == .running { status = .done }
+            return
+        }
         if status == .running { status = .stopped }
     }
 
     func start(rawURL: String, tab: ChannelTab) {
         stop()
-        videos = []
+        let key = ListingCache.key(url: rawURL, tab: tab)
+        cacheKey = key
         seen = []
-        channel = ""
-        channelRef = nil
         error = nil
         outerCursor = 0
         exhausted = false
+        incoming = []
+        // Seen before: the last list goes up at once and the read happens behind it.
+        if let cached = ListingCache.shared.entry(for: key) {
+            videos = cached.videos
+            channel = cached.channel
+            channelRef = cached.channelRef
+            isRefreshing = true
+        } else {
+            videos = []
+            channel = ""
+            channelRef = nil
+            isRefreshing = false
+        }
         status = .running
 
         task = Task { [weak self] in
@@ -79,14 +111,23 @@ final class Scraper {
                     self.outerCursor = 0
                     self.exhausted = false
                     try await self.fill(upTo: Self.pageSize)
-                    if !self.videos.isEmpty { break }
+                    if !self.collected.isEmpty { break }
                 }
-                guard !self.videos.isEmpty else { throw YtDlp.Failure.noTab(tab.label) }
+                guard !self.collected.isEmpty else { throw YtDlp.Failure.noTab(tab.label) }
                 self.settle()
             } catch is CancellationError {
                 // stop() already recorded the state
             } catch {
-                self.fail(error)
+                // A failed refresh keeps the list it was refreshing — offline, or
+                // yt-dlp having a bad day, is no reason to take it away.
+                if self.isRefreshing {
+                    Log.library.error("refresh failed: \(error.localizedDescription, privacy: .public)")
+                    self.isRefreshing = false
+                    self.incoming = []
+                    self.status = .done
+                } else {
+                    self.fail(error)
+                }
             }
         }
     }
@@ -110,7 +151,15 @@ final class Scraper {
 
     private func settle() {
         guard status == .running else { return }
+        if isRefreshing {
+            videos = incoming
+            incoming = []
+            isRefreshing = false
+        }
         status = exhausted ? .done : .paused
+        if let cacheKey {
+            ListingCache.shared.store(videos, channel: channel, channelRef: channelRef, for: cacheKey)
+        }
     }
 
     private func fail(_ error: Error) {
@@ -145,7 +194,7 @@ final class Scraper {
 
     /// Pull outer entries until `target` videos are in hand or the listing runs dry.
     private func fill(upTo target: Int) async throws {
-        while videos.count < target {
+        while collected.count < target {
             let chunk = try await pullChunk(target: target)
             if chunk.reachedTarget { return }
             if chunk.consumed < Self.pageSize {
@@ -174,14 +223,19 @@ final class Scraper {
 
                 chunk.consumed += 1
                 outerCursor += 1
-                if channel.isEmpty {
-                    channel = (json["playlist_channel"] as? String)
+                // A refresh takes the name afresh too: channels do rename.
+                if channel.isEmpty || (isRefreshing && chunk.consumed == 1) {
+                    let name = (json["playlist_channel"] as? String)
                         ?? (json["playlist_title"] as? String) ?? ""
+                    if !name.isEmpty { channel = name }
                 }
-                if channelRef == nil { channelRef = Channel(listingJSON: json) }
+                if channelRef == nil || (isRefreshing && chunk.consumed == 1),
+                   let ref = Channel(listingJSON: json) {
+                    channelRef = ref
+                }
                 await absorb(json, depth: 0)
 
-                if videos.count >= target {
+                if collected.count >= target {
                     chunk.reachedTarget = true
                     stream.terminate()      // page is full; stop walking the channel
                     break
@@ -190,7 +244,7 @@ final class Scraper {
         } catch let failure as ProcessStream.Failure {
             // A tab the channel does not have exits non-zero having printed nothing.
             // With entries already in hand that is just the end of the listing.
-            if chunk.consumed == 0 && videos.isEmpty { throw failure }
+            if chunk.consumed == 0 && collected.isEmpty { throw failure }
         }
         return chunk
     }
@@ -206,7 +260,7 @@ final class Scraper {
 
         guard isPlaylist else {
             if let video = Video(json: json), seen.insert(video.id).inserted {
-                videos.append(video)
+                if isRefreshing { incoming.append(video) } else { videos.append(video) }
             }
             return
         }

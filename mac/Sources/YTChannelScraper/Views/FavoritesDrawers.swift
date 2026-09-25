@@ -300,7 +300,7 @@ private struct DrawerChannelRow: View {
 
     private var card: some View {
         HStack(spacing: 10) {
-                ChannelAvatar(channel: channel, size: 34)
+                ChannelAvatar(channel: channel, size: 30)
                     .overlay {
                         Circle().strokeBorder(
                             hovering ? Palette.accent.opacity(0.65) : Palette.ink(0.14),
@@ -326,8 +326,8 @@ private struct DrawerChannelRow: View {
                 // reflow under the button the moment you reach for it.
                 Spacer(minLength: 26)
             }
-            .padding(.horizontal, 10)
-            .frame(height: 54)
+            .padding(.horizontal, 9)
+            .frame(height: 46)
             .background(Palette.tileSurface(active: hovering))
             .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .overlay {
@@ -396,7 +396,7 @@ private struct DrawerVideoRow: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 8)
-            .frame(minHeight: 66)
+            .frame(minHeight: 56)
             .background(Palette.tileSurface(active: hovering))
             .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
             .overlay {

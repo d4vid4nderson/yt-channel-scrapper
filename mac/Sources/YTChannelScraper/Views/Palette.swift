@@ -20,10 +20,10 @@ enum Layout {
     /// What a favourites panel takes from the page. Wide enough for a two-line video
     /// title beside its thumbnail, narrow enough that the list it is standing next to is
     /// still a list you can read.
-    static let drawerWidth: CGFloat = 330
+    static let drawerWidth: CGFloat = 290
 
     /// The downloads panel is a handful of rows and a footer, not a page of its own.
-    static let downloadsHeight: CGFloat = 340
+    static let downloadsHeight: CGFloat = 300
 
     /// One easing for all three panels, so opening any of them is recognisably the same
     /// gesture.

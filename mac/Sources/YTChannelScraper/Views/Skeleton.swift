@@ -23,9 +23,9 @@ struct VideoListSkeleton: View {
     var body: some View {
         VStack(spacing: 10) {
             ForEach(0..<6, id: \.self) { index in
-                SkeletonCard(minHeight: 90) {
+                SkeletonCard(minHeight: 72) {
                     Bone(corner: 4.4).frame(width: 17, height: 17)
-                    Bone(corner: 10).frame(width: 124, height: 124 * 9 / 16)
+                    Bone(corner: 10).frame(width: 104, height: 104 * 9 / 16)
                     VStack(alignment: .leading, spacing: 7) {
                         HStack(spacing: 0) {
                             Bone().frame(height: 12)
@@ -48,7 +48,7 @@ struct ChannelListSkeleton: View {
     var body: some View {
         VStack(spacing: 10) {
             ForEach(0..<4, id: \.self) { index in
-                SkeletonCard(minHeight: 84, verticalPadding: 12) {
+                SkeletonCard(minHeight: 64, verticalPadding: 8) {
                     Circle()
                         .fill(Palette.ink(0.09))
                         .frame(width: 56, height: 56)

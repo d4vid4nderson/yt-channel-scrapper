@@ -37,7 +37,7 @@ struct CommandBoard: View {
             }
         }
         .frame(maxWidth: 680)
-        .padding(.top, 34)
+        .padding(.top, 18)
     }
 
     // MARK: - Before there is a family
@@ -69,9 +69,9 @@ struct CommandBoard: View {
         HStack(alignment: .top, spacing: 0) {
             dispatch
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 26)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
 
             Rectangle()
                 .fill(Palette.ink(0.07))
@@ -85,9 +85,9 @@ struct CommandBoard: View {
             // Equal halves would say they matter equally.
             meta
                 .frame(width: 186, alignment: .leading)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 26)
+                .padding(.horizontal, 14)
+                .padding(.top, 12)
+                .padding(.bottom, 16)
         }
         .fixedSize(horizontal: false, vertical: true)
         .background(Palette.ink(0.035), in: ThemedRect(cornerRadius: 14))

@@ -28,7 +28,7 @@ struct VideoRow: View {
     @State private var hoveringThumb = false
 
     private let corner: CGFloat = 14
-    private let rowHeight: CGFloat = 90
+    private let rowHeight: CGFloat = 72
 
     var body: some View {
         HStack(spacing: 14) {
@@ -92,8 +92,8 @@ struct VideoRow: View {
                     .transition(.scale.combined(with: .opacity))
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 7)
         .frame(minHeight: rowHeight)
         .background {
             if isPicked {
@@ -148,7 +148,7 @@ struct VideoRow: View {
                 Rectangle().fill(.quaternary)
             }
         }
-        .frame(width: 124, height: 124 * 9 / 16)
+        .frame(width: 104, height: 104 * 9 / 16)
         .clipShape(ThemedRect(cornerRadius: 10, style: .continuous))
         .overlay {
             if hoveringThumb {

@@ -145,9 +145,9 @@ struct ChannelRow: View {
                                             : AnyShapeStyle(Palette.ink(0.06)))
                 )
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
-        .frame(minHeight: 84)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 64)
         .background(Palette.rowPlate)
         .clipShape(ThemedRect(cornerRadius: corner, style: .continuous))
         .overlay {

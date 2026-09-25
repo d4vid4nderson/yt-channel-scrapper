@@ -12,7 +12,7 @@ struct YTChannelScraperApp: App {
             RootView(model: model)
                 .themed()
         }
-        .defaultSize(width: 1020, height: 700)
+        .defaultSize(width: 960, height: 620)
         .commands {
             CommandGroup(after: .appInfo) {
                 Button("Check for Updates…") {

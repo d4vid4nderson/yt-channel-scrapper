@@ -25,7 +25,10 @@ final class AppModel {
         get { showFamilyDrawer }
         set { newValue ? openFamilyDrawer() : (showFamilyDrawer = false) }
     }
-    var showChannelsDrawer = false
+    var showChannelsDrawer = false {
+        // Opening the saved channels is the moment you are about to pick one.
+        didSet { if showChannelsDrawer { warmSavedChannels() } }
+    }
     /// Setting up a child's phone over the cable — see `PhoneSetupSheet`.
     var showPhoneSetup = false
     /// Every device and what it holds — see `DevicesSheet`. `focusedDevice` is the one it
@@ -63,6 +66,10 @@ final class AppModel {
     /// The drawer under the window that shows `nowPlaying`, and whether it could: in full
     /// screen, or with no room below the window, the in-window bar stands in for it.
     let nowPlayingDrawer = NowPlayingDrawer()
+    /// Pre-reads the saved channels, so opening one from the drawer is instant.
+    let listingWarmer = ListingWarmer()
+    /// The waveform and tempo of whatever is in the drawer.
+    let trackAnalysis = TrackAnalysis()
     private(set) var nowPlayingInDrawer = false
 
     let scraper = Scraper()
@@ -488,6 +495,10 @@ final class AppModel {
         preview.adopt(video: now.video, player: now.player, ratio: now.ratio)
     }
 
+    func warmSavedChannels() {
+        listingWarmer.warm(library.recent, tab: tab)
+    }
+
     /// Put `nowPlaying` wherever it can be shown: the drawer if it will open, the bar if
     /// not, nowhere when nothing is playing. Called again when full screen ends.
     func presentNowPlaying() {
@@ -503,10 +514,12 @@ final class AppModel {
             return
         }
         nowPlayingDrawer.onPlacementChanged = { [weak self] in self?.nowPlayingInDrawer = false }
+        trackAnalysis.analyse(now.video)
         nowPlayingInDrawer = nowPlayingDrawer.show(
             under: window,
             content: NowPlayingMonitor(
                 video: now.video, player: now.player, ratio: now.ratio,
+                analysis: trackAnalysis,
                 expand: { [weak self] in self?.reopenNowPlaying() },
                 toNotch: { [weak self] in self?.popOutToIsland(tuckingWindowAway: true) },
                 stop: { [weak self] in self?.stopNowPlaying() }
@@ -516,6 +529,7 @@ final class AppModel {
 
     func stopNowPlaying() {
         guard let now = nowPlaying else { return }
+        trackAnalysis.cancel()
         nowPlaying = nil
         now.player.pause()
         now.player.replaceCurrentItem(with: nil)
