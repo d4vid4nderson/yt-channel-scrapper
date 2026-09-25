@@ -63,11 +63,20 @@ struct RootView: View {
                 .background(Palette.ground)
                 .overlay(alignment: .top) { Rectangle().fill(Palette.ink(0.10)).frame(height: 1) }
                 .transition(.move(edge: .bottom).combined(with: .opacity))
+            } else if let loading = model.nowLoading {
+                NowLoadingModule(video: loading, error: model.nowLoadingError,
+                                 cancel: model.cancelNowLoading)
+                    .frame(height: AppModel.nowPlayingHeight - 12)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                    .background(Palette.ground)
+                    .overlay(alignment: .top) { Rectangle().fill(Palette.ink(0.10)).frame(height: 1) }
+                    .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
             VersionFooter(updater: model.appUpdater)
         }
-        .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id)
+        .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id ?? model.nowLoading?.id)
         .frame(minWidth: 820, minHeight: 520)
         // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
         // own grey in the strip between the toolbar and the header.
@@ -713,7 +722,8 @@ private struct ResultsList: View {
             inSavedList: model.mode == .saved,
             toggle: { model.toggle(video) },
             downloadOne: { model.download([video]) },
-            preview: { model.preview.open(video) },
+            preview: { model.playNow(video) },
+            openCard: { model.openCard(video) },
             toggleSaved: { model.toggleSaved(video) },
             shelfMenu: ShelfMenu(model: model, video: video)
         )

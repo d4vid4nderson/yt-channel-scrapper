@@ -495,6 +495,70 @@ final class AppModel {
         listingWarmer.warm(library.recent, tab: tab)
     }
 
+    /// A video asked to play straight into the module, while its stream is found. Its own
+    /// session, so the preview card never opens for it.
+    private(set) var nowLoading: Video? {
+        didSet { if (nowLoading == nil) != (oldValue == nil) { presentNowPlaying() } }
+    }
+    /// Why `nowLoading` could not play, when it could not.
+    private(set) var nowLoadingError: String?
+    private let backgroundSession = PreviewSession()
+    private var loadingTask: Task<Void, Never>?
+
+    /// The thumbnail's play: start it in the Now Playing module, no card. The card is for
+    /// clicking the title.
+    func playNow(_ video: Video) {
+        if let now = nowPlaying, now.video.id == video.id {
+            now.player.play()
+            return
+        }
+        loadingTask?.cancel()
+        backgroundSession.close()
+        nowLoadingError = nil
+        nowLoading = video
+        backgroundSession.open(video)
+        loadingTask = Task { [weak self] in
+            // The session reports through its state; there is nothing to await but it.
+            for _ in 0..<600 {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self, !Task.isCancelled, self.nowLoading?.id == video.id else { return }
+                switch self.backgroundSession.state {
+                case .working: continue
+                case .failed(let message):
+                    Log.preview.error("play now failed: \(message, privacy: .public)")
+                    // Said in the module itself, which stays up until it is closed.
+                    self.nowLoadingError = message
+                    return
+                case .ready:
+                    guard let handed = self.backgroundSession.handOff() else { return }
+                    self.nowPlaying?.player.pause()
+                    self.nowPlaying = NowPlaying(video: handed.video, player: handed.player,
+                                                 ratio: handed.ratio)
+                    handed.player.play()
+                    self.nowLoading = nil
+                    return
+                }
+            }
+            self?.nowLoading = nil
+            self?.backgroundSession.close()
+        }
+    }
+
+    /// The title's link: the full card. Whatever is in Now Playing pauses — two things
+    /// sounding at once is nobody's intent.
+    func openCard(_ video: Video) {
+        cancelNowLoading()
+        nowPlaying?.player.pause()
+        preview.open(video)
+    }
+
+    func cancelNowLoading() {
+        loadingTask?.cancel()
+        backgroundSession.close()
+        nowLoadingError = nil
+        nowLoading = nil
+    }
+
     /// The Now Playing module's height, which the window grows by to make room for it.
     static let nowPlayingHeight: CGFloat = 148
 
@@ -511,14 +575,15 @@ final class AppModel {
             $0.isVisible && !$0.isMiniaturized && $0.canBecomeMain
         }), !window.styleMask.contains(.fullScreen) else { return }
         var frame = window.frame
-        if nowPlaying != nil, grownForNowPlaying == 0 {
+        let wanted = nowPlaying != nil || nowLoading != nil
+        if wanted, grownForNowPlaying == 0 {
             let floor = (window.screen ?? NSScreen.main)?.visibleFrame.minY ?? frame.minY
             let grow = min(Self.nowPlayingHeight, max(0, frame.minY - floor))
             guard grow > 0 else { return }
             frame.origin.y -= grow
             frame.size.height += grow
             grownForNowPlaying = grow
-        } else if nowPlaying == nil, grownForNowPlaying > 0 {
+        } else if !wanted, grownForNowPlaying > 0 {
             frame.origin.y += grownForNowPlaying
             frame.size.height -= grownForNowPlaying
             grownForNowPlaying = 0
@@ -529,6 +594,7 @@ final class AppModel {
     }
 
     func stopNowPlaying() {
+        cancelNowLoading()
         guard let now = nowPlaying else { return }
         trackAnalysis.cancel()
         nowPlaying = nil

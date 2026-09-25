@@ -15,7 +15,10 @@ struct VideoRow: View {
     var inSavedList = false
     let toggle: () -> Void
     let downloadOne: () -> Void
+    /// The thumbnail's play: straight into Now Playing.
     let preview: () -> Void
+    /// The title's link: the full preview card.
+    var openCard: (() -> Void)? = nil
     let toggleSaved: () -> Void
 
     /// The ⋯ that puts this video on a child's shelf, or nothing when there is no family
@@ -45,16 +48,11 @@ struct VideoRow: View {
             // watching something does not disturb a selection already made.
             Button(action: preview) { thumbnail }
                 .buttonStyle(.plain)
-                .help("Preview this video")
+                .help("Play this video in Now Playing")
                 .pointingHand()
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(video.title)
-                    .font(.system(size: 13.5, weight: .medium))
-                    .foregroundStyle(isPicked ? Palette.ink(1) : .primary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-                    .fixedSize(horizontal: false, vertical: true)
+                TitleLink(title: video.title, isPicked: isPicked, open: openCard)
                 Text(video.metaText(showingChannel: inSavedList))
                     .font(.system(size: 11.5))
                     .foregroundStyle(isPicked ? Palette.ink(0.70) : .secondary)
@@ -156,7 +154,9 @@ struct VideoRow: View {
                     Color.black.opacity(0.35)
                     Image(systemName: "play.fill")
                         .font(.system(size: 15))
-                        .foregroundStyle(Palette.onFill)
+                        // White on the black scrim, as the duration is: a theme's onFill
+                        // can be near-black, and this sat invisible on the Nostromo.
+                        .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.5), radius: 3)
                 }
                 .clipShape(ThemedRect(cornerRadius: 10, style: .continuous))
@@ -205,5 +205,34 @@ private struct RowDownloadButton: View {
         .pointingHand()
         .onHover { hovering = $0 }
         .animation(.easeOut(duration: 0.15), value: hovering)
+    }
+}
+
+/// A video's title, which opens the full preview card — underlined under the pointer,
+/// so it reads as the link it is. Without `open`, plain text.
+private struct TitleLink: View {
+    let title: String
+    let isPicked: Bool
+    let open: (() -> Void)?
+    @State private var hovering = false
+
+    var body: some View {
+        let linked = hovering && open != nil
+        let text = Text(title)
+            .font(.system(size: 13.5, weight: .medium))
+            .underline(linked, color: Palette.accent)
+            .foregroundStyle(linked ? Palette.accent : (isPicked ? Palette.ink(1) : Palette.ink(0.95)))
+            .lineLimit(2)
+            .multilineTextAlignment(.leading)
+            .fixedSize(horizontal: false, vertical: true)
+        if let open {
+            text
+                .onTapGesture(perform: open)
+                .onHover { hovering = $0 }
+                .help("Open the player")
+                .pointingHand()
+        } else {
+            text
+        }
     }
 }

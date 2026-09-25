@@ -270,3 +270,63 @@ struct NowPlayingMonitor: View {
         }
     }
 }
+
+/// The Now Playing module while a video asked for from its thumbnail is still finding a
+/// stream — the same unit, so nothing jumps when the picture arrives — or, if it could
+/// not be played, saying why until it is closed.
+struct NowLoadingModule: View {
+    let video: Video
+    let error: String?
+    let cancel: () -> Void
+
+    var body: some View {
+        HStack(spacing: 14) {
+            AsyncImage(url: video.thumbnail) { phase in
+                if let image = phase.image { image.resizable().scaledToFill() } else { Color.black }
+            }
+            .frame(width: 84 * 16 / 9, height: 84)
+            .clipShape(ThemedRect(cornerRadius: 8, style: .continuous))
+            .overlay {
+                if error == nil { ProgressView().controlSize(.small).tint(.white) }
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text(error == nil ? "Starting" : "Could not play")
+                    .displayType(10, classic: .semibold)
+                    .foregroundStyle(error == nil ? Palette.accent : Palette.warn)
+                Text(video.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Palette.ink(1))
+                    .lineLimit(1)
+                Text(error ?? "Finding a stream…")
+                    .font(.system(size: 11.5))
+                    .foregroundStyle(Palette.ink(0.5))
+                    .lineLimit(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Button(action: cancel) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Palette.ink(0.85))
+                    .frame(width: 30, height: 28)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(error == nil ? "Cancel" : "Close")
+            .pointingHand()
+        }
+        .padding(.horizontal, 14)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background {
+            ZStack {
+                Palette.surface
+                ThemeBackdrop(strength: 0.5)
+            }
+        }
+        .clipShape(ThemedRect(cornerRadius: 14, style: .continuous))
+        .overlay {
+            ThemedRect(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Palette.ink(0.14), lineWidth: 1)
+        }
+        .themeEdge(radius: 14)
+    }
+}
