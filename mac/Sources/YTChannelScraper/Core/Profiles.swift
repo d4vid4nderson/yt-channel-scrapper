@@ -102,7 +102,7 @@ final class Profiles {
     init() {
         hasPIN = Keychain.data(for: Key.pin) != nil
         useFaceID = Keychain.string(for: Key.faceID) == "1"
-        guardian = Keychain.decode(Guardian.self, for: Key.guardian)
+        guardian = Self.storedGuardian()
         mode = Self.storedMode()
 
         // A mode with no PIN behind it cannot be escaped, which would brick the app for
@@ -143,7 +143,7 @@ final class Profiles {
     /// under a different author.
     @discardableResult
     func adopt(_ guardian: Guardian) -> Bool {
-        guard Keychain.encode(guardian, for: Key.guardian) else { return false }
+        guard Self.store(guardian) else { return false }
         self.guardian = guardian
         return true
     }
@@ -155,9 +155,53 @@ final class Profiles {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return false }
         let updated = Guardian(id: guardian?.id ?? UUID(), name: trimmed)
-        guard Keychain.encode(updated, for: Key.guardian) else { return false }
+        guard Self.store(updated) else { return false }
         guardian = updated
         return true
+    }
+
+    /// On a Mac the identity lives in the defaults, not the Keychain.
+    ///
+    /// A Keychain item made by a non-sandboxed Mac app trusts only the build that made
+    /// it, and one made by an ad-hoc signed build is refused to every build after — so
+    /// each rebuild came back with no guardian, and the Family drawer hid everyone until
+    /// somebody typed their name again. The phone's reason for the Keychain, surviving a
+    /// child's reinstall, does not apply to a Mac; this is the trade `ShelfStore.deviceID`
+    /// already makes there.
+    private static let guardianDefaultsKey = "profile.guardian"
+
+    private static func storedGuardian() -> Guardian? {
+        #if os(macOS)
+        if let data = UserDefaults.standard.data(forKey: guardianDefaultsKey),
+           let kept = try? JSONDecoder().decode(Guardian.self, from: data) {
+            return kept
+        }
+        // Carried over once, if this build can still read the old item. If it cannot,
+        // `ShelfStore.lastKnownGuardian` recovers the identity from the shared folder.
+        let legacy = Keychain.decode(Guardian.self, for: Key.guardian)
+        if let legacy { store(legacy) }
+        return legacy
+        #else
+        return Keychain.decode(Guardian.self, for: Key.guardian)
+        #endif
+    }
+
+    @discardableResult
+    private static func store(_ guardian: Guardian) -> Bool {
+        #if os(macOS)
+        guard let data = try? JSONEncoder().encode(guardian) else { return false }
+        UserDefaults.standard.set(data, forKey: guardianDefaultsKey)
+        return true
+        #else
+        return Keychain.encode(guardian, for: Key.guardian)
+        #endif
+    }
+
+    private static func forgetGuardian() {
+        #if os(macOS)
+        UserDefaults.standard.removeObject(forKey: guardianDefaultsKey)
+        #endif
+        Keychain.remove(Key.guardian)
     }
 
     // MARK: - Setting the PIN
@@ -270,7 +314,7 @@ final class Profiles {
         guard persistMode(.minor(setup.minor)) else { return .failed }
         mode = .minor(setup.minor)
         Keychain.encode(setup.minor, for: Key.lastMinor)
-        Keychain.remove(Key.guardian)
+        Self.forgetGuardian()
         guardian = nil
         Log.profiles.notice("set up from the Mac as a child's phone")
         return .locked(keptPIN: keptPIN)

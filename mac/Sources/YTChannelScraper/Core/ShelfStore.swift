@@ -865,6 +865,18 @@ final class ShelfStore {
         return id
     }
 
+    /// Who this device last reported belonging to, while they are still an admin here.
+    ///
+    /// How a device that has lost its own record of who it is — a Mac rebuild that could
+    /// not read the old Keychain item — finds its way back without anyone retyping a name.
+    /// Not a guess: it is this device's own report, found by the id it kept.
+    var lastKnownGuardian: Profiles.Guardian? {
+        guard let record = devices.first(where: { $0.deviceID == deviceID }),
+              !record.isMinor, let person = record.personID
+        else { return nil }
+        return guardians.first { $0.id == person }
+    }
+
     /// The name this device shows in the family list, until somebody renames it.
     var suggestedDeviceName: String {
         let kind = DeviceRecord.Kind.current.noun

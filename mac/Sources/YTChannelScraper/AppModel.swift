@@ -95,6 +95,10 @@ final class AppModel {
     /// that folder and nothing here is notified.
     func syncShelf() async {
         await shelf.refresh()
+        if profiles.guardian == nil, let known = shelf.lastKnownGuardian {
+            Log.profiles.notice("recovered this Mac's guardian from its own device record")
+            profiles.adopt(known)
+        }
         guard let guardian = profiles.guardian else { return }
         // Put this guardian on the family list even before their first approval, so the
         // other parent sees them appear as soon as they are set up rather than whenever
