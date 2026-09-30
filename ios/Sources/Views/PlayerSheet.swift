@@ -176,6 +176,18 @@ struct PlayerSheet: View {
 
     @ViewBuilder
     private var actions: some View {
+        repeatButton
+        if item.isVideo, ThemedPiP.shared.isSupported {
+            Button {
+                ThemedPiP.shared.start()
+            } label: {
+                Image(systemName: "pip.enter")
+                    .font(.system(size: 13, weight: .semibold))
+            }
+            .buttonStyle(.bordered)
+            .tint(Color.secondaryText)
+            .accessibilityLabel("Picture in Picture")
+        }
         if let video = item.video {
             // Bookmarking is the one thing a minor can add to the library, and it is
             // theirs to undo: the same button takes it off again.
@@ -222,6 +234,21 @@ struct PlayerSheet: View {
                 .foregroundStyle(Color.secondaryText)
         }
     }
+
+    /// Off, this video, or its channel — one button, round the three. Open to a minor:
+    /// looping the channel only ever moves through what was approved.
+    private var repeatButton: some View {
+        let setting = RepeatSetting.shared
+        return Button {
+            setting.mode = setting.mode.next
+        } label: {
+            Image(systemName: setting.mode.symbol)
+                .font(.system(size: 13, weight: .semibold))
+        }
+        .buttonStyle(.bordered)
+        .tint(setting.mode == .off ? Color.secondaryText : Palette.accent)
+        .accessibilityLabel(setting.mode.label)
+    }
 }
 
 /// `AVPlayerViewController`, wrapped, rather than SwiftUI's `VideoPlayer`.
@@ -241,6 +268,12 @@ struct Stage: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.updatesNowPlayingInfoCenter = false
+        // Picture in Picture is `ThemedPiP`'s, not AVKit's: AVKit's window cannot wear
+        // the theme. Swiping home with the player open floats the video over the Home
+        // Screen — the nearest iOS comes to a video widget, since a widget is a drawing
+        // and cannot hold a player. Only for a video: an audio file has nothing to float.
+        controller.allowsPictureInPicturePlayback = false
+        if poster == nil { ThemedPiP.shared.attach(player: player, source: controller.view) }
         // Touching `view` forces the controller to load, which is what makes
         // `contentOverlayView` exist to hang the poster on.
         controller.view.backgroundColor = .black
@@ -249,7 +282,10 @@ struct Stage: UIViewControllerRepresentable {
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
-        if controller.player !== player { controller.player = player }
+        if controller.player !== player {
+            controller.player = player
+            if poster == nil { ThemedPiP.shared.attach(player: player, source: controller.view) }
+        }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }

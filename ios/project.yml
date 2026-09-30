@@ -28,6 +28,9 @@ settings:
     # Personal/internal distribution: set DEVELOPMENT_TEAM in ios/Local.xcconfig (gitignored)
     # so a clone does not carry somebody else's team id around.
     CODE_SIGN_STYLE: Automatic
+    # The App Group the app and its widgets share (see Shared/WidgetSnapshot.swift).
+    # Derived from the bundle id so an override in Local.xcconfig carries it along.
+    YTCS_APP_GROUP: group.$(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper)
 
 configFiles:
   Debug: Local.xcconfig
@@ -39,6 +42,8 @@ targets:
     platform: iOS
     sources:
       - path: Sources
+      # What the app writes for the widgets and they read. Compiled into both.
+      - path: Shared
       - path: Support/Assets.xcassets
       - path: Support/PrivacyInfo.xcprivacy
         buildPhase: resources
@@ -82,7 +87,20 @@ targets:
     info:
       path: Support/Info.plist
       properties:
-        CFBundleDisplayName: Command Center
+        CFBundleDisplayName: YT Player
+        # Where the widgets' snapshot lives. Read at run time by WidgetSnapshot.container.
+        YTCSAppGroup: $(YTCS_APP_GROUP)
+        # The widgets' links into the app: ytplayer://video/<id>, ytplayer://search and so
+        # on. See WidgetLink, which is also where the reasons it is safe to register live.
+        CFBundleURLTypes:
+          - CFBundleURLName: $(PRODUCT_BUNDLE_IDENTIFIER).widget-links
+            CFBundleURLSchemes: [ytplayer]
+        # The long-press menu on the Home Screen icon. Handled in App/QuickActions.swift,
+        # which matches on the type string.
+        UIApplicationShortcutItems:
+          - UIApplicationShortcutItemType: com.d4vid4nderson.ytchannelscraper.changeTheme
+            UIApplicationShortcutItemTitle: Change Theme
+            UIApplicationShortcutItemIconSymbolName: paintpalette
         # App Store Connect rejects an upload without this (ITMS-90713), and nothing
         # catches it until you try. Xcode injects it for itself when it generates the
         # Info.plist, but this target supplies its own, so `actool` writes the nested
@@ -153,6 +171,11 @@ targets:
       path: Support/YTChannelScraper.entitlements
       properties:
         com.apple.developer.ubiquity-kvstore-identifier: $(TeamIdentifierPrefix)$(CFBundleIdentifier)
+        # Shared with the widget extension. A new capability, so the first archive after
+        # it regenerates the profiles — which -allowProvisioningUpdates allows.
+        com.apple.security.application-groups: [$(YTCS_APP_GROUP)]
+    dependencies:
+      - target: YTPlayerWidget
 
     settings:
       base:
@@ -160,13 +183,44 @@ targets:
         # the xcconfig — target-level build settings outrank it — which made the
         # "change this if the id is taken" note over there a lie.
         PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper)
-        INFOPLIST_KEY_CFBundleDisplayName: Command Center
+        INFOPLIST_KEY_CFBundleDisplayName: YT Player
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # One per theme, switched to with the theme — see ThemeChrome.applyIcon and
         # make-icon.sh, which generates them.
         ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-bladeRunner AppIcon-dune AppIcon-middleEarth AppIcon-prancingPony AppIcon-synthwave AppIcon-grid AppIcon-nostromo AppIcon-nostromoTeal"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad
+
+  # The Home and Lock Screen widgets. They draw only what the app writes into the shared
+  # App Group, and never touch the library, the shelf or the network themselves — see
+  # WidgetFeed for why that matters on a minor's phone.
+  YTPlayerWidget:
+    type: app-extension
+    platform: iOS
+    sources:
+      - path: Widget
+      - path: Shared
+    info:
+      path: Support/Widget-Info.plist
+      properties:
+        CFBundleDisplayName: YT Player
+        YTCSAppGroup: $(YTCS_APP_GROUP)
+        # Must match the app's, or the install is refused.
+        CFBundleShortVersionString: "1.0.0"
+        CFBundleVersion: "$(CURRENT_PROJECT_VERSION)"
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.widgetkit-extension
+    entitlements:
+      path: Support/Widget.entitlements
+      properties:
+        com.apple.security.application-groups: [$(YTCS_APP_GROUP)]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: $(YTCS_BUNDLE_ID:default=com.d4vid4nderson.ytchannelscraper).widget
+        # Swaps in the empty PlayerRemote in Shared/PlayerIntents.swift.
+        SWIFT_ACTIVE_COMPILATION_CONDITIONS: $(inherited) WIDGET_EXTENSION
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SKIP_INSTALL: YES
 
   # Unit tests for the parts that have to be right and do not need a device: the shelf
   # merge rules, and anything else that is pure. Deliberately a *logic* test bundle with

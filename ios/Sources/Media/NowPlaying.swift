@@ -31,6 +31,21 @@ final class NowPlaying {
     private var wired = false
     private var lastRate: Float = 0
 
+    /// Told after every change this class publishes — play, pause, seek, a new item, the
+    /// end — so the Home Screen widgets can follow along. See `WidgetFeed`.
+    var didPublish: (@MainActor () -> Void)?
+
+    /// Where the player is, for the widgets: seconds in, the length when known, and
+    /// whether it is moving.
+    var position: (elapsed: Double, duration: Double?, isPaused: Bool)? {
+        guard let player else { return nil }
+        let elapsed = player.currentTime().seconds
+        let duration = player.currentItem?.duration.seconds
+        return (elapsed.isFinite ? elapsed : 0,
+                duration.flatMap { $0.isFinite && $0 > 0 ? $0 : nil },
+                player.rate == 0)
+    }
+
     private init() {}
 
     // MARK: - Lifecycle
@@ -81,6 +96,7 @@ final class NowPlaying {
         lastRate = 0
         setCommandsEnabled(false)
         MPNowPlayingInfoCenter.default().nowPlayingInfo = nil
+        didPublish?()
     }
 
     // MARK: - Publishing
@@ -99,6 +115,7 @@ final class NowPlaying {
         info[MPNowPlayingInfoPropertyPlaybackRate] = Double(player.rate)
 
         MPNowPlayingInfoCenter.default().nowPlayingInfo = info
+        didPublish?()
     }
 
     /// A streamed item reports `indefinite` until it has loaded enough to know better,
@@ -205,25 +222,28 @@ final class NowPlaying {
     }
 
     // MARK: - Acting on them
+    //
+    // `toggle` and `skip` are also what the widgets' buttons call, through
+    // `PlayerIntents` — one set of transport controls, whoever pressed the button.
 
     private func setRate(_ rate: Float) {
         player?.rate = rate
         sync()
     }
 
-    private func toggle() {
+    func toggle() {
         guard let player else { return }
         setRate(player.rate > 0 ? 0 : 1)
     }
 
-    private func skip(by seconds: TimeInterval) {
+    func skip(by seconds: TimeInterval) {
         guard let player else { return }
         let now = player.currentTime().seconds
         guard now.isFinite else { return }
         seek(to: max(0, now + seconds))
     }
 
-    private func seek(to seconds: TimeInterval) {
+    func seek(to seconds: TimeInterval) {
         guard let player else { return }
         player.seek(to: CMTime(seconds: seconds, preferredTimescale: 600),
                     toleranceBefore: .zero, toleranceAfter: .zero)

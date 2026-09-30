@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Command Center</string>
+	<string>YT Player</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIconName</key>
@@ -20,6 +20,17 @@
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>1.0.0</string>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>$(PRODUCT_BUNDLE_IDENTIFIER).widget-links</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>ytplayer</string>
+			</array>
+		</dict>
+	</array>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
@@ -28,6 +39,17 @@
 	<true/>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Unlock Minor Mode without typing your PIN.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemIconSymbolName</key>
+			<string>paintpalette</string>
+			<key>UIApplicationShortcutItemTitle</key>
+			<string>Change Theme</string>
+			<key>UIApplicationShortcutItemType</key>
+			<string>com.d4vid4nderson.ytchannelscraper.changeTheme</string>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
@@ -73,5 +95,7 @@
 			</dict>
 		</dict>
 	</array>
+	<key>YTCSAppGroup</key>
+	<string>$(YTCS_APP_GROUP)</string>
 </dict>
 </plist>

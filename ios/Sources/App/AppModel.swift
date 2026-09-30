@@ -11,6 +11,12 @@ import SwiftUI
 @MainActor
 @Observable
 final class AppModel {
+    /// The one model, reachable without a view. A widget button can wake the app in the
+    /// background with no window at all — no `RootView` to have made one — and still
+    /// needs a player and the approval rules to hand it to. `RootView` holds this same
+    /// instance.
+    static let shared = AppModel()
+
     // MARK: - Pieces
 
     let listing = Listing()
@@ -41,6 +47,14 @@ final class AppModel {
         playback.allowsStreaming = { [weak self] id in
             guard let self else { return false }
             return !self.isMinor || self.approvedIDs.contains(id)
+        }
+        playback.didFinish = { [weak self] item in self?.finished(item) }
+        // Play, pause and seek, from wherever they were pressed — so the widgets'
+        // progress and buttons match the player. Here rather than in a view, because a
+        // widget can wake the app with no view at all.
+        NowPlaying.shared.didPublish = { [weak self] in
+            guard let self else { return }
+            WidgetFeed.shared.update(from: self)
         }
     }
 
@@ -158,6 +172,10 @@ final class AppModel {
     /// own to push onto.
     var homePath: [Channel] = []
     var searchPath: [Channel] = []
+
+    /// Whether the search field is active, with the keyboard up. Bound so the Search
+    /// widget can land on a field ready to type into.
+    var searchActive = false
 
     /// Show a channel, on whichever stack is currently in front.
     func show(_ channel: Channel) {
@@ -395,10 +413,18 @@ final class AppModel {
     ///
     /// Per device, not shared: the shelf records what the family decided, and a decision
     /// is not undone by one person tidying their own inbox. It also has to be persisted
-    /// or every relaunch would hand back everything already dealt with.
+    /// or every relaunch would hand back everything already dealt with. Reported to
+    /// Observation by hand, since the macro cannot see into the defaults.
     private(set) var dismissed: Set<String> {
-        get { Set(UserDefaults.standard.stringArray(forKey: "inbox.dismissed") ?? []) }
-        set { UserDefaults.standard.set(Array(newValue), forKey: "inbox.dismissed") }
+        get {
+            access(keyPath: \.dismissed)
+            return Set(UserDefaults.standard.stringArray(forKey: "inbox.dismissed") ?? [])
+        }
+        set {
+            withMutation(keyPath: \.dismissed) {
+                UserDefaults.standard.set(Array(newValue), forKey: "inbox.dismissed")
+            }
+        }
     }
 
     private func key(_ kind: ShelfEntry.Kind, _ id: String) -> String { "\(kind.rawValue):\(id)" }
@@ -424,6 +450,58 @@ final class AppModel {
     /// changes — the sender still sent it, and it stays on the shelf.
     func dismiss(channel: Channel) { dismissed.insert(key(.channel, channel.id)) }
     func dismiss(video: Video) { dismissed.insert(key(.video, video.id)) }
+
+    /// Empty the inbox without keeping anything. Same act as removing each row.
+    func clearInbox() {
+        let waiting = unclaimedSent
+        var gone = dismissed
+        for channel in waiting.channels { gone.insert(key(.channel, channel.id)) }
+        for video in waiting.videos { gone.insert(key(.video, video.id)) }
+        dismissed = gone
+    }
+
+    /// Keys this device has seen in its inbox but not dealt with.
+    ///
+    /// Separate from `dismissed` on purpose: a read row stays in the list, it just stops
+    /// counting as new — the badge is "what arrived since I last looked", and the list is
+    /// "what I have not decided about". Per device, like `dismissed`.
+    private(set) var read: Set<String> {
+        get {
+            access(keyPath: \.read)
+            return Set(UserDefaults.standard.stringArray(forKey: "inbox.read") ?? [])
+        }
+        set {
+            withMutation(keyPath: \.read) {
+                UserDefaults.standard.set(Array(newValue), forKey: "inbox.read")
+            }
+        }
+    }
+
+    func isRead(_ channel: Channel) -> Bool { read.contains(key(.channel, channel.id)) }
+    func isRead(_ video: Video) -> Bool { read.contains(key(.video, video.id)) }
+
+    func setRead(_ channel: Channel, _ isRead: Bool) { mark(key(.channel, channel.id), isRead) }
+    func setRead(_ video: Video, _ isRead: Bool) { mark(key(.video, video.id), isRead) }
+
+    private func mark(_ key: String, _ isRead: Bool) {
+        if isRead { read.insert(key) } else { read.remove(key) }
+    }
+
+    func markAllRead() {
+        let waiting = unclaimedSent
+        var seen = read
+        for channel in waiting.channels { seen.insert(key(.channel, channel.id)) }
+        for video in waiting.videos { seen.insert(key(.video, video.id)) }
+        read = seen
+    }
+
+    /// What the badges show: waiting and not yet read.
+    var unreadCount: Int {
+        let waiting = unclaimedSent
+        let seen = read
+        return waiting.channels.filter { !seen.contains(key(.channel, $0.id)) }.count
+            + waiting.videos.filter { !seen.contains(key(.video, $0.id)) }.count
+    }
 
     /// Keep one thing, which is the same act as taking it off the list.
     ///

@@ -10,7 +10,9 @@ import SwiftUI
 /// Downloads is the downloads drawer — which gains a badge, because on a phone it is the
 /// thing you leave and come back to.
 struct RootView: View {
-    @State private var model = AppModel()
+    @State private var model = AppModel.shared
+    /// Up here with `model` so it survives the rebuild a theme change causes.
+    @State private var pickingTheme = false
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some View {
@@ -64,6 +66,19 @@ struct RootView: View {
                 }
             }
         }
+        // The widgets. Written on the way out as well as in, so they show the phone as it
+        // was left — and whenever what they show changes while the app is open.
+        .onChange(of: scenePhase) { _, phase in
+            if phase == .background { WidgetFeed.shared.update(from: model) }
+        }
+        .onChange(of: model.playback.item?.id) { WidgetFeed.shared.update(from: model) }
+        .onChange(of: ThemeStore.shared.selection) { WidgetFeed.shared.update(from: model) }
+        .onChange(of: RepeatSetting.shared.mode) { WidgetFeed.shared.update(from: model) }
+        .onChange(of: model.library.channels.count) { WidgetFeed.shared.update(from: model) }
+        .onOpenURL { url in
+            guard let link = WidgetLink(url: url) else { return }
+            open(link)
+        }
         .onChange(of: scenePhase) { _, phase in
             guard phase == .active else { return }
             // The icon is matched to the theme on every return to the front, not only
@@ -72,7 +87,52 @@ struct RootView: View {
             // they already match, so iOS only says "icon changed" when it has.
             ThemeChrome.applyIcon(ThemeStore.shared.theme)
             model.applyChildSetup()
-            Task { await model.syncShelf() }
+            Task {
+                await model.syncShelf()
+                WidgetFeed.shared.update(from: model)
+            }
+        }
+    }
+
+    /// Where a widget's tap lands.
+    ///
+    /// Nothing here grants anything the app would not: a video goes through
+    /// `AppModel.play`, which refuses on a minor's phone what is not approved, and search
+    /// is not offered there at all — the scheme is open to any app on the phone, not only
+    /// the widget.
+    private func open(_ link: WidgetLink) {
+        switch link {
+        case .open:
+            break
+        case .resume:
+            if let item = model.playback.item { model.playing = item }
+        case .airplay:
+            // Once the app is on screen: the picker needs a window to present from.
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))
+                RoutePicker.present()
+            }
+        case .video(let id, let title, let channelID, let channelName):
+            var json: [String: Any] = ["id": id, "title": title]
+            if let channelID { json["channel_id"] = channelID }
+            if let channelName { json["channel"] = channelName }
+            let known = model.savedVideos.first { $0.id == id }
+            if let video = known ?? Video(json: json) { model.play(video) }
+        case .channel(let id):
+            guard let channel = model.library.channels.first(where: { $0.id == id }) else { return }
+            model.playing = nil
+            model.tab = .home
+            model.homePath = [channel]
+        case .search:
+            guard !model.isMinor else { return }
+            model.playing = nil
+            model.tab = .search
+            // A beat for the tab to be on screen: a search field that is not in the
+            // window yet cannot take the keyboard.
+            Task {
+                try? await Task.sleep(for: .milliseconds(350))
+                model.searchActive = true
+            }
         }
     }
 
@@ -103,7 +163,7 @@ struct RootView: View {
             if !model.isMinor {
                 InboxView(model: model)
                     .tabItem { Label("Inbox", systemImage: "tray") }
-                    .badge(model.inboxCount)
+                    .badge(model.unreadCount)
                     .tag(AppModel.Tab.inbox)
             }
 
@@ -118,6 +178,31 @@ struct RootView: View {
         .tint(Palette.accent)
         .sheet(item: $model.playing) { item in
             PlayerSheet(model: model, item: item)
+        }
+        .sheet(isPresented: $pickingTheme) {
+            // Closed in the same breath as the switch, so the tree the new theme rebuilds
+            // does not find the sheet still asked for and bring it straight back.
+            ThemeGallery { id in
+                pickingTheme = false
+                ThemeStore.shared.selection = id
+            }
+        }
+        // The Home Screen's Change Theme quick action. `initial` catches the one that
+        // launched the app cold, which lands before this view exists.
+        .onChange(of: QuickActions.shared.pending, initial: true) { _, action in
+            guard action == .changeTheme else { return }
+            QuickActions.shared.pending = nil
+            // One sheet at a time: a video that is open steps down to the Now Playing
+            // bar and keeps playing.
+            if model.playing != nil {
+                model.playing = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    pickingTheme = true
+                }
+            } else {
+                pickingTheme = true
+            }
         }
         .overlay(alignment: .top) { banner }
         .animation(.easeInOut(duration: 0.2), value: model.banner)
@@ -193,6 +278,10 @@ private struct NowPlayingBar: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel(isPlaying ? "Pause" : "Play")
+
+            AirPlayButton()
+                .frame(width: 36, height: 36)
+                .accessibilityLabel("AirPlay")
 
             Button {
                 model.stopPlaying()

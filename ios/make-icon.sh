@@ -97,3 +97,24 @@ for SVG in ../icons/themes/*-ios.svg; do
 JSON
   render "$SVG" "$SET/icon-1024.png"
 done
+
+# Small copies of every icon as plain image sets, for the theme picker the Home Screen
+# quick action opens. An app icon set cannot be loaded as an image, so the picker needs
+# its own. 180px is a 60pt tile at 3x.
+for SET in Support/Assets.xcassets/AppIcon*.appiconset; do
+  NAME="$(basename "$SET" .appiconset)"
+  THEME="${NAME#AppIcon-}"
+  [ "$THEME" = "AppIcon" ] && THEME="classic"
+  OUT="Support/Assets.xcassets/ThemeIcon-$THEME.imageset"
+  mkdir -p "$OUT"
+  sips -Z 180 "$SET/icon-1024.png" --out "$OUT/icon.png" >/dev/null
+  cat > "$OUT/Contents.json" <<JSON
+{
+  "images" : [
+    { "filename" : "icon.png", "idiom" : "universal" }
+  ],
+  "info" : { "author" : "xcode", "version" : 1 }
+}
+JSON
+done
+echo "==> theme picker icons written"

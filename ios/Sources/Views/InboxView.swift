@@ -48,14 +48,39 @@ struct InboxView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarTrailing) {
                     if !isMinor, model.inboxCount > 0 {
-                        Button("Keep All") { model.claimSent() }
-                            .font(.system(size: 16, weight: .semibold))
+                        Menu {
+                            Button("Save All", systemImage: "bookmark") {
+                                withAnimation(.easeOut(duration: 0.2)) { model.claimSent() }
+                            }
+                            Button("Mark All as Read", systemImage: "envelope.open") {
+                                model.markAllRead()
+                            }
+                            .disabled(model.unreadCount == 0)
+                            Divider()
+                            Button("Clear Inbox", systemImage: "xmark.bin", role: .destructive) {
+                                confirmingClear = true
+                            }
+                        } label: {
+                            Image(systemName: "ellipsis.circle")
+                                .font(.system(size: 17, weight: .semibold))
+                        }
                     }
                 }
+            }
+            .confirmationDialog("Clear the inbox?", isPresented: $confirmingClear,
+                                titleVisibility: .visible) {
+                Button("Clear \(model.inboxCount) Items", role: .destructive) {
+                    withAnimation(.easeOut(duration: 0.2)) { model.clearInbox() }
+                }
+            } message: {
+                Text("Nothing is saved. It only leaves this phone's inbox — the sender "
+                     + "still sent it, and nobody else's shelf changes.")
             }
             .task { await model.syncShelf() }
         }
     }
+
+    @State private var confirmingClear = false
 
     /// One pull, held open until the folder has actually settled.
     ///
@@ -128,11 +153,16 @@ struct InboxView: View {
             if !waiting.channels.isEmpty {
                 Section {
                     ForEach(waiting.channels) { channel in
+                        let isRead = model.isRead(channel)
                         HStack(spacing: 8) {
+                            UnreadDot(isRead: isRead)
                             ChannelRow(channel: channel)
                             InboxActions(model: model, channel: channel)
                         }
                         .listRowBackground(Color.card)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            ReadToggle(isRead: isRead) { model.setRead(channel, !isRead) }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 model.dismiss(channel: channel)
@@ -151,17 +181,26 @@ struct InboxView: View {
             if !waiting.videos.isEmpty {
                 Section {
                     ForEach(waiting.videos) { video in
+                        let isRead = model.isRead(video)
                         HStack(spacing: 8) {
+                            UnreadDot(isRead: isRead)
                             // Not a Button around the whole row. The actions live inside
                             // it, and an enclosing Button eats their taps — the same thing
                             // that made the Mac's drawer rows undraggable.
                             VideoRow(video: video, showChannel: true)
                                 .contentShape(Rectangle())
-                                .onTapGesture { model.play(video) }
+                                .onTapGesture {
+                                    // Watching it is reading it.
+                                    model.setRead(video, true)
+                                    model.play(video)
+                                }
 
                             InboxActions(model: model, video: video)
                         }
                         .listRowBackground(Color.card)
+                        .swipeActions(edge: .leading, allowsFullSwipe: true) {
+                            ReadToggle(isRead: isRead) { model.setRead(video, !isRead) }
+                        }
                         .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                             Button(role: .destructive) {
                                 model.dismiss(video: video)
@@ -211,6 +250,17 @@ private struct InboxActions: View {
         return false
     }
 
+    private var isRead: Bool {
+        if let video { return model.isRead(video) }
+        if let channel { return model.isRead(channel) }
+        return false
+    }
+
+    private func setRead(_ value: Bool) {
+        if let video { model.setRead(video, value) }
+        if let channel { model.setRead(channel, value) }
+    }
+
     /// Saving also clears the row. Animated because the row is what you are looking at
     /// when it happens, and something leaving a list without moving reads as a glitch.
     private func save() {
@@ -249,6 +299,11 @@ private struct InboxActions: View {
                     }
                     Divider()
                 }
+                if isRead {
+                    Button("Mark as Unread", systemImage: "envelope.badge") { setRead(false) }
+                } else {
+                    Button("Mark as Read", systemImage: "envelope.open") { setRead(true) }
+                }
                 Button("Remove from Inbox", systemImage: "xmark", role: .destructive) {
                     if let video { model.dismiss(video: video) }
                     if let channel { model.dismiss(channel: channel) }
@@ -264,6 +319,35 @@ private struct InboxActions: View {
             .menuIndicator(.hidden)
             .fixedSize()
         }
+    }
+}
+
+/// The mark on a row that has not been read, as in Mail. A read row keeps the space so
+/// the list does not shift sideways when something is marked.
+private struct UnreadDot: View {
+    let isRead: Bool
+
+    var body: some View {
+        Circle()
+            .fill(Palette.accent)
+            .frame(width: 8, height: 8)
+            .opacity(isRead ? 0 : 1)
+            .accessibilityLabel(isRead ? "" : "Unread")
+            .accessibilityHidden(isRead)
+    }
+}
+
+/// The leading swipe: flip read and unread.
+private struct ReadToggle: View {
+    let isRead: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(isRead ? "Unread" : "Read",
+                  systemImage: isRead ? "envelope.badge" : "envelope.open")
+        }
+        .tint(Palette.accent)
     }
 }
 

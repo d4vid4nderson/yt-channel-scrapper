@@ -310,7 +310,7 @@ PLIST
         <key>bundle-identifier</key><string>$(bundle_id)</string>
         <key>bundle-version</key><string>$number</string>
         <key>kind</key><string>software</string>
-        <key>title</key><string>YT Channel Scraper</string>
+        <key>title</key><string>YT Player</string>
       </dict>
     </dict>
   </array>

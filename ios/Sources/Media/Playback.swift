@@ -97,6 +97,11 @@ final class Playback {
 
     private var task: Task<Void, Never>?
     private var statusWatch: Task<Void, Never>?
+    private var endWatch: Task<Void, Never>?
+
+    /// Told when an item plays to its end, which is where repeat takes over — see
+    /// `AppModel.finished`.
+    var didFinish: (@MainActor (Playable) -> Void)?
     /// Clients whose URLs YouTube has already refused for this item. AVPlayer reports
     /// that refusal long after `resolve` returned, so it has to be remembered here and
     /// fed back in on the next attempt.
@@ -167,6 +172,7 @@ final class Playback {
     private func start(_ item: Playable) {
         task?.cancel()
         statusWatch?.cancel()
+        endWatch?.cancel()
         state = .working(item.file == nil ? "Finding a stream…" : "Opening…")
         let refused = self.refused
 
@@ -214,6 +220,7 @@ final class Playback {
                     isVideo: item.isVideo
                 )
                 self.watch(built.player)
+                self.watchForEnd(built.player, item)
             } catch is CancellationError {
                 Log.preview.info("cancelled \(item.id, privacy: .public)")
             } catch {
@@ -230,11 +237,14 @@ final class Playback {
         task = nil
         statusWatch?.cancel()
         statusWatch = nil
+        endWatch?.cancel()
+        endWatch = nil
         if case .ready(let player) = state {
             player.pause()
             player.replaceCurrentItem(with: nil)
         }
         NowPlaying.shared.end()
+        ThemedPiP.shared.detach()
         Self.releaseAudioSession()
         state = .working("Finding a stream…")
         item = nil
@@ -291,6 +301,18 @@ final class Playback {
                     return
                 }
                 try? await Task.sleep(for: .milliseconds(500))
+            }
+        }
+    }
+
+    private func watchForEnd(_ player: AVPlayer, _ item: Playable) {
+        guard let playerItem = player.currentItem else { return }
+        endWatch = Task { [weak self] in
+            let ends = NotificationCenter.default.notifications(
+                named: AVPlayerItem.didPlayToEndTimeNotification, object: playerItem)
+            for await _ in ends.map({ _ in () }) {
+                guard !Task.isCancelled else { return }
+                self?.didFinish?(item)
             }
         }
     }

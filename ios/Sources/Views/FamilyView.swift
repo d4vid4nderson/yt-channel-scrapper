@@ -271,7 +271,7 @@ struct FamilyView: View {
                     Spacer()
                     Text("\(model.inboxCount)")
                         .font(.system(size: 13).monospacedDigit())
-                        .foregroundStyle(model.inboxCount > 0 ? Palette.accent : Color.secondaryText)
+                        .foregroundStyle(model.unreadCount > 0 ? Palette.accent : Color.secondaryText)
                 }
             }
             .listRowBackground(Color.card)

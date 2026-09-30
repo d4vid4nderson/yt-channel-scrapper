@@ -14,7 +14,7 @@ import Foundation
 enum Paths {
     /// What the user sees. Changed when the app was renamed; deliberately *not* the
     /// same string as `appName` below.
-    static let displayName = "YT Parent Command Center"
+    static let displayName = "YT Player"
 
     /// The name on disk, and only that.
     ///
@@ -31,7 +31,7 @@ enum Paths {
     /// directory on first launch, which is a deliberate change and not a rename.
     static let appName = "YT Channel Scraper"
 
-    /// Visible in Files under "On My iPhone → Command Center".
+    /// Visible in Files under "On My iPhone → YT Player".
     static let downloads: URL = {
         let documents = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)[0]
         return ensure(documents)

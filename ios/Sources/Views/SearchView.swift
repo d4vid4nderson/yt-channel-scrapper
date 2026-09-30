@@ -46,6 +46,7 @@ struct SearchView: View {
             .toolbar { toolbar }
             .searchable(
                 text: $model.urlText,
+                isPresented: $model.searchActive,
                 placement: .navigationBarDrawer(displayMode: .always),
                 prompt: "Video name, channel name, @handle or URL"
             )

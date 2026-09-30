@@ -182,9 +182,19 @@ struct HomeView: View {
     /// Importing, exporting and Minor Mode itself are all the parent's. In Minor Mode the
     /// whole menu is replaced by the one thing a minor's phone needs to offer: a way for
     /// the parent to get back in, which costs a PIN to use and is therefore safe to
-    /// leave in plain sight.
+    /// leave in plain sight. The theme is the exception, offered alongside it: it is
+    /// per phone, touches nothing a parent decided, and is the child's to pick.
     @ToolbarContentBuilder
     private var menu: some ToolbarContent {
+        if model.isMinor {
+            ToolbarItem(placement: .topBarTrailing) {
+                Menu {
+                    themePicker
+                } label: {
+                    Label("Theme", systemImage: "paintpalette")
+                }
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             if model.isMinor {
                 Button("Minor Mode is on", systemImage: "lock.fill") { unlocking = true }
@@ -241,16 +251,18 @@ struct HomeView: View {
 
                     // Per phone: a child's device can wear a different theme from the
                     // parent's, and nothing about it travels with the library.
-                    Menu("Theme", systemImage: "paintpalette") {
-                        Picker("Theme", selection: Bindable(ThemeStore.shared).selection) {
-                            ForEach(Theme.all) { theme in
-                                Text(theme.name).tag(theme.id)
-                            }
-                        }
-                    }
+                    Menu("Theme", systemImage: "paintpalette") { themePicker }
                 } label: {
                     Image(systemName: "ellipsis.circle")
                 }
+            }
+        }
+    }
+
+    private var themePicker: some View {
+        Picker("Theme", selection: Bindable(ThemeStore.shared).selection) {
+            ForEach(Theme.all) { theme in
+                Text(theme.name).tag(theme.id)
             }
         }
     }

@@ -2,6 +2,9 @@ import SwiftUI
 
 @main
 struct YTScraperApp: App {
+    /// Only for the Home Screen quick actions — see `QuickActions`.
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     var body: some Scene {
         WindowGroup {
             RootView()
