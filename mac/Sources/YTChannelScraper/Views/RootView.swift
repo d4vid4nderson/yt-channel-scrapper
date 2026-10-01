@@ -586,7 +586,7 @@ private struct SearchPill: View {
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
                     .foregroundStyle(Palette.onFill)
-                    // Stop/Search/Scrape all fit today. The frame is fixed, so anything
+                    // Stop and Search both fit today. The frame is fixed, so anything
                     // longer would wrap inside the capsule rather than overflow it —
                     // truncating is the failure worth having.
                     .lineLimit(1)
@@ -612,9 +612,11 @@ private struct SearchPill: View {
         .onAppear { if !compact { focused = true } }
     }
 
+    /// "Search" whether the field holds a name or a channel's URL: opening a channel
+    /// reads its kept list and asks YouTube only for what is new, which is a search in
+    /// every sense the person pressing it cares about. The help text still says which.
     private var buttonLabel: String {
-        if model.isBusy { return "Stop" }
-        return model.intent == .search ? "Search" : "Scrape"
+        model.isBusy ? "Stop" : "Search"
     }
 
     private var helpText: String {
