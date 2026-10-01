@@ -29,7 +29,7 @@ struct RootView: View {
     /// remembered between launches. The View menu and the title-bar button both flip it.
     @AppStorage("header.hidden") private var headerHidden = false
     /// The panels as drawers outside the window; see `OuterDrawers`.
-    @State private var drawers = OuterDrawers()
+    private var drawers: OuterDrawers { .shared }
 
     var body: some View {
         VStack(spacing: 0) {

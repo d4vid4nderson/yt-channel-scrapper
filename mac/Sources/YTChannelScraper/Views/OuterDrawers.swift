@@ -17,6 +17,11 @@ import SwiftUI
 final class OuterDrawers {
     enum Kind: CaseIterable { case saved, family, downloads }
 
+    /// One for the app, not one per `RootView`: a theme switch rebuilds the view tree, and
+    /// a controller held in the view's state was rebuilt with it — leaving the old one's
+    /// drawers on screen with nothing left that knew to close them.
+    static let shared = OuterDrawers()
+
     /// How far a drawer tucks behind the window's edge when open, so it reads as coming
     /// out from under it rather than as a window parked alongside.
     private static let tuck: CGFloat = 14
@@ -50,7 +55,8 @@ final class OuterDrawers {
                 let panel = panels[kind] ?? makePanel(kind, content: content(kind))
                 panels[kind] = panel
                 show(kind, panel, in: window)
-            } else if !want, open.contains(kind), let panel = panels[kind] {
+            } else if !want, let panel = panels[kind],
+                      open.contains(kind) || panel.isVisible {
                 hide(kind, panel, in: window)
             }
         }
@@ -181,7 +187,7 @@ final class OuterDrawers {
         panel.animationBehavior = .none
         // The tucked strip plus a margin of its own, so the content has room to breathe
         // beside the window's edge rather than starting right at it.
-        let host = NSHostingView(rootView: DrawerChrome(kind: kind, inset: Self.tuck + 8,
+        let host = FirstClickHostingView(rootView: DrawerChrome(kind: kind, inset: Self.tuck + 8,
                                                         content: content).themed())
         host.sizingOptions = []
         panel.contentView = host
@@ -198,6 +204,13 @@ private extension DrawerChrome {
         case .downloads: .top
         }
     }
+}
+
+/// A click on a drawer acts on the first press, close button included. By default a
+/// click on a window that is not key only makes it key, so the ✕ needed pressing twice
+/// and the drawer seemed not to close.
+final class FirstClickHostingView<Content: View>: NSHostingView<Content> {
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
 /// A borderless panel that can still take typing — the Saved panel's filter, the family
