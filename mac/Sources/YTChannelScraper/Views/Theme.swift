@@ -532,44 +532,45 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// Cyber Mead: Syd Mead's street for Blade Runner, in gouache — acid green and warm
-    /// orange signage over deep olive and night blue, wet pavement throwing it all back.
+    /// Cyber Mead: Syd Mead's street for Blade Runner, in gouache — its night indigo and
+    /// violet for the panels, the lamp's yellow-lime for what matters and the electric
+    /// blue screen for what is chosen (green and orange are Ring World's).
     /// Bruno Ace SC capitals (bundled, OFL), bevelled panels cut on the diagonal.
     static let cyberMead = Theme(
         id: .cyberMead,
         name: "Cyber Mead",
         tagline: "Syd Mead's street, after dark",
         appearance: .dark,
-        ink: hex(0xE8EBD2),
-        accent: hex(0xB8E636),
-        accentHot: hex(0xD2F55C),
-        accent2: hex(0xF0954A),
-        edgeTint: hex(0xB8E636),
-        brand: hex(0xB8E636),
-        ground: hex(0x0A0D09),
-        surface: hex(0x12160F),
-        card: hex(0x161B12).opacity(0.9),
-        field: hex(0x141911),
-        fieldInk: hex(0xE8EBD2),
-        fieldRaised: hex(0x252C1C),
-        onFill: hex(0x0E1404),
-        good: hex(0xB8E636),
+        ink: hex(0xE6E6F2),
+        accent: hex(0xE2E85A),
+        accentHot: hex(0xF0F48A),
+        accent2: hex(0x9A6CF0),
+        edgeTint: hex(0x7A6CD8),
+        brand: hex(0xE2E85A),
+        ground: hex(0x0A0A16),
+        surface: hex(0x12121F),
+        card: hex(0x161628).opacity(0.9),
+        field: hex(0x141424),
+        fieldInk: hex(0xE6E6F2),
+        fieldRaised: hex(0x24243C),
+        onFill: hex(0x14140A),
+        good: hex(0xE2E85A),
         warn: hex(0xF0954A),
-        glow: hex(0xB8E636),
-        glowDeep: hex(0x2E3A12),
-        pickedMid: hex(0x161E0E),
-        pickedFar: hex(0x222E12),
-        pickedEdge: hex(0x3E5218),
-        pickedEdgeHot: hex(0x5A7622),
+        glow: hex(0x7A6CD8),
+        glowDeep: hex(0x241E4A),
+        pickedMid: hex(0x16142A),
+        pickedFar: hex(0x201C3C),
+        pickedEdge: hex(0x3A3270),
+        pickedEdgeHot: hex(0x54489A),
         corners: .chamfered(scale: 0.5),
         edge: .bevel,
         type: Typeface(display: ["BrunoAceSC-Regular"], displayCaps: true, displayTracking: 0.8),
         backdrop: .mead,
-        aurora: [hex(0x2E3A12), hex(0x1C2410), hex(0x142030), hex(0x2E3A12)],
-        lcd: LCD(background: hex(0x060904), ink: hex(0xC8F050), glow: hex(0xB8E636),
+        aurora: [hex(0x241E4A), hex(0x18163A), hex(0x142030), hex(0x241E4A)],
+        lcd: LCD(background: hex(0x07070F), ink: hex(0xE2E85A), glow: hex(0xE2E85A),
                  font: "ShareTechMono-Regular"),
-        // The keyhole sign's orange, where something is lit or chosen.
-        highlight: hex(0xF0954A)
+        // The painting's electric blue screen, where something is lit or chosen.
+        highlight: hex(0x4A8CFF)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
