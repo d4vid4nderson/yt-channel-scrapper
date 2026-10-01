@@ -30,7 +30,7 @@ THEMES = {
     "dune":         ("#6a3a14", "#130c06", "#e0822f", "#1b1007"),
     "middleEarth":  ("#3a2814", "#120c07", "#d9b060", "#120c07"),
     "synthwave":    ("#1e2a2e", "#090a0c", "#ff7a6e", "#ffffff"),
-    "cyberMead":    ("#241e4a", "#0a0a16", "#e2e85a", "#14140a"),
+    "starfighter":  ("#1e1e5a", "#07081a", "#e8303e", "#ffffff"),
     "ringWorld":    ("#26381c", "#0b0f0b", "#7fae3a", "#0a1205"),
     "grid":         ("#04303e", "#000407", "#18e4ff", "#00141a"),
 }
