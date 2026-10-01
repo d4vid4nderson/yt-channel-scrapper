@@ -969,19 +969,21 @@ extension View {
     /// The theme's border treatment round a container whose shape is
     /// `ThemedRect(cornerRadius: radius)`. `lit` is hover or selection: the edge brightens
     /// rather than the container changing shape. Nothing at all in Classic.
-    func themeEdge(radius: CGFloat, lit: Bool = false, seed: Int = 0) -> some View {
-        themeEdge(ThemedRect(cornerRadius: radius, style: .continuous, seed: seed), lit: lit)
+    func themeEdge(radius: CGFloat, lit: Bool = false, seed: Int = 0, quiet: Bool = false) -> some View {
+        themeEdge(ThemedRect(cornerRadius: radius, style: .continuous, seed: seed), lit: lit, quiet: quiet)
     }
 
-    /// The same, round any themed shape — the search pill's `ThemedCapsule`.
-    func themeEdge<S: InsettableShape>(_ shape: S, lit: Bool = false) -> some View {
-        overlay { ThemeEdgeView(shape: shape, lit: lit).allowsHitTesting(false) }
+    /// The same, round any themed shape — the search pill's `ThemedCapsule`. `quiet`
+    /// lights it in the theme's own tint, not its highlight (see `Bevel.quiet`).
+    func themeEdge<S: InsettableShape>(_ shape: S, lit: Bool = false, quiet: Bool = false) -> some View {
+        overlay { ThemeEdgeView(shape: shape, lit: lit, quiet: quiet).allowsHitTesting(false) }
     }
 }
 
 private struct ThemeEdgeView<S: InsettableShape>: View {
     let shape: S
     let lit: Bool
+    var quiet = false
 
     var body: some View {
         let theme = Theme.active
@@ -1038,7 +1040,7 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
                 .frame(width: 22, height: 2)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         case .bevel:
-            Bevel(shape: shape, lit: lit)
+            Bevel(shape: shape, lit: lit, quiet: quiet)
         }
     }
 }
@@ -1182,6 +1184,9 @@ struct Bevel<S: InsettableShape>: View {
     let shape: S
     var lit = false
     var pressed = false
+    /// Lit in the theme's own tint rather than its highlight — a list row, where the
+    /// highlight's orange on every hover was too much.
+    var quiet = false
 
     var body: some View {
         let theme = Theme.active
@@ -1203,9 +1208,9 @@ struct Bevel<S: InsettableShape>: View {
                                startPoint: .top, endPoint: .bottom),
                 lineWidth: 1)
             shape.inset(by: 1.5)
-                .stroke((lit ? theme.litTint : theme.edgeTint).opacity(lit ? 0.7 : 0.28),
+                .stroke((lit && !quiet ? theme.litTint : theme.edgeTint).opacity(lit ? 0.7 : 0.28),
                         lineWidth: lit ? 0.8 : 0.6)
-                .shadow(color: lit && theme.highlight != nil ? theme.litTint.opacity(0.6) : .clear,
+                .shadow(color: lit && !quiet && theme.highlight != nil ? theme.litTint.opacity(0.6) : .clear,
                         radius: 3)
         }
     }

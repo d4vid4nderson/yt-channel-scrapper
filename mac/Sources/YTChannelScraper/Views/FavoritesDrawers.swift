@@ -310,7 +310,7 @@ private struct DrawerChannelRow: View {
                 ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(channel.id))
                     .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(channel.id))
+            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(channel.id), quiet: true)
     }
 }
 
@@ -379,7 +379,7 @@ private struct DrawerVideoRow: View {
                 ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(video.id))
                     .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(video.id))
+            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(video.id), quiet: true)
         .animation(.easeOut(duration: 0.14), value: hovering)
     }
 
