@@ -2316,9 +2316,8 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let trancePicture = picture("trance")
 
     /// The show: the photo with its fire alive — each flame column's glow swelling and
-    /// sinking as flame does, sparks showering down from the top, embers thrown up —
-    /// lasers fanning out from deep on the stage towards the audience (towards you),
-    /// sweeping, and the rig's blue lights breathing. The fire breathes; nothing flashes.
+    /// sinking as flame does, a few embers lifting off its top — the rig's blue lights
+    /// breathing, and stage haze drifting through. Only what the photo has in it.
     private static func mead(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
@@ -2344,35 +2343,6 @@ struct ThemeBackdrop: View {
             light.fill(all, with: .radialGradient(Gradient(colors: [blue.opacity(0.30 * b * k), .clear]),
                                                   center: p, startRadius: 0, endRadius: frame.width * 0.05))
         }
-        // Lasers aimed at the audience: two sources deep on the stage, each throwing a fan
-        // of beams that widen towards the camera and sweep slowly across it.
-        for (n, (x, y)) in [(0.70, 0.30), (0.88, 0.26)].enumerated() {
-            let source = at(x, y)
-            let m = Double(n)
-            let sweep = 0.5 * sin(t * (0.3 + m * 0.08) + m * 2.4)
-            let tint = n == 0 ? blue : th.accent
-            for i in 0..<7 {
-                let a = Double.pi * 0.62 + sweep + (Double(i) - 3) * 0.16
-                let length = max(s.width, s.height) * 1.5
-                let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length * 0.55)
-                // Widening as it comes towards you: a thin wedge, not a line.
-                let dx = end.x - source.x, dy = end.y - source.y
-                let len = max(hypot(dx, dy), 1)
-                let nx = -dy / len, ny = dx / len
-                let w: CGFloat = 7
-                var beam = Path()
-                beam.move(to: source)
-                beam.addLine(to: CGPoint(x: end.x + nx * w, y: end.y + ny * w))
-                beam.addLine(to: CGPoint(x: end.x - nx * w, y: end.y - ny * w))
-                beam.closeSubpath()
-                light.fill(beam, with: .linearGradient(
-                    Gradient(colors: [Color.white.opacity(0.55 * k), tint.opacity(0.35 * k), tint.opacity(0.05 * k)]),
-                    startPoint: source, endPoint: end))
-            }
-            light.fill(Path(ellipseIn: CGRect(x: source.x - 5, y: source.y - 5, width: 10, height: 10)),
-                       with: .radialGradient(Gradient(colors: [Color.white.opacity(0.9 * k), tint.opacity(0.4 * k), .clear]),
-                                             center: source, startRadius: 0, endRadius: 10))
-        }
         // The fire: each column's glow swelling and sinking, irregularly, as flame does.
         for (n, (x, y, r)) in [(0.085, 0.35, 0.10), (0.13, 0.60, 0.09), (0.255, 0.58, 0.07), (0.31, 0.47, 0.08)].enumerated() {
             let m = Double(n)
@@ -2383,26 +2353,31 @@ struct ThemeBackdrop: View {
                                  .init(color: th.accent.opacity(0.18 * breath * k), location: 0.4),
                                  .init(color: .clear, location: 1)]),
                 center: p, startRadius: 0, endRadius: frame.width * CGFloat(r * 1.6)))
-            for i in 0..<14 {
+            // Embers lifting off the top of the column, few and short-lived.
+            let crest = at(x, y - r * 1.6)
+            for i in 0..<6 {
                 var rng = Seeded(state: 0xE3B &+ UInt64(i) &* 7919 &+ UInt64(n) &* 104729)
-                let life = 2 + rng.next() * 2.5
+                let life = 1.5 + rng.next() * 1.5
                 let u = (t / life + rng.next()).truncatingRemainder(dividingBy: 1)
-                let drift = CGFloat(rng.next() - 0.5) * frame.width * 0.06
-                let q = CGPoint(x: p.x + drift * CGFloat(u) + CGFloat(sin(t * 2 + Double(i))) * 4,
-                                y: p.y - frame.height * 0.35 * CGFloat(u))
+                let drift = CGFloat(rng.next() - 0.5) * frame.width * 0.03
+                let q = CGPoint(x: crest.x + drift * CGFloat(u) + CGFloat(sin(t * 2 + Double(i))) * 3,
+                                y: crest.y - frame.height * 0.12 * CGFloat(u))
                 let size = CGFloat(0.8 + rng.next() * 1.6)
                 light.fill(Path(ellipseIn: CGRect(x: q.x - size, y: q.y - size, width: size * 2, height: size * 2)),
                            with: .color(th.accentHot.opacity((1 - u) * 0.8 * k)))
             }
         }
-        // Sparks showering down from the top-left.
-        for i in 0..<40 {
-            var rng = Seeded(state: 0x59A2 &+ UInt64(i) &* 2654435761)
-            let life = 1.8 + rng.next() * 1.8
-            let u = (t / life + rng.next()).truncatingRemainder(dividingBy: 1)
-            let q = at(0.10 + rng.next() * 0.10 + 0.02 * u, rng.next() * 0.05 + 0.4 * u)
-            light.fill(Path(ellipseIn: CGRect(x: q.x - 1.2, y: q.y - 1.2, width: 2.4, height: 2.4)),
-                       with: .color(Color(red: 1, green: 0.85, blue: 0.55).opacity((1 - u) * 0.9 * k)))
+        // Stage haze drifting through, warm near the fire and cool under the rig.
+        for i in 0..<5 {
+            let n = Double(i)
+            let reach = max(s.width, s.height) * CGFloat(0.3 + 0.05 * n.truncatingRemainder(dividingBy: 2))
+            let span = Double(s.width + reach * 2)
+            let x = (n * 0.37 * span + t * (8 + n * 3)).truncatingRemainder(dividingBy: span) - Double(reach)
+            let y = Double(s.height) * (0.3 + 0.12 * n) + 14 * sin(t * 0.1 + n)
+            let tint = i % 2 == 0 ? th.accent : blue
+            c.fill(all, with: .radialGradient(
+                Gradient(colors: [tint.opacity(0.06 * k), .clear]),
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: reach))
         }
     }
 
