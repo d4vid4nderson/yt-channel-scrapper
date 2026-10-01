@@ -90,6 +90,8 @@ struct Theme: Identifiable, @unchecked Sendable {
         var displayWidth: Font.Width = .standard
         var displayCaps = false
         var displayTracking: CGFloat = 0
+        /// Headings lit in the theme's glow, as if the light were on them — Arrakis's sun.
+        var displayGlow = false
 
         /// The display face this device actually has, if any.
         var displayName: String? { display.first(where: Theme.hasFont) }
@@ -326,9 +328,10 @@ extension Theme {
         pickedEdgeHot: hex(0x6A3F1A),
         corners: .facetted(scale: 0.55),
         edge: .bevel,
-        // Syncopate (bundled, Apache): wide, thin capitals, the posters' lettering.
-        type: Typeface(display: ["Syncopate-Regular"], displayWeight: .light,
-                       displayCaps: true, displayTracking: 1),
+        // Josefin Sans Light (bundled, OFL): thin geometric capitals, widely spaced — the
+        // posters' restraint without their stretch.
+        type: Typeface(display: ["JosefinSansRoman-Light"], displayWeight: .light,
+                       displayCaps: true, displayTracking: 2.5, displayGlow: true),
         backdrop: .dunes,
         aurora: [hex(0xE0822F), hex(0xF2B45A), hex(0x8A3C12), hex(0xF7D08A)],
         lcd: LCD(background: hex(0x0E0804), ink: hex(0xF2B45A), glow: hex(0xE0822F),
@@ -1136,10 +1139,13 @@ extension Font {
 extension View {
     /// `Font.display`, with the theme's capitals and spacing.
     func displayType(_ size: CGFloat, classic: Font.Weight = .bold) -> some View {
-        let type = Theme.active.type
+        let theme = Theme.active
+        let type = theme.type
         return font(.display(size, classic: classic))
             .textCase(type.displayCaps ? .uppercase : nil)
             .tracking(type.displayTracking * min(size, 24) / 20)
+            .shadow(color: type.displayGlow ? theme.glow.opacity(0.75) : .clear,
+                    radius: type.displayGlow ? min(size * 0.35, 10) : 0)
     }
 }
 
