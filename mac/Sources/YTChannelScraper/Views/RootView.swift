@@ -33,13 +33,11 @@ struct RootView: View {
                 // handle is where the panel is in every view, and the panel is above the
                 // page so the handle can lie over it.
                 SavedChannelsDrawer(model: model)
-                    .drawerSlot(open: model.showChannelsDrawer, side: .leading)
-                    .overlay(alignment: .trailing) {
+                    .drawerSlot(open: model.showChannelsDrawer, side: .leading) {
                         EdgeTab(edge: .leading, icon: "bookmark.fill",
                                 title: "Saved", shortcut: "⌘1",
                                 isOpen: model.showChannelsDrawer,
                                 toggle: model.toggleChannelsDrawer)
-                            .alignmentGuide(.trailing) { $0[.leading] }
                     }
                     .zIndex(1)
 
@@ -50,8 +48,7 @@ struct RootView: View {
                         updater: model.updater,
                         isPresented: $model.showDownloads
                     )
-                    .bottomDrawerSlot(open: model.showDownloads)
-                    .overlay(alignment: .top) {
+                    .bottomDrawerSlot(open: model.showDownloads) {
                         // A dot, not a tally: that something is running is the part
                         // worth a mark, and the panel one click away has the numbers.
                         EdgeTab(edge: .bottom, icon: "arrow.down.circle.fill",
@@ -59,19 +56,16 @@ struct RootView: View {
                                 busy: model.downloader.activeCount > 0,
                                 isOpen: model.showDownloads,
                                 toggle: model.toggleDownloads)
-                            .alignmentGuide(.top) { $0[.bottom] }
                     }
                     .zIndex(1)
                 }
 
                 FamilyDrawer(model: model)
-                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
-                    .overlay(alignment: .leading) {
+                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing) {
                         EdgeTab(edge: .trailing, icon: "person.2.fill",
                                 title: "Family", shortcut: "⌘3",
                                 isOpen: model.showFamilyDrawer,
                                 toggle: model.toggleFamilyDrawer)
-                            .alignmentGuide(.leading) { $0[.trailing] }
                     }
                     .zIndex(1)
             }

@@ -11,8 +11,8 @@ import SwiftUI
 /// and hairline, flush against its edge, square where it joins and rounded only where it
 /// sticks out — so with the panel open it reads as the panel's tab, and with it closed as
 /// the panel's edge peeking out of the window. It sits one point over the seam to cover
-/// the panel's hairline there, which is what makes the two one outline. The chevron points
-/// the way a click will move the panel.
+/// the panel's hairline there, which is what makes the two one outline. It lives inside
+/// the panel's slot (`drawerSlot(open:side:tab:)`), so the two move as one.
 struct EdgeTab: View {
     enum Edge { case leading, trailing, bottom }
 
@@ -27,32 +27,32 @@ struct EdgeTab: View {
 
     @State private var hovering = false
 
+    /// How far a tab sticks out from its panel, and how long it is along the edge. Close to
+    /// square on purpose: a tall sliver read as a scrollbar rather than as a handle.
+    static let depth: CGFloat = 26
+    static let length: CGFloat = 32
+
     var body: some View {
         let shape = TabShape(edge: edge, closed: true)
         Button(action: toggle) {
-            stack {
-                Image(systemName: icon)
-                    .font(.system(size: 12, weight: .medium))
-                    .overlay(alignment: .topTrailing) {
-                        if busy {
-                            Circle()
-                                .fill(Palette.accent)
-                                .frame(width: 5, height: 5)
-                                .offset(x: 3, y: -2)
-                        }
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .overlay(alignment: .topTrailing) {
+                    if busy {
+                        Circle()
+                            .fill(Palette.accent)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 3, y: -2)
                     }
-                Image(systemName: chevron)
-                    .font(.system(size: 8, weight: .bold))
-                    .opacity(0.6)
-            }
-            .foregroundStyle(isOpen ? Palette.accent : Palette.ink(hovering ? 0.95 : 0.65))
-            .frame(width: size.width, height: size.height)
-            .background { Palette.sheetSurface.clipShape(shape) }
-            .overlay {
-                TabShape(edge: edge, closed: false)
-                    .stroke(Palette.ink(hovering ? 0.32 : 0.2), lineWidth: 1)
-            }
-            .contentShape(shape)
+                }
+                .foregroundStyle(isOpen ? Palette.accent : Palette.ink(hovering ? 0.95 : 0.65))
+                .frame(width: size.width, height: size.height)
+                .background { Palette.sheetSurface.clipShape(shape) }
+                .overlay {
+                    TabShape(edge: edge, closed: false)
+                        .stroke(Palette.ink(hovering ? 0.32 : 0.2), lineWidth: 1)
+                }
+                .contentShape(shape)
         }
         .buttonStyle(.plain)
         .help("\(isOpen ? "Close" : "Open") \(title)  (\(shortcut))")
@@ -64,7 +64,8 @@ struct EdgeTab: View {
     }
 
     private var size: CGSize {
-        edge == .bottom ? CGSize(width: 56, height: 20) : CGSize(width: 20, height: 56)
+        edge == .bottom ? CGSize(width: Self.length, height: Self.depth)
+                        : CGSize(width: Self.depth, height: Self.length)
     }
 
     /// Over the panel's hairline by its own width.
@@ -75,24 +76,39 @@ struct EdgeTab: View {
         case .bottom:   CGSize(width: 0, height: 1)
         }
     }
+}
 
-    /// Which way the panel will move: out from its edge when closed, back into it when open.
-    private var chevron: String {
-        switch (edge, isOpen) {
-        case (.leading, false), (.trailing, true): "chevron.right"
-        case (.leading, true), (.trailing, false): "chevron.left"
-        case (.bottom, false): "chevron.up"
-        case (.bottom, true):  "chevron.down"
+extension View {
+    /// `drawerSlot`, with the panel's tab inside the same sliding frame.
+    ///
+    /// The tab was once an overlay on the slot, and the two animated as separate layers:
+    /// the tab got to where it was going and the panel caught up. Here the tab is laid out
+    /// beside the panel in one row that the slot reveals, so they are one view and cannot
+    /// part. The slot is the tab's depth wider than the panel and gives that depth back to
+    /// the page with a negative padding, so the page's width is what it always was.
+    func drawerSlot(open: Bool, side: DrawerSide,
+                    @ViewBuilder tab: () -> some View) -> some View {
+        let depth = EdgeTab.depth
+        return HStack(spacing: 0) {
+            if side == .trailing { tab().frame(width: depth) }
+            frame(width: Layout.drawerWidth)
+            if side == .leading { tab().frame(width: depth) }
         }
+        .frame(width: (open ? Layout.drawerWidth : 0) + depth, alignment: side.innerEdge)
+        .clipped()
+        .padding(side == .leading ? .trailing : .leading, -depth)
     }
 
-    @ViewBuilder
-    private func stack(@ViewBuilder _ content: () -> some View) -> some View {
-        if edge == .bottom {
-            HStack(spacing: 5, content: content)
-        } else {
-            VStack(spacing: 4, content: content)
+    /// The same for the Downloads panel, rising from the bottom with its tab on top.
+    func bottomDrawerSlot(open: Bool, @ViewBuilder tab: () -> some View) -> some View {
+        let depth = EdgeTab.depth
+        return VStack(spacing: 0) {
+            tab().frame(height: depth)
+            frame(height: Layout.downloadsHeight)
         }
+        .frame(height: (open ? Layout.downloadsHeight : 0) + depth, alignment: .top)
+        .clipped()
+        .padding(.top, -depth)
     }
 }
 
