@@ -24,13 +24,18 @@ struct RootView: View {
     /// kept. Nothing is dimmed, because nothing is blocked.
     private var isClassic: Bool { Theme.active.id == .classic }
     @State private var isFullScreen = false
+    /// The panels as drawers outside the window; see `OuterDrawers`.
+    @State private var drawers = OuterDrawers()
 
     var body: some View {
         VStack(spacing: 0) {
             if themedFullScreen { fullScreenBar }
             HStack(spacing: 0) {
+                // Inline only in full screen, where there is no outside for the drawers to
+                // slide into. Everywhere else they come out from behind the window and the
+                // page keeps its size.
                 SavedChannelsDrawer(model: model)
-                    .drawerSlot(open: model.showChannelsDrawer, side: .leading)
+                    .drawerSlot(open: isFullScreen && model.showChannelsDrawer, side: .leading)
 
                 VStack(spacing: 0) {
                     page
@@ -39,11 +44,11 @@ struct RootView: View {
                         updater: model.updater,
                         isPresented: $model.showDownloads
                     )
-                    .bottomDrawerSlot(open: model.showDownloads)
+                    .bottomDrawerSlot(open: isFullScreen && model.showDownloads)
                 }
 
                 FamilyDrawer(model: model)
-                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
+                    .drawerSlot(open: isFullScreen && model.showFamilyDrawer, side: .trailing)
             }
 
             // Its own module, full width, between the page and the footer: the window
@@ -88,6 +93,14 @@ struct RootView: View {
         .animation(Layout.drawerEase, value: model.showFamilyDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
         .toolbar(themedFullScreen ? .hidden : .visible, for: .windowToolbar)
+        .background(WindowReader { window in
+            drawers.attach(to: window)
+            syncDrawers()
+        })
+        .onChange(of: model.showChannelsDrawer) { syncDrawers() }
+        .onChange(of: model.showFamilyDrawer) { syncDrawers() }
+        .onChange(of: model.showDownloads) { syncDrawers() }
+        .onChange(of: isFullScreen) { syncDrawers() }
         // Read back on appearing as well: a theme change rebuilds this view mid-full-screen.
         .onAppear {
             isFullScreen = NSApp.windows.contains { $0.styleMask.contains(.fullScreen) }
@@ -200,6 +213,28 @@ struct RootView: View {
             // And one for the app itself. Quiet too — if there is nothing, nothing is
             // said; if there is, a pill appears in the chrome and waits to be noticed.
             await model.appUpdater.check()
+        }
+    }
+
+    /// Open or shut the outside drawers to match the model — all shut in full screen,
+    /// where the inline slots take over.
+    private func syncDrawers() {
+        let outside = !isFullScreen
+        drawers.sync([
+            .saved: outside && model.showChannelsDrawer,
+            .family: outside && model.showFamilyDrawer,
+            .downloads: outside && model.showDownloads,
+        ]) { kind in
+            switch kind {
+            case .saved: AnyView(SavedChannelsDrawer(model: model))
+            case .family: AnyView(FamilyDrawer(model: model))
+            case .downloads:
+                AnyView(DownloadsDrawer(
+                    downloader: model.downloader,
+                    updater: model.updater,
+                    isPresented: Binding(get: { model.showDownloads },
+                                         set: { model.showDownloads = $0 })))
+            }
         }
     }
 
