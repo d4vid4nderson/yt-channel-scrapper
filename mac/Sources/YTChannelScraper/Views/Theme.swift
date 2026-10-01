@@ -1895,8 +1895,28 @@ struct ThemeBackdrop: View {
 
     /// Light cycles: a few trails of light drawn low across the dark, each on its own
     /// lane and at its own pace, one in the second colour. The horizon is only a glow.
+    /// The Grid's picture: `Backdrop-grid.jpg`, family build only.
+    nonisolated(unsafe) private static let gridPicture = picture("grid")
+
+    /// Lines in the Grid picture that light runs along, as (near end, far end) in
+    /// fractions of the picture — measured off it: the road's lane lines running to the
+    /// gate, and the beams rising from the gate into the sky.
+    private static let gridRoads: [((Double, Double), (Double, Double))] = [
+        ((0.260, 1.0), (0.500, 0.521)), ((0.386, 1.0), (0.498, 0.528)),
+        ((0.512, 1.0), (0.514, 0.521)), ((0.624, 1.0), (0.528, 0.521)),
+        ((0.116, 1.0), (0.430, 0.600)),
+    ]
+    private static let gridBeams: [((Double, Double), (Double, Double))] = [
+        ((0.475, 0.36), (0.31, 0.0)), ((0.49, 0.36), (0.40, 0.0)),
+        ((0.54, 0.36), (0.66, 0.0)), ((0.555, 0.36), (0.70, 0.0)),
+    ]
+
     private static func grid(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
+        if let picture = gridPicture {
+            gridScene(&c, s, th, picture, k, t)
+            return
+        }
         horizonGlow(&c, s, th.accent, k * 0.6, height: 0.4)
         // Low lanes, under where the page's content sits, so a trail does not cross a card.
         for (lane, lap, leftward, second) in [(0.86, 9.0, false, false), (0.92, 13.0, true, true),
@@ -1916,6 +1936,70 @@ struct ThemeBackdrop: View {
             c.fill(Path(rect.insetBy(dx: 0, dy: -3)), with: .linearGradient(
                 Gradient(colors: [.clear, color.opacity(0.12 * k)]),
                 startPoint: CGPoint(x: start, y: y), endPoint: CGPoint(x: head, y: y)))
+        }
+    }
+
+    /// The picture, with the city running: pulses of light racing up the lane lines into
+    /// the distance — quick and large near, small and slow far off, as perspective has it
+    /// — more climbing the beams into the sky, the gate's light breathing, and haze
+    /// drifting across the horizon.
+    private static func gridScene(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+                                  _ picture: Image, _ k: Double, _ t: Double) {
+        let all = Path(CGRect(origin: .zero, size: s))
+        let frame = drawPicture(&c, s, picture, k, t)
+        c.fill(all, with: .color(th.ground.opacity(0.3)))
+        func at(_ p: (Double, Double)) -> CGPoint {
+            CGPoint(x: frame.minX + frame.width * p.0, y: frame.minY + frame.height * p.1)
+        }
+        var light = c
+        light.blendMode = .plusLighter
+        let white = Color(red: 0.85, green: 0.98, blue: 1)
+        // The gate.
+        let gate = at((0.515, 0.42))
+        let breathe = 0.75 + 0.25 * sin(t * 0.6)
+        light.fill(all, with: .radialGradient(
+            Gradient(colors: [white.opacity(0.22 * breathe * k), th.accent.opacity(0.08 * k), .clear]),
+            center: gate, startRadius: 0, endRadius: frame.width * 0.12))
+        // Pulses along a line, from its near end to its far end.
+        func run(_ line: ((Double, Double), (Double, Double)), count: Int, lap: Double, size: CGFloat,
+                 offset: Double) {
+            let near = at(line.0), far = at(line.1)
+            for n in 0..<count {
+                let u = ((t + offset) / lap + Double(n) / Double(count)).truncatingRemainder(dividingBy: 1)
+                // Fast near, slowing into the distance.
+                let e = 1 - pow(1 - u, 2.2)
+                let head = CGPoint(x: near.x + (far.x - near.x) * e, y: near.y + (far.y - near.y) * e)
+                let back = max(0, e - 0.08 * (1 - e) - 0.01)
+                let tail = CGPoint(x: near.x + (far.x - near.x) * back, y: near.y + (far.y - near.y) * back)
+                let r = size * CGFloat(1 - e * 0.85)
+                let fade = min(1, u * 8) * min(1, (1 - u) * 6)
+                var streak = Path()
+                streak.move(to: tail)
+                streak.addLine(to: head)
+                light.stroke(streak, with: .linearGradient(
+                    Gradient(colors: [.clear, white.opacity(0.9 * fade * k)]),
+                    startPoint: tail, endPoint: head), lineWidth: max(0.8, r * 0.5))
+                light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                           with: .radialGradient(Gradient(colors: [white.opacity(0.85 * fade * k),
+                                                                   th.accent.opacity(0.35 * fade * k), .clear]),
+                                                 center: head, startRadius: 0, endRadius: r))
+            }
+        }
+        for (i, road) in gridRoads.enumerated() {
+            run(road, count: 2, lap: 2.6 + Double(i) * 0.55, size: 9, offset: Double(i) * 0.7)
+        }
+        for (i, beam) in gridBeams.enumerated() {
+            run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3)
+        }
+        // Haze across the horizon, drifting.
+        for i in 0..<5 {
+            let n = Double(i)
+            let span = Double(s.width) * 1.6
+            let x = (n * 0.37 * span + t * (10 + n * 4)).truncatingRemainder(dividingBy: span) - Double(s.width) * 0.3
+            let center = CGPoint(x: x, y: Double(at((0.5, 0.44 + 0.04 * n)).y))
+            c.fill(all, with: .radialGradient(
+                Gradient(colors: [th.accent.opacity(0.07 * k), .clear]),
+                center: center, startRadius: 0, endRadius: frame.width * 0.22))
         }
     }
 
