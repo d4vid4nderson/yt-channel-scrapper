@@ -23,7 +23,7 @@ import UIKit
 struct Theme: Identifiable, @unchecked Sendable {
 
     enum ID: String, CaseIterable, Identifiable, Sendable {
-        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, starfighter
+        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, trance
         var id: String { rawValue }
     }
 
@@ -197,7 +197,7 @@ extension Theme {
         case .synthwave: synthwave
         case .grid: grid
         case .ringWorld: ringWorld
-        case .starfighter: starfighter
+        case .trance: trance
         }
     }
 
@@ -532,46 +532,46 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// The Last Starfighter, in the arcade cabinet's colours: black with its red and
-    /// blue-violet racing stripes, and the posters' deep blue running into magenta.
-    /// Red for what matters, the cabinet's blue where something is lit or chosen, a
-    /// magenta glow, and Audiowide's 1984 arcade capitals (bundled, OFL). Bevelled
-    /// panels cut on the diagonal, like the Gunstar's hull plates.
-    static let starfighter = Theme(
-        id: .starfighter,
-        name: "The Last Starfighter",
-        tagline: "Greetings, Starfighter",
+    /// Armin van Buuren, live: the stage between columns of fire, the rig lit blue. Fire
+    /// amber for what matters, the rig's blue where something is lit or chosen, neon
+    /// edges, glowing Audiowide capitals.
+    /// (The id is "trance"; the theme took over A State of Trance's slot.)
+    static let trance = Theme(
+        id: .trance,
+        name: "Armin Live",
+        tagline: "Armin van Buuren, live on stage",
         appearance: .dark,
-        ink: hex(0xEDEAF6),
-        accent: hex(0xE8303E),
-        accentHot: hex(0xFF5A66),
-        accent2: hex(0xE64FB0),
-        edgeTint: hex(0x5C66E8),
-        brand: hex(0xE8303E),
-        ground: hex(0x07081A),
-        surface: hex(0x0E1026),
-        card: hex(0x121534).opacity(0.9),
-        field: hex(0x10132E),
-        fieldInk: hex(0xEDEAF6),
-        fieldRaised: hex(0x20244C),
-        onFill: .white,
-        good: hex(0x5C9CF8),
-        warn: hex(0xF0B04A),
-        glow: hex(0xE64FB0),
-        glowDeep: hex(0x1E1E5A),
-        pickedMid: hex(0x16123A),
-        pickedFar: hex(0x24124A),
-        pickedEdge: hex(0x3C3A8A),
-        pickedEdgeHot: hex(0x5C56B8),
+        ink: hex(0xF6ECE0),
+        accent: hex(0xFF7A1E),
+        accentHot: hex(0xFFA04A),
+        accent2: hex(0x3A7CFF),
+        edgeTint: hex(0xFF7A1E),
+        brand: hex(0xFF7A1E),
+        ground: hex(0x0C0604),
+        surface: hex(0x160C08),
+        card: hex(0x1C100A).opacity(0.9),
+        field: hex(0x190E09),
+        fieldInk: hex(0xF6ECE0),
+        fieldRaised: hex(0x2E1A10),
+        onFill: hex(0x1A0A02),
+        good: hex(0x5A9CFF),
+        warn: hex(0xFF5A3A),
+        glow: hex(0xFF7A1E),
+        glowDeep: hex(0x4A1E0A),
+        pickedMid: hex(0x201008),
+        pickedFar: hex(0x30160A),
+        pickedEdge: hex(0x5A2A12),
+        pickedEdgeHot: hex(0x82401A),
         corners: .chamfered(scale: 0.5),
-        edge: .bevel,
-        type: Typeface(display: ["Audiowide-Regular"], displayCaps: true, displayTracking: 0.8),
+        edge: .neon,
+        type: Typeface(display: ["Audiowide-Regular"], displayCaps: true, displayTracking: 0.8,
+                       displayGlow: true),
         backdrop: .mead,
-        aurora: [hex(0x1E1E5A), hex(0x3A1450), hex(0x101A40), hex(0x1E1E5A)],
-        lcd: LCD(background: hex(0x05061A), ink: hex(0x8AA0FF), glow: hex(0x5C66E8),
+        aurora: [hex(0x4A1E0A), hex(0x2E1208), hex(0x1E0C06), hex(0x4A1E0A)],
+        lcd: LCD(background: hex(0x0A0402), ink: hex(0xFFB04A), glow: hex(0xFF7A1E),
                  font: "ShareTechMono-Regular"),
-        // The cabinet's blue stripe.
-        highlight: hex(0x5C66E8)
+        // The rig's blue.
+        highlight: hex(0x3A7CFF)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -599,9 +599,9 @@ extension Theme {
         private let lock = NSLock()
         private var theme: Theme = {
             // Themes since removed carry over to the one that took their slot: the
-            // Nostromos, Retrofuture / Hologram and Cyber Mead to The Last Starfighter.
+            // Nostromos, Retrofuture / Hologram, Cyber Mead and The Last Starfighter to Armin Live.
             let saved = UserDefaults.standard.string(forKey: Theme.defaultsKey)
-                .map { ["nostromo", "nostromoTeal", "cyberMead"].contains($0) ? ID.starfighter.rawValue : $0 }
+                .map { ["nostromo", "nostromoTeal", "cyberMead", "starfighter"].contains($0) ? ID.trance.rawValue : $0 }
             return Theme.named(saved.flatMap(ID.init(rawValue:)) ?? .classic)
         }()
 
@@ -2310,81 +2310,99 @@ struct ThemeBackdrop: View {
         }
     }
 
-    // MARK: The Last Starfighter
+    // MARK: Armin Live
 
-    /// The Last Starfighter's picture: `Backdrop-starfighter.jpg`, family build only.
-    nonisolated(unsafe) private static let starfighterPicture = picture("starfighter")
+    /// The stage picture: `Backdrop-trance.jpg`, family build only.
+    nonisolated(unsafe) private static let trancePicture = picture("trance")
 
-    /// The Gunstar lifting off: spray billowing up from under its thrusters, the green
-    /// beacons pulsing, light shimmering on the sea and the stars twinkling. Darkened
-    /// over all, since the painting is pale and the page sits on it.
+    /// The show: the photo with its fire alive — each flame column's glow swelling and
+    /// sinking as flame does, sparks showering down from the top, embers thrown up —
+    /// lasers fanning out from deep on the stage towards the audience (towards you),
+    /// sweeping, and the rig's blue lights breathing. The fire breathes; nothing flashes.
     private static func mead(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
-        guard let picture = starfighterPicture else {
-            horizonGlow(&c, s, th.glowDeep, k, height: 0.5)
-            return
+        var frame = CGRect(origin: .zero, size: s)
+        if let picture = trancePicture {
+            frame = drawPicture(&c, s, picture, k, t)
+            c.fill(all, with: .linearGradient(
+                Gradient(stops: [.init(color: th.ground.opacity(0.45), location: 0),
+                                 .init(color: th.ground.opacity(0.2), location: 0.5),
+                                 .init(color: th.ground.opacity(0.4), location: 1)]),
+                startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
         }
-        let frame = drawPicture(&c, s, picture, k, t)
         func at(_ x: Double, _ y: Double) -> CGPoint {
             CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
         }
-        let spray = Color(red: 0.92, green: 0.95, blue: 0.97)
-        // Spray billowing up from the sea under each thruster.
-        for (n, (x, y)) in [(0.60, 0.80), (0.86, 0.82)].enumerated() {
-            for i in 0..<7 {
-                let life = 2.2 + Double(i % 3) * 0.6
-                let p = (t / life + Double(i) / 7 + Double(n) * 0.3).truncatingRemainder(dividingBy: 1)
-                var rng = Seeded(state: 0x5B12 &+ UInt64(i) &* 977 &+ UInt64(n) &* 7919)
-                let base = at(x + (rng.next() - 0.5) * 0.06, y)
-                let point = CGPoint(x: base.x + CGFloat(rng.next() - 0.5) * frame.width * 0.05 * CGFloat(p),
-                                    y: base.y - frame.height * 0.16 * CGFloat(p))
-                let r = frame.width * CGFloat(0.02 + 0.05 * p)
-                c.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                       with: .radialGradient(Gradient(colors: [spray.opacity(0.30 * sin(.pi * p) * k), .clear]),
-                                             center: point, startRadius: 0, endRadius: r))
-            }
-        }
-        // The pale painting turned to the posters' night: deep blue over the sky running
-        // into magenta low down, then darkened under the page.
-        var tone = c
-        tone.blendMode = .color
-        tone.fill(all, with: .linearGradient(
-            Gradient(colors: [th.glowDeep.opacity(0.7), th.accent2.opacity(0.35)]),
-            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
-        c.fill(all, with: .linearGradient(
-            Gradient(stops: [.init(color: th.ground.opacity(0.55), location: 0),
-                             .init(color: th.ground.opacity(0.35), location: 0.5),
-                             .init(color: th.ground.opacity(0.45), location: 1)]),
-            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
         var light = c
         light.blendMode = .plusLighter
-        // The beacons, pulsing out of step.
-        for (i, (x, y, r)) in [(0.762, 0.66, 0.035), (0.258, 0.60, 0.02), (0.13, 0.43, 0.012)].enumerated() {
-            let pulse = 0.5 + 0.5 * sin(t * 1.4 + Double(i) * 2.1)
+        let blue = th.accent2
+        // The rig's blue lights, breathing.
+        for (i, (x, y)) in [(0.39, 0.02), (0.63, 0.22), (0.77, 0.04), (0.72, 0.15), (0.97, 0.19), (0.22, 0.31)].enumerated() {
+            let b = 0.5 + 0.5 * sin(t * 0.9 + Double(i) * 1.7)
+            let p = at(x, y)
+            light.fill(all, with: .radialGradient(Gradient(colors: [blue.opacity(0.30 * b * k), .clear]),
+                                                  center: p, startRadius: 0, endRadius: frame.width * 0.05))
+        }
+        // Lasers aimed at the audience: two sources deep on the stage, each throwing a fan
+        // of beams that widen towards the camera and sweep slowly across it.
+        for (n, (x, y)) in [(0.70, 0.30), (0.88, 0.26)].enumerated() {
+            let source = at(x, y)
+            let m = Double(n)
+            let sweep = 0.5 * sin(t * (0.3 + m * 0.08) + m * 2.4)
+            let tint = n == 0 ? blue : th.accent
+            for i in 0..<7 {
+                let a = Double.pi * 0.62 + sweep + (Double(i) - 3) * 0.16
+                let length = max(s.width, s.height) * 1.5
+                let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length * 0.55)
+                // Widening as it comes towards you: a thin wedge, not a line.
+                let dx = end.x - source.x, dy = end.y - source.y
+                let len = max(hypot(dx, dy), 1)
+                let nx = -dy / len, ny = dx / len
+                let w: CGFloat = 7
+                var beam = Path()
+                beam.move(to: source)
+                beam.addLine(to: CGPoint(x: end.x + nx * w, y: end.y + ny * w))
+                beam.addLine(to: CGPoint(x: end.x - nx * w, y: end.y - ny * w))
+                beam.closeSubpath()
+                light.fill(beam, with: .linearGradient(
+                    Gradient(colors: [Color.white.opacity(0.55 * k), tint.opacity(0.35 * k), tint.opacity(0.05 * k)]),
+                    startPoint: source, endPoint: end))
+            }
+            light.fill(Path(ellipseIn: CGRect(x: source.x - 5, y: source.y - 5, width: 10, height: 10)),
+                       with: .radialGradient(Gradient(colors: [Color.white.opacity(0.9 * k), tint.opacity(0.4 * k), .clear]),
+                                             center: source, startRadius: 0, endRadius: 10))
+        }
+        // The fire: each column's glow swelling and sinking, irregularly, as flame does.
+        for (n, (x, y, r)) in [(0.085, 0.35, 0.10), (0.13, 0.60, 0.09), (0.255, 0.58, 0.07), (0.31, 0.47, 0.08)].enumerated() {
+            let m = Double(n)
+            let breath = 0.65 + 0.20 * sin(t * 1.7 + m) + 0.10 * sin(t * 3.1 + m * 2) + 0.05 * sin(t * 5.3 + m)
             let p = at(x, y)
             light.fill(all, with: .radialGradient(
-                Gradient(colors: [th.accent2.opacity(0.45 * pulse * k), th.accent2.opacity(0.08 * k), .clear]),
-                center: p, startRadius: 0, endRadius: frame.width * r))
+                Gradient(stops: [.init(color: th.accentHot.opacity(0.32 * breath * k), location: 0),
+                                 .init(color: th.accent.opacity(0.18 * breath * k), location: 0.4),
+                                 .init(color: .clear, location: 1)]),
+                center: p, startRadius: 0, endRadius: frame.width * CGFloat(r * 1.6)))
+            for i in 0..<14 {
+                var rng = Seeded(state: 0xE3B &+ UInt64(i) &* 7919 &+ UInt64(n) &* 104729)
+                let life = 2 + rng.next() * 2.5
+                let u = (t / life + rng.next()).truncatingRemainder(dividingBy: 1)
+                let drift = CGFloat(rng.next() - 0.5) * frame.width * 0.06
+                let q = CGPoint(x: p.x + drift * CGFloat(u) + CGFloat(sin(t * 2 + Double(i))) * 4,
+                                y: p.y - frame.height * 0.35 * CGFloat(u))
+                let size = CGFloat(0.8 + rng.next() * 1.6)
+                light.fill(Path(ellipseIn: CGRect(x: q.x - size, y: q.y - size, width: size * 2, height: size * 2)),
+                           with: .color(th.accentHot.opacity((1 - u) * 0.8 * k)))
+            }
         }
-        // Light shimmering on the sea.
-        for i in 0..<14 {
-            let n = Double(i)
-            var rng = Seeded(state: 0x5EA &+ UInt64(i) &* 2654435761)
-            let x = rng.next(), y = 0.86 + rng.next() * 0.12
-            let glint = max(0, sin(t * (1 + rng.next()) + n * 1.9))
-            let p = at(x, y)
-            let w = frame.width * CGFloat(0.02 + rng.next() * 0.03)
-            light.fill(Path(ellipseIn: CGRect(x: p.x - w / 2, y: p.y - 1, width: w, height: 2)),
-                       with: .color(spray.opacity(0.35 * glint * k)))
-        }
-        // Stars twinkling over the moon's sky.
-        var stars = Seeded(state: 0x1984)
+        // Sparks showering down from the top-left.
         for i in 0..<40 {
-            let p = at(stars.next(), stars.next() * 0.45)
-            let tw = max(0, sin(t * (0.7 + stars.next()) + Double(i) * 2.3))
-            light.fill(Path(ellipseIn: CGRect(x: p.x - 1, y: p.y - 1, width: 2, height: 2)),
-                       with: .color(Color.white.opacity(0.6 * tw * k)))
+            var rng = Seeded(state: 0x59A2 &+ UInt64(i) &* 2654435761)
+            let life = 1.8 + rng.next() * 1.8
+            let u = (t / life + rng.next()).truncatingRemainder(dividingBy: 1)
+            let q = at(0.10 + rng.next() * 0.10 + 0.02 * u, rng.next() * 0.05 + 0.4 * u)
+            light.fill(Path(ellipseIn: CGRect(x: q.x - 1.2, y: q.y - 1.2, width: 2.4, height: 2.4)),
+                       with: .color(Color(red: 1, green: 0.85, blue: 0.55).opacity((1 - u) * 0.9 * k)))
         }
     }
 
