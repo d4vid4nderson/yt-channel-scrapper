@@ -2140,12 +2140,17 @@ struct ThemeBackdrop: View {
                 var flicker = Seeded(state: 0xF1A5 &+ shot &* 104729)
                 if shot % 2 == 0, flicker.next() > 0.2 {
                     let level = 0.6 + flicker.next() * 0.4
-                    let tip = CGPoint(x: frame.minX + frame.width * 0.167, y: frame.minY + frame.height * 0.690)
+                    // In a window narrower than the picture its sides are cropped and the
+                    // barrel's tip can fall past the left edge; the flash is held just
+                    // inside it then, its light spilling in from the gun out of view.
+                    let tip = CGPoint(x: max(frame.minX + frame.width * 0.167, 4),
+                                      y: frame.minY + frame.height * 0.690)
                     let flame = Color(red: 1, green: 0.85, blue: 0.5)
                     let r = frame.width * 0.009
-                    light.fill(Path(ellipseIn: CGRect(x: tip.x - r * 2, y: tip.y - r * 2, width: r * 4, height: r * 4)),
-                               with: .radialGradient(Gradient(colors: [flame.opacity(0.55 * level * k), .clear]),
-                                                     center: tip, startRadius: 0, endRadius: r * 2))
+                    light.fill(Path(ellipseIn: CGRect(x: tip.x - r * 3, y: tip.y - r * 3, width: r * 6, height: r * 6)),
+                               with: .radialGradient(Gradient(colors: [flame.opacity(0.6 * level * k),
+                                                                       flame.opacity(0.18 * level * k), .clear]),
+                                                     center: tip, startRadius: 0, endRadius: r * 3))
                     // The flame, out along the barrel (up and to the left).
                     var spike = c
                     spike.blendMode = .plusLighter
