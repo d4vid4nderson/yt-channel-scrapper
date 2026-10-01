@@ -141,7 +141,7 @@ struct ChromeButtonStyle: ButtonStyle {
                 return enabled ? .clear : Palette.ink(0.08)
             case .secondary:
                 if isOn { return Palette.accent.opacity(0.4) }
-                if themed { return Theme.active.edgeTint.opacity(lit ? 0.7 : 0.32) }
+                if themed { return (lit ? Theme.active.litTint : Theme.active.edgeTint).opacity(lit ? 0.7 : 0.32) }
                 return Palette.ink(lit ? 0.16 : 0.10)
             case .ghost:
                 return .clear
@@ -247,8 +247,8 @@ struct ChromeSegmented<Option: Hashable>: View {
         @ViewBuilder
         private func thumbFill(_ shape: ThemedRect) -> some View {
             if Theme.active.id != .classic {
-                shape.fill(Theme.active.edgeTint.opacity(0.16))
-                    .overlay { shape.strokeBorder(Theme.active.edgeTint.opacity(0.6), lineWidth: 1) }
+                shape.fill(Theme.active.litTint.opacity(0.16))
+                    .overlay { shape.strokeBorder(Theme.active.litTint.opacity(0.6), lineWidth: 1) }
             } else if scheme == .dark {
                 shape.fill(Palette.ink(0.14))
                     .overlay { shape.strokeBorder(Palette.ink(0.08), lineWidth: 1) }

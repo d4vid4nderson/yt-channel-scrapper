@@ -151,6 +151,11 @@ struct Theme: Identifiable, @unchecked Sendable {
     let aurora: [Color]
     /// Nil in Classic, which has no skin to set a display into.
     let lcd: LCD?
+    /// What a lit panel's inner rule and a chosen segment glow in — hover, focus,
+    /// selection — where it is not `edgeTint`. Dune's Water of Life teal.
+    var highlight: Color? = nil
+
+    var litTint: Color { highlight ?? edgeTint }
 
     var colorScheme: ColorScheme? {
         switch appearance {
@@ -299,8 +304,8 @@ extension Theme {
     )
 
     /// Arrakis at dusk. Umber and sand, spice orange for anything that matters, and the
-    /// Water of Life's glowing teal as the rare second colour — what is done and safe,
-    /// and the odd drop drifting through the storm. Thin, spaced capitals.
+    /// Water of Life's glowing teal as the rare second colour, in the interface only: what
+    /// is lit (hovered, focused, chosen) and what is done. Thin, spaced capitals.
     static let dune = Theme(
         id: .dune,
         name: "Dune",
@@ -336,7 +341,8 @@ extension Theme {
         backdrop: .dunes,
         aurora: [hex(0xE0822F), hex(0xF2B45A), hex(0x8A3C12), hex(0xF7D08A)],
         lcd: LCD(background: hex(0x0E0804), ink: hex(0xF2B45A), glow: hex(0xE0822F),
-                 font: "Jura-Medium")
+                 font: "Jura-Medium"),
+        highlight: hex(0x3FE6D2)
     )
 
     /// A page from the Red Book, bound in Rivendell. Sepia ink on parchment, gilt rules,
@@ -988,7 +994,10 @@ struct Bevel<S: InsettableShape>: View {
                                startPoint: .top, endPoint: .bottom),
                 lineWidth: 1)
             shape.inset(by: 1.5)
-                .stroke(theme.edgeTint.opacity(lit ? 0.55 : 0.28), lineWidth: 0.6)
+                .stroke((lit ? theme.litTint : theme.edgeTint).opacity(lit ? 0.7 : 0.28),
+                        lineWidth: lit ? 0.8 : 0.6)
+                .shadow(color: lit && theme.highlight != nil ? theme.litTint.opacity(0.6) : .clear,
+                        radius: 3)
         }
     }
 }
@@ -1510,10 +1519,8 @@ struct ThemeBackdrop: View {
             let y = tall - (far.next() * tall + t * rise).truncatingRemainder(dividingBy: tall) - 20
             let glint = 0.5 + 0.5 * sin(t * (0.4 + far.next() * 0.5) + far.next() * 6)
             let r = 0.8 + far.next() * 1.2
-            // One in ten is a drop of the Water of Life.
-            let water = far.next() < 0.1
             glow.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
-                      with: .color((water ? th.accent2 : th.accent).opacity((0.15 + 0.35 * glint) * k)))
+                      with: .color(th.accent.opacity((0.15 + 0.35 * glint) * k)))
         }
         // Near spice: few, large, soft and quick, bobbing as they pass the lens.
         var near = Seeded(state: 0x5B1CE)
@@ -1524,14 +1531,8 @@ struct ThemeBackdrop: View {
             let y = near.next() * Double(s.height) + 26 * sin(t * (0.5 + near.next() * 0.5) + near.next() * 6)
             let r = CGFloat(3 + near.next() * 5)
             let point = CGPoint(x: x, y: y)
-            // One in five glows teal — the Water of Life — a little brighter, with a hot
-            // centre, so it reads as lit from inside rather than as more spice.
-            let water = near.next() < 0.2
-            let colors: [Color] = water
-                ? [Color.white.opacity(0.35 * k), th.accent2.opacity(0.5 * k), .clear]
-                : [th.accentHot.opacity(0.32 * k), .clear]
             glow.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                      with: .radialGradient(Gradient(colors: colors),
+                      with: .radialGradient(Gradient(colors: [th.accentHot.opacity(0.32 * k), .clear]),
                                             center: point, startRadius: 0, endRadius: r))
         }
     }
