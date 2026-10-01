@@ -5,19 +5,38 @@
 # together here, because what makes this an app rather than a binary is mostly the
 # three vendored executables in Resources plus an Info.plist.
 #
-#   ./build-mac-app.sh          just the .app
-#   ./build-mac-app.sh --dmg    also wrap it in a DMG for distribution
+#   ./build-mac-app.sh                 just the .app
+#   ./build-mac-app.sh --dmg           also wrap it in a DMG for distribution
+#   ./build-mac-app.sh --shared [--dmg]
+#                                      the edition for other people: no family features
+#                                      (see Edition.swift), its own bundle id, ad-hoc
+#                                      signed so it opens on any Mac, in dist-mac/shared
 set -euo pipefail
 cd "$(dirname "$0")"
 
 WANT_DMG=
-[ "${1:-}" = "--dmg" ] && WANT_DMG=1
+SHARED=
+for arg in "$@"; do
+  case "$arg" in
+    --dmg)    WANT_DMG=1 ;;
+    --shared) SHARED=1 ;;
+    *) echo "build-mac-app.sh: unknown option $arg" >&2; exit 2 ;;
+  esac
+done
 
 APP_NAME="YT Command Center"
 BUNDLE_ID="com.d4vid4nderson.ytchannelscraper"
 # Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
-VERSION="${VERSION:-2.4.1}"
+VERSION="${VERSION:-2.5.0}"
 OUT="dist-mac"
+EDITION_KEY=""
+if [ -n "$SHARED" ]; then
+  # A bundle id of its own, so the family's updater never takes it (it checks the id)
+  # and it never shares preferences with the family build on the same Mac.
+  BUNDLE_ID="com.d4vid4nderson.ytcommandcenter.shared"
+  OUT="dist-mac/shared"
+  EDITION_KEY="<key>YTCSEdition</key><string>shared</string>"
+fi
 APP="$OUT/$APP_NAME.app"
 
 # --- vendored binaries ---
@@ -143,6 +162,7 @@ cat > "$APP/Contents/Info.plist" <<PLIST
   <key>NSHighResolutionCapable</key><true/>
   <key>NSHumanReadableCopyright</key><string>Local use only.</string>
   <key>NSSupportsAutomaticTermination</key><false/>
+  $EDITION_KEY
 
   <!-- The exported library: its own type, so the Finder gives it an icon and a
        double-click opens it here rather than in a text editor. -->
@@ -204,6 +224,12 @@ if [ -f mac/Local.signing.env ]; then
   YTCS_MAC_PROFILE="${_profile:-${YTCS_MAC_PROFILE:-}}"
 fi
 IDENTITY="${YTCS_MAC_IDENTITY:--}"
+# The shared edition is always ad-hoc: the family's certificate and profile only cover
+# this family's Macs, and a copy signed with them will not open anywhere else.
+if [ -n "$SHARED" ]; then
+  IDENTITY="-"
+  YTCS_MAC_PROFILE=""
+fi
 
 # The team id lives in ios/Local.xcconfig, which is gitignored, rather than being written
 # down a second time here.
@@ -267,7 +293,9 @@ echo "==> done: $APP ($SIZE)"
 # while mounted, then converted to UDZO.
 # Named for the version and the architecture, because that is what the in-app updater
 # looks for on a release: it picks the .dmg matching the machine it is running on.
-DMG_NAME="YT-Channel-Scraper-$VERSION-$(uname -m).dmg"
+# The shared edition's name carries "shared", which is how each updater tells the two
+# apart on one release (see AppUpdater.disk).
+DMG_NAME="YT-Channel-Scraper-$VERSION-${SHARED:+shared-}$(uname -m).dmg"
 DMG="$OUT/$DMG_NAME"
 RW="$OUT/$APP_NAME.rw.dmg"
 echo "==> building the DMG"

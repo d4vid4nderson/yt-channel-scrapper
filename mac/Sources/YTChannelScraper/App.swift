@@ -56,8 +56,10 @@ struct YTChannelScraperApp: App {
                     .keyboardShortcut("1", modifiers: .command)
                 Button("Downloads") { model.toggleDownloads() }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("Users") { model.toggleFamilyDrawer() }
-                    .keyboardShortcut("3", modifiers: .command)
+                if Edition.isFamily {
+                    Button("Users") { model.toggleFamilyDrawer() }
+                        .keyboardShortcut("3", modifiers: .command)
+                }
                 Divider()
                 Button("Export Library…") { model.exportLibrary() }
                 Button("Import Library…") { model.importLibrary() }

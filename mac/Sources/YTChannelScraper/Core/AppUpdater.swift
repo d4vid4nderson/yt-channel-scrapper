@@ -124,6 +124,10 @@ final class AppUpdater {
         let images = assets.compactMap { asset -> (name: String, url: URL)? in
             guard let name = asset["name"] as? String,
                   name.lowercased().hasSuffix(".dmg"),
+                  // One release carries both editions; each takes only its own. Taking
+                  // the other's would be refused later anyway (a different bundle id),
+                  // but as a failed update rather than the right one.
+                  name.lowercased().contains(Edition.diskTag) == Edition.isShared,
                   let string = asset["browser_download_url"] as? String,
                   let url = URL(string: string)
             else { return nil }

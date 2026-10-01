@@ -421,7 +421,7 @@ struct RootView: View {
                     .padding(.bottom, 4)
                     // What is going on, before anything has been typed. A search box with
                     // a row of chips under it was not a command centre; this is.
-                    CommandBoard(model: model)
+                    if Edition.isFamily { CommandBoard(model: model) }
                     Spacer(minLength: 0)
                     Spacer(minLength: 0)   // sits the block a little above centre
                 }
@@ -485,9 +485,11 @@ private struct PanelSwitches: View {
             Switch(icon: "bookmark", title: "Saved", isOn: model.showChannelsDrawer,
                    help: "\(model.showChannelsDrawer ? "Close" : "Open") Saved  (⌘1)",
                    action: model.toggleChannelsDrawer)
-            Switch(icon: "person.2", title: "Users", isOn: model.showFamilyDrawer,
-                   help: "\(model.showFamilyDrawer ? "Close" : "Open") Users  (⌘3)",
-                   action: model.toggleFamilyDrawer)
+            if Edition.isFamily {
+                Switch(icon: "person.2", title: "Users", isOn: model.showFamilyDrawer,
+                       help: "\(model.showFamilyDrawer ? "Close" : "Open") Users  (⌘3)",
+                       action: model.toggleFamilyDrawer)
+            }
         }
         .padding(Chrome.trackInset)
         .frame(height: Chrome.large)
@@ -933,7 +935,7 @@ private struct ResultsList: View {
             preview: { model.openCard(video) },
             openCard: { model.openCard(video) },
             toggleSaved: { model.toggleSaved(video) },
-            shelfMenu: ShelfMenu(model: model, video: video)
+            shelfMenu: Edition.isFamily ? ShelfMenu(model: model, video: video) : nil
         )
         .id(video.id)
     }

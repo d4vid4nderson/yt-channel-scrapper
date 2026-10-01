@@ -94,6 +94,8 @@ final class AppModel {
     /// this machine comes back to the front — the other guardian's device writes into
     /// that folder and nothing here is notified.
     func syncShelf() async {
+        // The shared edition has no family, and no folder to read one from.
+        guard Edition.isFamily else { return }
         await shelf.refresh()
         if profiles.guardian == nil, let known = shelf.lastKnownGuardian {
             Log.profiles.notice("recovered this Mac's guardian from its own device record")
@@ -667,6 +669,7 @@ extension AppModel {
     }
 
     func openFamilyDrawer() {
+        guard Edition.isFamily else { return }
         showChannelsDrawer = false
         showFamilyDrawer = true
     }
