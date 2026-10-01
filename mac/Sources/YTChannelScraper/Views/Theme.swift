@@ -347,8 +347,8 @@ extension Theme {
 
     /// The map in Bag End's study, by candlelight: dark aged paper, sepia ink gone pale
     /// with age, gilt rules, oxblood for what you press, and the light pooled in the
-    /// middle of the page with the edges falling into shadow. Headings in Eagle Lake's
-    /// broad-pen hand where the app carries it, Baskerville otherwise.
+    /// middle of the page with the edges falling into shadow. Headings in Uncial
+    /// Antiqua's map hand where the app carries it, Baskerville otherwise.
     static let middleEarth = Theme(
         id: .middleEarth,
         name: "Middle-earth",
@@ -380,9 +380,9 @@ extension Theme {
         // The skin's bevel with its gilt rule, not a knot in every corner: on every row,
         // card and button at once that was a page of swirls.
         edge: .bevel,
-        // Eagle Lake (bundled, OFL): broad-pen lettering, the map's own hand. In its own
-        // capitals and lower case, as the map is lettered, not set in all caps.
-        type: Typeface(design: .serif, display: ["EagleLake-Regular", "Baskerville-SemiBold"],
+        // Uncial Antiqua (bundled, OFL): the rounded uncial hand the map is lettered in.
+        // In its own capitals and lower case, as the map is, not set in all caps.
+        type: Typeface(design: .serif, display: ["UncialAntiqua-Regular", "Baskerville-SemiBold"],
                        displayCaps: false, displayTracking: 0.3, displayGlow: true),
         backdrop: .parchment,
         aurora: [hex(0xC9883A), hex(0xE0B060), hex(0x5A3416), hex(0xEAD7A8)],
