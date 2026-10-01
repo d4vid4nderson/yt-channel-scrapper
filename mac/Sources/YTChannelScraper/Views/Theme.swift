@@ -23,7 +23,7 @@ import UIKit
 struct Theme: Identifiable, @unchecked Sendable {
 
     enum ID: String, CaseIterable, Identifiable, Sendable {
-        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, nostromoTeal
+        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, cyberMead
         var id: String { rawValue }
     }
 
@@ -57,10 +57,6 @@ struct Theme: Identifiable, @unchecked Sendable {
         case glitch
         /// Only the corners, as a targeting reticle draws them.
         case brackets
-        /// An instrument panel's marking: a hairline, a ruler of ticks along the top edge
-        /// and a short tab of the accent at its head — the labelled panels of 2001, Alien
-        /// and Moon.
-        case instrument
         /// `accent` running into `accent2` along the edge, and glowing.
         case gradient
         /// A short bar of `edgeTint` on the leading end of the top edge — a glyph mark.
@@ -72,7 +68,7 @@ struct Theme: Identifiable, @unchecked Sendable {
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, ringWorld, space, scanlines }
+    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, ringWorld, mead, scanlines }
 
     /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
     /// into the panel, its own lettering colour, and a little of that colour's light.
@@ -201,7 +197,7 @@ extension Theme {
         case .synthwave: synthwave
         case .grid: grid
         case .ringWorld: ringWorld
-        case .nostromoTeal: nostromoTeal
+        case .cyberMead: cyberMead
         }
     }
 
@@ -536,45 +532,44 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// Hologram: the Prometheus bridge — deep blue-black, glowing cyan wireframe, holo
-    /// green where something is chosen, small red markers. Thin glowing rules with small
-    /// cut corners, Electrolize capitals (bundled, OFL), a terminal face in the readouts.
-    /// (The id is the old teal Nostromo's, so a saved choice carries over.)
-    static let nostromoTeal = Theme(
-        id: .nostromoTeal,
-        name: "Hologram",
-        tagline: "The bridge's holographic map",
+    /// Cyber Mead: Syd Mead's street for Blade Runner, in gouache — acid green and warm
+    /// orange signage over deep olive and night blue, wet pavement throwing it all back.
+    /// Bruno Ace SC capitals (bundled, OFL), bevelled panels cut on the diagonal.
+    static let cyberMead = Theme(
+        id: .cyberMead,
+        name: "Cyber Mead",
+        tagline: "Syd Mead's street, after dark",
         appearance: .dark,
-        ink: hex(0xD2F6FA),
-        accent: hex(0x2FD8F0),
-        accentHot: hex(0x7CEBFA),
-        accent2: hex(0x5CF08A),
-        edgeTint: hex(0x2FD8F0),
-        brand: hex(0x2FD8F0),
-        ground: hex(0x030A10),
-        surface: hex(0x07131B),
-        card: hex(0x0A1822).opacity(0.9),
-        field: hex(0x081620),
-        fieldInk: hex(0xD2F6FA),
-        fieldRaised: hex(0x123040),
-        onFill: hex(0x021018),
-        good: hex(0x5CF08A),
-        warn: hex(0xFF5A6A),
-        glow: hex(0x2FD8F0),
-        glowDeep: hex(0x0B3448),
-        pickedMid: hex(0x08202A),
-        pickedFar: hex(0x0E3040),
-        pickedEdge: hex(0x1A5468),
-        pickedEdgeHot: hex(0x2A7890),
-        corners: .chamfered(scale: 0.6),
-        edge: .neon,
-        type: Typeface(display: ["Electrolize-Regular"], displayCaps: true, displayTracking: 1.6),
-        backdrop: .space,
-        aurora: [hex(0x0B3448), hex(0x08202A), hex(0x061620), hex(0x0B3448)],
-        lcd: LCD(background: hex(0x02070B), ink: hex(0x7CEBFA), glow: hex(0x2FD8F0),
+        ink: hex(0xE8EBD2),
+        accent: hex(0xB8E636),
+        accentHot: hex(0xD2F55C),
+        accent2: hex(0xF0954A),
+        edgeTint: hex(0xB8E636),
+        brand: hex(0xB8E636),
+        ground: hex(0x0A0D09),
+        surface: hex(0x12160F),
+        card: hex(0x161B12).opacity(0.9),
+        field: hex(0x141911),
+        fieldInk: hex(0xE8EBD2),
+        fieldRaised: hex(0x252C1C),
+        onFill: hex(0x0E1404),
+        good: hex(0xB8E636),
+        warn: hex(0xF0954A),
+        glow: hex(0xB8E636),
+        glowDeep: hex(0x2E3A12),
+        pickedMid: hex(0x161E0E),
+        pickedFar: hex(0x222E12),
+        pickedEdge: hex(0x3E5218),
+        pickedEdgeHot: hex(0x5A7622),
+        corners: .chamfered(scale: 0.5),
+        edge: .bevel,
+        type: Typeface(display: ["BrunoAceSC-Regular"], displayCaps: true, displayTracking: 0.8),
+        backdrop: .mead,
+        aurora: [hex(0x2E3A12), hex(0x1C2410), hex(0x142030), hex(0x2E3A12)],
+        lcd: LCD(background: hex(0x060904), ink: hex(0xC8F050), glow: hex(0xB8E636),
                  font: "ShareTechMono-Regular"),
-        // Holo green, where something is lit or chosen.
-        highlight: hex(0x5CF08A)
+        // The keyhole sign's orange, where something is lit or chosen.
+        highlight: hex(0xF0954A)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -601,9 +596,10 @@ extension Theme {
     private final class Box: @unchecked Sendable {
         private let lock = NSLock()
         private var theme: Theme = {
-            // The green Nostromo is gone; its choice carries over to the teal one.
+            // Themes since removed carry over: the Nostromos (and Retrofuture / Hologram,
+            // which had the teal one's id) to Cyber Mead, which took that slot.
             let saved = UserDefaults.standard.string(forKey: Theme.defaultsKey)
-                .map { $0 == "nostromo" ? ID.nostromoTeal.rawValue : $0 }
+                .map { ["nostromo", "nostromoTeal"].contains($0) ? ID.cyberMead.rawValue : $0 }
             return Theme.named(saved.flatMap(ID.init(rawValue:)) ?? .classic)
         }()
 
@@ -1001,8 +997,6 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
                 // At rest, one quiet rule. The signal only breaks up when you reach for it.
                 shape.strokeBorder(theme.ink.opacity(0.2), lineWidth: 1)
             }
-        case .instrument:
-            InstrumentEdge(shape: shape, lit: lit)
         case .brackets:
             Brackets(length: 9)
                 .stroke(theme.edgeTint.opacity(lit ? 1 : 0.7),
@@ -1020,36 +1014,6 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 }
 
 // MARK: - Skin chrome
-
-/// Retrofuture's panel marking, after Moon's screens: a crisp rule in the screen's cyan
-/// (the accent when lit), a solid square block in the top-leading corner and a small
-/// two-by-two checkerboard in the top-trailing one.
-private struct InstrumentEdge<S: InsettableShape>: View {
-    let shape: S
-    let lit: Bool
-
-    var body: some View {
-        let theme = Theme.active
-        let rule = lit ? theme.litTint : theme.edgeTint
-        ZStack {
-            shape.strokeBorder(rule.opacity(lit ? 0.8 : 0.35), lineWidth: 1)
-                .shadow(color: rule.opacity(lit ? 0.5 : 0.15), radius: lit ? 4 : 2)
-            Canvas { c, size in
-                guard size.width > 50, size.height > 22 else { return }
-                let block: CGFloat = size.height > 60 ? 6 : 4
-                c.fill(Path(CGRect(x: 3, y: 3, width: block, height: block)),
-                       with: .color((lit ? theme.litTint : theme.edgeTint).opacity(0.9)))
-                let cell = block / 2
-                let x0 = size.width - 3 - block, y0: CGFloat = 3
-                for (dx, dy) in [(0, 0), (1, 1)] {
-                    c.fill(Path(CGRect(x: x0 + CGFloat(dx) * cell, y: y0 + CGFloat(dy) * cell,
-                                       width: cell, height: cell)),
-                           with: .color(theme.edgeTint.opacity(0.7)))
-                }
-            }
-        }
-    }
-}
 
 /// The chosen plate in a marked theme (Ring World) — a switch, a segment: the dark armour
 /// plate with real depth, a brighter green glowing at the top and falling away, a sheen
@@ -1459,7 +1423,7 @@ struct ThemeBackdrop: View {
             case .parchment: Self.parchment(&context, size, theme, k, t)
             case .glitch: Self.glitch(&context, size, theme, k, t)
             case .ringWorld: Self.ringWorld(&context, size, theme, k, t)
-            case .space: Self.space(&context, size, theme, k, t)
+            case .mead: Self.mead(&context, size, theme, k, t)
             case .grid: Self.grid(&context, size, theme, k, t)
             case .scanlines where glass:
                 Self.scanlines(&context, size, theme, k * 0.45, t, glow: false)
@@ -2323,94 +2287,62 @@ struct ThemeBackdrop: View {
         }
     }
 
-    // MARK: Retrofuture
+    // MARK: Cyber Mead
 
-    /// Outside the window: stars at three depths drifting past, and the room's screens
-    /// lighting the glass a little — soft cyan pooling in from two edges, breathing.
-    /// Hologram's picture: `Backdrop-retrofuture.jpg`, family build only.
-    nonisolated(unsafe) private static let stationPicture = picture("retrofuture")
+    /// Cyber Mead's picture: `Backdrop-cyberMead.jpg`, family build only.
+    nonisolated(unsafe) private static let meadPicture = picture("cyberMead")
 
-    private static func space(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
-                              _ k: Double, _ t: Double) {
+    /// The street: the painting with its signs glowing and breathing (each on its own
+    /// slow cycle), their reflections shimmering in the wet road, and fine rain falling
+    /// through the lamplight. Without the picture, the rain on the dark.
+    private static func mead(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+                             _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
-        if let picture = stationPicture {
-            // The bridge: the picture under its own hologram working — the green rings
-            // turning about their column, a scan line sweeping across the map, the red
-            // markers pulsing, and the whole projection breathing a little.
+        if let picture = meadPicture {
             let frame = drawPicture(&c, s, picture, k, t)
-            c.fill(all, with: .color(th.ground.opacity(0.22)))
+            c.fill(all, with: .color(th.ground.opacity(0.25)))
             func at(_ x: Double, _ y: Double) -> CGPoint {
                 CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
             }
             var light = c
             light.blendMode = .plusLighter
-            // Rings: bright arcs travelling round the column's rings, each ring its own pace.
-            let column = at(0.265, 0.55)
-            for (i, (y, rx, ry)) in [(0.42, 0.17, 0.025), (0.48, 0.18, 0.028), (0.61, 0.20, 0.032),
-                                     (0.66, 0.21, 0.034), (0.71, 0.20, 0.03)].enumerated() {
-                let centre = CGPoint(x: column.x, y: frame.minY + frame.height * y)
-                let a = frame.width * rx, b = frame.height * ry
-                let speed = 0.5 + Double(i) * 0.13
-                let head = (t * speed + Double(i) * 1.3).truncatingRemainder(dividingBy: 2 * .pi)
-                var arc = Path()
-                for step in 0...24 {
-                    let th0 = head - Double(step) * 0.05
-                    let p = CGPoint(x: centre.x + a * CGFloat(cos(th0)), y: centre.y + b * CGFloat(sin(th0)))
-                    step == 0 ? arc.move(to: p) : arc.addLine(to: p)
+            // Signs: the green tube, the orange keyhole, the street lamp, the left screen.
+            let signs: [(Double, Double, Double, Color)] = [
+                (0.31, 0.46, 0.09, th.accent), (0.425, 0.56, 0.10, th.accent2),
+                (0.86, 0.37, 0.07, th.accentHot), (0.05, 0.55, 0.10, Theme.hex(0x4A7CF0)),
+            ]
+            for (i, (x, y, r, tint)) in signs.enumerated() {
+                let breathe = 0.55 + 0.45 * sin(t * (0.6 + Double(i) * 0.17) + Double(i) * 1.9)
+                let p = at(x, y)
+                light.fill(all, with: .radialGradient(
+                    Gradient(colors: [tint.opacity(0.22 * breathe * k), .clear]),
+                    center: p, startRadius: 0, endRadius: frame.width * r))
+                // Its reflection: a stretched shimmer on the road below.
+                let road = frame.minY + frame.height * 0.93
+                for band in 0..<6 {
+                    let wobble = CGFloat(sin(t * 2.3 + Double(band) * 1.4 + Double(i))) * frame.width * 0.006
+                    let yb = road + CGFloat(band) * frame.height * 0.012
+                    let w = frame.width * CGFloat(r) * 0.8
+                    light.fill(Path(ellipseIn: CGRect(x: p.x - w / 2 + wobble, y: yb, width: w, height: 3)),
+                               with: .color(tint.opacity(0.16 * breathe * k * (1 - Double(band) / 6))))
                 }
-                light.stroke(arc, with: .color(th.accent2.opacity(0.55 * k)),
-                             style: StrokeStyle(lineWidth: 2, lineCap: .round))
-                light.drawLayer { glow in
-                    glow.addFilter(.blur(radius: 4))
-                    glow.stroke(arc, with: .color(th.accent2.opacity(0.4 * k)), lineWidth: 5)
-                }
-            }
-            // The scan: a soft band of cyan sweeping left to right over the map, then again.
-            let sweep = (t / 7).truncatingRemainder(dividingBy: 1)
-            let x = frame.minX + frame.width * CGFloat(-0.1 + sweep * 1.2)
-            let band = CGRect(x: x - frame.width * 0.03, y: frame.minY + frame.height * 0.3,
-                              width: frame.width * 0.06, height: frame.height * 0.7)
-            light.fill(Path(band), with: .linearGradient(
-                Gradient(colors: [.clear, th.accent.opacity(0.16 * k), .clear]),
-                startPoint: CGPoint(x: band.minX, y: 0), endPoint: CGPoint(x: band.maxX, y: 0)))
-            // The red markers, pulsing out of step.
-            for (i, (mx, my)) in [(0.158, 0.40), (0.41, 0.605), (0.555, 0.865), (0.018, 0.84), (0.675, 0.655)].enumerated() {
-                let pulse = 0.5 + 0.5 * sin(t * 2.2 + Double(i) * 1.7)
-                let p = at(mx, my)
-                let r = frame.width * 0.018
-                light.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
-                           with: .radialGradient(Gradient(colors: [th.warn.opacity(0.5 * pulse * k), .clear]),
-                                                 center: p, startRadius: 0, endRadius: r))
-            }
-            // The projection breathing.
-            let breathe = 0.5 + 0.5 * sin(t * 0.6)
-            light.fill(all, with: .radialGradient(
-                Gradient(colors: [th.accent.opacity(0.07 * breathe * k), .clear]),
-                center: at(0.35, 0.65), startRadius: 0, endRadius: frame.width * 0.4))
-            return
-        }
-        for (layer, count, speed, size, weight) in [(0, 220, 2.0, 0.8, 0.35), (1, 90, 6.0, 1.2, 0.5),
-                                                     (2, 30, 14.0, 1.8, 0.7)] {
-            var rng = Seeded(state: 0x2001 &+ UInt64(layer) &* 977)
-            for _ in 0..<count {
-                let span = Double(s.width + 10)
-                let x = (rng.next() * span - t * speed).truncatingRemainder(dividingBy: span)
-                let xx = x < 0 ? x + span : x
-                let y = rng.next() * Double(s.height)
-                let r = size * (0.6 + rng.next() * 0.6)
-                c.fill(Path(ellipseIn: CGRect(x: xx - 5, y: y, width: r, height: r)),
-                       with: .color(th.ink.opacity(weight * (0.5 + rng.next() * 0.5) * k)))
             }
         }
-        var light = c
-        light.blendMode = .plusLighter
-        for (i, (x, y, r)) in [(0.0, 1.0, 0.7), (1.0, 0.0, 0.55)].enumerated() {
-            let breathe = 0.8 + 0.2 * sin(t * 0.2 + Double(i) * 2)
-            light.fill(all, with: .radialGradient(
-                Gradient(colors: [th.glow.opacity(0.10 * breathe * k), .clear]),
-                center: CGPoint(x: s.width * x, y: s.height * y), startRadius: 0,
-                endRadius: max(s.width, s.height) * r))
+        // Fine rain, on a slight slant, brighter in the lamplight.
+        let slant = 0.12
+        var rng = Seeded(state: 0x5ED)
+        var streaks = Path()
+        for _ in 0..<Int(s.width * s.height / 3200) {
+            let x0 = rng.next() * (s.width + s.height * slant)
+            let len = 10 + rng.next() * 14
+            let v = 700 + rng.next() * 300
+            let span = s.height + len
+            let y = (rng.next() * span + t * v).truncatingRemainder(dividingBy: span) - len
+            let x = x0 - y * slant
+            streaks.move(to: CGPoint(x: x, y: y))
+            streaks.addLine(to: CGPoint(x: x - len * slant, y: y + len))
         }
+        c.stroke(streaks, with: .color(th.ink.opacity(0.10 * k)), lineWidth: 0.7)
     }
 
     // MARK: Nostromo

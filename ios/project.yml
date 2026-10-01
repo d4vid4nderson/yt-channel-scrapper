@@ -187,7 +187,7 @@ targets:
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # One per theme, switched to with the theme — see ThemeChrome.applyIcon and
         # make-icon.sh, which generates them.
-        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-bladeRunner AppIcon-dune AppIcon-middleEarth AppIcon-synthwave AppIcon-grid AppIcon-ringWorld AppIcon-nostromoTeal"
+        ASSETCATALOG_COMPILER_ALTERNATE_APPICON_NAMES: "AppIcon-bladeRunner AppIcon-dune AppIcon-middleEarth AppIcon-synthwave AppIcon-grid AppIcon-ringWorld AppIcon-cyberMead"
         ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME: AccentColor
         TARGETED_DEVICE_FAMILY: "1,2"    # iPhone and iPad
 
