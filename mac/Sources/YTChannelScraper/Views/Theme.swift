@@ -1943,9 +1943,9 @@ struct ThemeBackdrop: View {
         }
     }
 
-    /// The picture, with the city running: pulses of light racing up the lane lines into
-    /// the distance — quick and large near, small and slow far off, as perspective has it
-    /// — more climbing the beams into the sky, the gate's light breathing, and haze
+    /// The picture, with the city running: light cycles racing up the lane lines into the
+    /// distance, each dragging its long wall of light — quick and large near, small and
+    /// slow far off, as perspective has it — more climbing the beams into the sky, the gate's light breathing, and haze
     /// drifting across the horizon.
     private static func gridScene(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ picture: Image, _ k: Double, _ t: Double) {
@@ -1967,38 +1967,50 @@ struct ThemeBackdrop: View {
         // Pulses along a line, from its near end to its far end.
         let orange = th.accent2
         func run(_ line: ((Double, Double), (Double, Double)), count: Int, lap: Double, size: CGFloat,
-                 offset: Double, tint: Color) {
+                 offset: Double, tint: Color, trail: Double = 0.5) {
             let near = at(line.0), far = at(line.1)
+            func point(_ e: Double) -> CGPoint {
+                CGPoint(x: near.x + (far.x - near.x) * e, y: near.y + (far.y - near.y) * e)
+            }
             for n in 0..<count {
                 let u = ((t + offset) / lap + Double(n) / Double(count)).truncatingRemainder(dividingBy: 1)
                 // Fast near, slowing into the distance.
                 let e = 1 - pow(1 - u, 2.2)
-                let head = CGPoint(x: near.x + (far.x - near.x) * e, y: near.y + (far.y - near.y) * e)
-                let back = max(0, e - 0.08 * (1 - e) - 0.01)
-                let tail = CGPoint(x: near.x + (far.x - near.x) * back, y: near.y + (far.y - near.y) * back)
+                let head = point(e)
                 let r = size * CGFloat(1 - e * 0.85)
-                let fade = min(1, u * 8) * min(1, (1 - u) * 6)
-                var streak = Path()
-                streak.move(to: tail)
-                streak.addLine(to: head)
-                light.stroke(streak, with: .linearGradient(
-                    Gradient(colors: [.clear, tint.opacity(0.9 * fade * k)]),
-                    startPoint: tail, endPoint: head), lineWidth: max(0.8, r * 0.5))
+                let fade = min(1, u * 8) * min(1, (1 - u) * 5)
+                // The light cycle's wall: a long ribbon behind it, drawn in segments that
+                // grow fainter and thinner towards the far end of the trail.
+                let start = max(0, e - trail)
+                let segments = 28
+                for sIndex in 0..<segments {
+                    let a = start + (e - start) * Double(sIndex) / Double(segments)
+                    let b = start + (e - start) * Double(sIndex + 1) / Double(segments)
+                    let along = Double(sIndex + 1) / Double(segments)
+                    var piece = Path()
+                    piece.move(to: point(a))
+                    piece.addLine(to: point(b))
+                    let width = max(0.8, size * CGFloat(1 - b * 0.85) * 0.45)
+                    light.stroke(piece, with: .color(tint.opacity(0.75 * along * fade * k)),
+                                 style: StrokeStyle(lineWidth: width, lineCap: .round))
+                    light.stroke(piece, with: .color(tint.opacity(0.18 * along * fade * k)),
+                                 style: StrokeStyle(lineWidth: width * 4, lineCap: .round))
+                }
                 light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
-                           with: .radialGradient(Gradient(colors: [white.opacity(0.85 * fade * k),
-                                                                   tint.opacity(0.45 * fade * k), .clear]),
+                           with: .radialGradient(Gradient(colors: [white.opacity(0.9 * fade * k),
+                                                                   tint.opacity(0.5 * fade * k), .clear]),
                                                  center: head, startRadius: 0, endRadius: r))
             }
         }
         // Blue for the users, orange for the other side: two of the lanes and the right
         // pair of beams run orange.
         for (i, road) in gridRoads.enumerated() {
-            run(road, count: 2, lap: 2.6 + Double(i) * 0.55, size: 9, offset: Double(i) * 0.7,
-                tint: [1, 3].contains(i) ? orange : white)
+            run(road, count: 1, lap: 4.2 + Double(i) * 0.7, size: 9, offset: Double(i) * 1.1,
+                tint: [1, 3].contains(i) ? orange : th.accentHot, trail: 0.55)
         }
         for (i, beam) in gridBeams.enumerated() {
             run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3,
-                tint: i >= 2 ? orange : white)
+                tint: i >= 2 ? orange : th.accentHot, trail: 0.35)
         }
         // Haze across the horizon, drifting.
         for i in 0..<5 {
