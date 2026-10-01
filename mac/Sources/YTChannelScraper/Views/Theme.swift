@@ -2074,7 +2074,7 @@ struct ThemeBackdrop: View {
         // other side) and which way it rides, after an uneven pause. Seeded per run, so
         // it is random to watch and steady frame to frame.
         let lines = gridRoads.map { ($0, true) } + gridBeams.map { ($0, false) }
-        for rider in 0..<4 {
+        for rider in 0..<6 {
             var pace = Seeded(state: 0xC1C1E &+ UInt64(rider) &* 7919)
             let slot = 3.2 + pace.next() * 3.5
             let shifted = t + Double(rider) * 1.73
@@ -2086,12 +2086,15 @@ struct ThemeBackdrop: View {
             let onRoad = rng.next() < 0.72
             let choices = lines.filter { $0.1 == onRoad }
             let line = choices[Int(rng.next() * Double(choices.count)) % choices.count].0
-            let away = rng.next() < 0.7
+            // Up the lines and back down them, about evenly.
+            let away = rng.next() < 0.5
             // Away: fast near, slowing into the distance; towards you: the reverse.
             let e = away ? 1 - pow(1 - u, 2.2) : 1 - pow(u, 2.2)
             let fade = min(1, u * 8) * min(1, (1 - u) * 5)
             cycle(line, e: e, away: away,
-                  trail: onRoad ? 0.35 + rng.next() * 0.35 : 0.2 + rng.next() * 0.25,
+                  // A short streak, not a long wall: the long walls never sat quite on
+                  // the picture's lines, and a short light reads as running along them.
+                  trail: onRoad ? 0.05 + rng.next() * 0.04 : 0.04 + rng.next() * 0.03,
                   size: onRoad ? 9 : 5,
                   tint: rng.next() < 0.38 ? orange : th.accentHot, fade: fade)
         }
