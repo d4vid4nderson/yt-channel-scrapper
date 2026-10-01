@@ -383,6 +383,32 @@ final class AppModel {
         scraper.start(rawURL: urlText, tab: tab)
     }
 
+    /// The channel that was open when Home was pressed.
+    private var lastChannel: (url: String, tab: ChannelTab, channel: Channel?)?
+
+    /// Put a channel's list back under the player when it is about to open over nothing —
+    /// after Home, or from a panel on the landing view. The channel last browsed, or failing
+    /// that the video's own. Opens from what is kept, so it is normally instant.
+    private func listUnderPlayer(for video: Video) {
+        guard !showsList else { return }
+        let fallback = video.channelId.map {
+            (url: Channel(id: $0, title: video.channelName ?? $0).url, tab: ChannelTab.videos,
+             channel: Optional(Channel(id: $0, title: video.channelName ?? $0)))
+        }
+        guard let target = lastChannel ?? fallback else { return }
+        lastSearch = nil
+        search.reset()
+        mode = .videos
+        tab = target.tab
+        browsingTabs = true
+        startedFromResults = true
+        openingChannel = target.channel
+        picked = []
+        filterText = ""
+        urlText = target.url
+        scraper.start(rawURL: target.url, tab: target.tab)
+    }
+
     /// Show another tab of the channel that is open — Videos, Shorts, Live, Music — from
     /// the bar over its list. Opens from what is kept when it can, so flicking between tabs
     /// already read costs nothing.
@@ -463,6 +489,10 @@ final class AppModel {
 
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
+        // Remembered, so a video played from Home has that channel to sit above.
+        if let url = scraper.rawURL {
+            lastChannel = (url, scraper.tab, scraper.channelRef)
+        }
         browsingTabs = false
         // The landing view has no player in it; what was playing carries on in the bar.
         dismissPreview()
@@ -529,6 +559,7 @@ final class AppModel {
     func reopenNowPlaying() {
         guard let now = nowPlaying else { return }
         nowPlaying = nil
+        listUnderPlayer(for: now.video)
         preview.adopt(video: now.video, player: now.player, ratio: now.ratio)
     }
 
@@ -596,6 +627,7 @@ final class AppModel {
     func openCard(_ video: Video) {
         cancelNowLoading()
         nowPlaying?.player.pause()
+        listUnderPlayer(for: video)
         preview.open(video)
     }
 
@@ -745,6 +777,7 @@ extension AppModel {
         let ratio = miniPlayer.aspectRatio
         guard let video = islandVideo, let player = miniPlayer.release() else { return }
         islandVideo = nil
+        listUnderPlayer(for: video)
         preview.adopt(video: video, player: player, ratio: ratio)
         NSApp.windows.first { $0.isMiniaturized }?.deminiaturize(nil)
         NSApp.activate(ignoringOtherApps: true)
