@@ -23,7 +23,7 @@ import UIKit
 struct Theme: Identifiable, @unchecked Sendable {
 
     enum ID: String, CaseIterable, Identifiable, Sendable {
-        case classic, bladeRunner, dune, middleEarth, synthwave, grid, nostromo, nostromoTeal
+        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, nostromo, nostromoTeal
         var id: String { rawValue }
     }
 
@@ -68,7 +68,7 @@ struct Theme: Identifiable, @unchecked Sendable {
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, scanlines }
+    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, ringWorld, scanlines }
 
     /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
     /// into the panel, its own lettering colour, and a little of that colour's light.
@@ -191,6 +191,7 @@ extension Theme {
         case .middleEarth: middleEarth
         case .synthwave: synthwave
         case .grid: grid
+        case .ringWorld: ringWorld
         case .nostromo: nostromo
         case .nostromoTeal: nostromoTeal
         }
@@ -482,6 +483,46 @@ extension Theme {
         // The other side's orange, where something is lit or chosen.
         highlight: hex(0xFF9B26),
         glints: true
+    )
+
+    /// Halo: Blood Gulch on the ring. Master Chief's armour green for everything that
+    /// matters, panels faintly green like the armour's plating, the HUD's blue in the
+    /// readouts, and the visor's gold where something is lit or chosen. Panels cut on the
+    /// diagonal like the armour's plates.
+    static let ringWorld = Theme(
+        id: .ringWorld,
+        name: "Ring World",
+        tagline: "Blood Gulch, under the ring",
+        appearance: .dark,
+        ink: hex(0xDDE6DA),
+        accent: hex(0x7FAE3A),
+        accentHot: hex(0x9CC85A),
+        accent2: hex(0x57C7F2),
+        edgeTint: hex(0x7FAE3A),
+        brand: hex(0x7FAE3A),
+        ground: hex(0x0B0F0B),
+        surface: hex(0x121812),
+        card: hex(0x161D16).opacity(0.9),
+        field: hex(0x151C15),
+        fieldInk: hex(0xDDE6DA),
+        fieldRaised: hex(0x243024),
+        onFill: hex(0x0A1205),
+        good: hex(0x9CC85A),
+        warn: hex(0xE8A93A),
+        glow: hex(0x7FAE3A),
+        glowDeep: hex(0x2E4A1A),
+        pickedMid: hex(0x121C10),
+        pickedFar: hex(0x1C2C14),
+        pickedEdge: hex(0x34501E),
+        pickedEdgeHot: hex(0x4A6E2A),
+        corners: .chamfered(scale: 0.7),
+        edge: .bevel,
+        type: Typeface(displayWeight: .semibold, displayCaps: true, displayTracking: 1.4),
+        backdrop: .ringWorld,
+        aurora: [hex(0x7FAE3A), hex(0x57C7F2), hex(0x2E4A1A), hex(0xDDE6DA)],
+        lcd: LCD(background: hex(0x050A0D), ink: hex(0x7FD6FA), glow: hex(0x57C7F2)),
+        // The visor's gold.
+        highlight: hex(0xE8A93A)
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
@@ -1374,6 +1415,7 @@ struct ThemeBackdrop: View {
             case .dunes: Self.dunes(&context, size, theme, k, t)
             case .parchment: Self.parchment(&context, size, theme, k, t)
             case .glitch: Self.glitch(&context, size, theme, k, t)
+            case .ringWorld: Self.ringWorld(&context, size, theme, k, t)
             case .grid: Self.grid(&context, size, theme, k, t)
             case .scanlines where glass:
                 Self.scanlines(&context, size, theme, k * 0.45, t, glow: false)
@@ -1962,22 +2004,6 @@ struct ThemeBackdrop: View {
     /// The Grid's picture: `Backdrop-grid.jpg`, family build only.
     nonisolated(unsafe) private static let gridPicture = picture("grid")
 
-    /// Lines in the Grid picture that light runs along, as (near end, far end) in
-    /// fractions of the picture — fitted to the brightest pixels along each line in the
-    /// picture itself: the road's solid lane lines running to the gate (not the dashed
-    /// ones: a cycle over painted dashes lit them up as beads), and the beams.
-    private static let gridRoads: [((Double, Double), (Double, Double))] = [
-        ((0.2716, 0.980), (0.4719, 0.560)),   // the bright line left of centre
-        ((0.5143, 0.980), (0.5093, 0.550)),   // the centre line
-        ((0.6419, 0.960), (0.5338, 0.600)),   // the road's right edge
-    ]
-    /// Fitted to the picture's brightest pixels along each beam, near end (the gate)
-    /// first.
-    private static let gridBeams: [((Double, Double), (Double, Double))] = [
-        ((0.4776, 0.330), (0.3606, 0.030)), ((0.4639, 0.330), (0.3286, 0.030)),
-        ((0.5565, 0.330), (0.6386, 0.030)), ((0.5773, 0.330), (0.6789, 0.030)),
-    ]
-
     private static func grid(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         if let picture = gridPicture {
@@ -2006,9 +2032,7 @@ struct ThemeBackdrop: View {
         }
     }
 
-    /// The picture, with the city running: light cycles racing up the lane lines into the
-    /// distance, each dragging its long wall of light — quick and large near, small and
-    /// slow far off, as perspective has it — more climbing the beams into the sky, the gate's light breathing, and haze
+    /// The picture, quietly alive: the gate's light breathing, and haze
     /// drifting across the horizon.
     private static func gridScene(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ picture: Image, _ k: Double, _ t: Double) {
@@ -2028,76 +2052,6 @@ struct ThemeBackdrop: View {
             Gradient(colors: [white.opacity(0.22 * breathe * k), th.accent.opacity(0.08 * k), .clear]),
             center: gate, startRadius: 0, endRadius: frame.width * 0.12))
         // Pulses along a line, from its near end to its far end.
-        let orange = th.accent2
-        // One light cycle on a line, `e` of the way from its near end to its far end,
-        // its wall of light trailing `trail` of the line behind it — towards the near end
-        // when it is heading away, towards the far end when it is coming at you.
-        func cycle(_ line: ((Double, Double), (Double, Double)), e: Double, away: Bool,
-                   trail: Double, size: CGFloat, tint: Color, fade: Double) {
-            let near = at(line.0), far = at(line.1)
-            func point(_ e: Double) -> CGPoint {
-                CGPoint(x: near.x + (far.x - near.x) * e, y: near.y + (far.y - near.y) * e)
-            }
-            func width(_ e: Double, _ scale: CGFloat) -> CGFloat { size * CGFloat(1 - e * 0.85) * scale }
-            let head = point(e)
-            let tailE = min(1, max(0, away ? e - trail : e + trail))
-            let back = point(tailE)
-            let dx = head.x - back.x, dy = head.y - back.y
-            let length = max(hypot(dx, dy), 0.001)
-            let nx = -dy / length, ny = dx / length
-            let wHead = max(1, width(e, 0.45)), wBack = max(0.4, width(tailE, 0.12))
-            func ribbon(_ scale: CGFloat) -> Path {
-                var p = Path()
-                p.move(to: CGPoint(x: back.x + nx * wBack * scale / 2, y: back.y + ny * wBack * scale / 2))
-                p.addLine(to: CGPoint(x: head.x + nx * wHead * scale / 2, y: head.y + ny * wHead * scale / 2))
-                p.addLine(to: CGPoint(x: head.x - nx * wHead * scale / 2, y: head.y - ny * wHead * scale / 2))
-                p.addLine(to: CGPoint(x: back.x - nx * wBack * scale / 2, y: back.y - ny * wBack * scale / 2))
-                p.closeSubpath()
-                return p
-            }
-            let along = { (a: Double) in GraphicsContext.Shading.linearGradient(
-                Gradient(colors: [tint.opacity(0), tint.opacity(a * fade * k)]),
-                startPoint: back, endPoint: head) }
-            light.drawLayer { glow in
-                glow.addFilter(.blur(radius: max(2, wHead * 1.5)))
-                glow.fill(ribbon(3), with: along(0.45))
-            }
-            light.fill(ribbon(1), with: along(0.9))
-            let r = width(e, 1)
-            light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
-                       with: .radialGradient(Gradient(colors: [white.opacity(0.9 * fade * k),
-                                                               tint.opacity(0.5 * fade * k), .clear]),
-                                             center: head, startRadius: 0, endRadius: r))
-        }
-        // Riders: each, run after run, picks a line at random — mostly the road, now and
-        // then a beam — a speed, a trail, a colour (blue for the users, orange for the
-        // other side) and which way it rides, after an uneven pause. Seeded per run, so
-        // it is random to watch and steady frame to frame.
-        let lines = gridRoads.map { ($0, true) } + gridBeams.map { ($0, false) }
-        for rider in 0..<6 {
-            var pace = Seeded(state: 0xC1C1E &+ UInt64(rider) &* 7919)
-            let slot = 3.2 + pace.next() * 3.5
-            let shifted = t + Double(rider) * 1.73
-            let run = UInt64(max(0, floor(shifted / slot)))
-            var rng = Seeded(state: 0xB1CE &+ run &* 104729 &+ UInt64(rider) &* 7919)
-            let pause = rng.next() * 0.45 * slot
-            let u = (shifted.truncatingRemainder(dividingBy: slot) - pause) / (slot - pause)
-            guard u >= 0, u < 1 else { continue }
-            let onRoad = rng.next() < 0.72
-            let choices = lines.filter { $0.1 == onRoad }
-            let line = choices[Int(rng.next() * Double(choices.count)) % choices.count].0
-            // Up the lines and back down them, about evenly.
-            let away = rng.next() < 0.5
-            // Away: fast near, slowing into the distance; towards you: the reverse.
-            let e = away ? 1 - pow(1 - u, 2.2) : 1 - pow(u, 2.2)
-            let fade = min(1, u * 8) * min(1, (1 - u) * 5)
-            cycle(line, e: e, away: away,
-                  // A short streak, not a long wall: the long walls never sat quite on
-                  // the picture's lines, and a short light reads as running along them.
-                  trail: onRoad ? 0.05 + rng.next() * 0.04 : 0.04 + rng.next() * 0.03,
-                  size: onRoad ? 9 : 5,
-                  tint: rng.next() < 0.38 ? orange : th.accentHot, fade: fade)
-        }
         // Haze across the horizon, drifting.
         for i in 0..<5 {
             let n = Double(i)
@@ -2105,8 +2059,70 @@ struct ThemeBackdrop: View {
             let x = (n * 0.37 * span + t * (10 + n * 4)).truncatingRemainder(dividingBy: span) - Double(s.width) * 0.3
             let center = CGPoint(x: x, y: Double(at((0.5, 0.44 + 0.04 * n)).y))
             c.fill(all, with: .radialGradient(
-                Gradient(colors: [(i == 2 ? orange : th.accent).opacity(0.07 * k), .clear]),
+                Gradient(colors: [(i == 2 ? th.accent2 : th.accent).opacity(0.07 * k), .clear]),
                 center: center, startRadius: 0, endRadius: frame.width * 0.22))
+        }
+    }
+
+    // MARK: Ring World
+
+    /// Ring World's picture: `Backdrop-ringWorld.jpg`, family build only.
+    nonisolated(unsafe) private static let ringPicture = picture("ringWorld")
+
+    /// Blood Gulch: cloud drifting across the sky, a slow glimmer of light running up the
+    /// ring's arc, the base's doorway light breathing, and dust in the sun. Without the
+    /// picture, the clouds and dust over the dark.
+    private static func ringWorld(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+                                  _ k: Double, _ t: Double) {
+        let all = Path(CGRect(origin: .zero, size: s))
+        if let picture = ringPicture {
+            let frame = drawPicture(&c, s, picture, k, t)
+            c.fill(all, with: .color(th.ground.opacity(0.32)))
+            func at(_ x: Double, _ y: Double) -> CGPoint {
+                CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
+            }
+            var light = c
+            light.blendMode = .plusLighter
+            // The base's doorway.
+            let door = at(0.60, 0.70)
+            let pulse = 0.6 + 0.4 * sin(t * 0.8)
+            light.fill(all, with: .radialGradient(
+                Gradient(colors: [th.accentHot.opacity(0.30 * pulse * k), th.accent.opacity(0.08 * k), .clear]),
+                center: door, startRadius: 0, endRadius: frame.width * 0.06))
+            // A glimmer running up the ring's arc, from the horizon into the sky.
+            let lap = 9.0
+            let u = (t / lap).truncatingRemainder(dividingBy: 1)
+            let glimmer = at(0.205 + (0.30 - 0.205) * u, 0.38 - 0.38 * u)
+            light.fill(all, with: .radialGradient(
+                Gradient(colors: [Color.white.opacity(0.22 * sin(.pi * u) * k), .clear]),
+                center: glimmer, startRadius: 0, endRadius: frame.width * 0.05))
+        } else {
+            horizonGlow(&c, s, th.glowDeep, k, height: 0.5)
+        }
+        // Cloud banks drifting across the middle, pale and matte.
+        let cloud = Color(red: 0.80, green: 0.86, blue: 0.90)
+        for i in 0..<6 {
+            let n = Double(i)
+            let reach = max(s.width, s.height) * CGFloat(0.28 + 0.06 * (n.truncatingRemainder(dividingBy: 3)))
+            let span = Double(s.width + reach * 2)
+            let x = (n * 0.29 * span + t * (6 + n * 2.5)).truncatingRemainder(dividingBy: span) - Double(reach)
+            let y = Double(s.height) * (0.08 + 0.06 * n) + 14 * sin(t * 0.07 + n)
+            c.fill(all, with: .radialGradient(
+                Gradient(stops: [.init(color: cloud.opacity(0.10 * k), location: 0),
+                                 .init(color: cloud.opacity(0.04 * k), location: 0.5),
+                                 .init(color: .clear, location: 1)]),
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: reach))
+        }
+        // Dust in the air, drifting and turning.
+        var rng = Seeded(state: 0x1A10)
+        for _ in 0..<Int(s.width * s.height / 7000) {
+            let speed = 4 + rng.next() * 9
+            let span = Double(s.width + 20)
+            let x = (rng.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 10
+            let y = rng.next() * Double(s.height) + 10 * sin(t * (0.2 + rng.next() * 0.2) + rng.next() * 6)
+            let r = 0.5 + rng.next() * 1.2
+            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
+                   with: .color(cloud.opacity((0.10 + rng.next() * 0.18) * k)))
         }
     }
 
