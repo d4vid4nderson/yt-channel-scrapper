@@ -471,7 +471,9 @@ extension Theme {
         pickedEdgeHot: hex(0x146680),
         corners: .chamfered(scale: 0.9),
         edge: .bevel,
-        type: Typeface(displayWeight: .semibold, displayCaps: true, displayTracking: 1.6),
+        // Orbitron (bundled, OFL): thin geometric capitals, the Grid's own lettering.
+        type: Typeface(display: ["Orbitron-Regular"], displayWeight: .semibold,
+                       displayCaps: true, displayTracking: 1.2),
         backdrop: .grid,
         aurora: [hex(0x18E4FF), hex(0x0A6FA8), hex(0x0B3D66), hex(0x7FF3FF)],
         lcd: LCD(background: hex(0x00070A), ink: hex(0x7FF3FF), glow: hex(0x18E4FF)),
