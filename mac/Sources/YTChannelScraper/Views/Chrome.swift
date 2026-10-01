@@ -18,11 +18,13 @@ enum Chrome {
     static let control: CGFloat = 28
     /// The header row's controls, one step up: they lead the window.
     static let large: CGFloat = 32
+    /// The search pill at its one size, on the hero and in the header alike: it does not
+    /// shrink when the page collapses, so the field and its buttons never jump.
+    static let pill: CGFloat = 52
     /// A toolbar row: a 28pt control and 8pt above and below it.
     static let bar: CGFloat = 44
-    /// The header row under the title bar. Was 64, which left a 32pt control floating in
-    /// a band twice its height; 52 gives it the same 10pt margin the toolbar rows have.
-    static let header: CGFloat = 52
+    /// The header row under the title bar: the full-size pill and 10pt above and below.
+    static let header: CGFloat = pill + 20
 
     /// A control's corner at a given height. Seven at 28 and eight at 32 — a quarter of
     /// the height, rounded, so the two sizes look like the same part scaled.

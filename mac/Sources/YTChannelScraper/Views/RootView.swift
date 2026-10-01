@@ -251,7 +251,7 @@ struct RootView: View {
             Image(systemName: "house")
                 .font(.system(size: 13, weight: .medium))
         }
-        .buttonStyle(.chrome(height: Chrome.large, square: true))
+        .buttonStyle(.chrome(height: 44, square: true))
         .help("Back to the start — the URL is kept  (⇧⌘H)")
         .accessibilityLabel("Home")
         .keyboardShortcut("h", modifiers: [.command, .shift])
@@ -332,7 +332,7 @@ struct RootView: View {
                 HStack(spacing: 10) {
                     homeButton
                     OpenChannelBadge(model: model)
-                    SearchPill(model: model, compact: true)
+                    SearchPill(model: model, compact: false, inHeader: true)
                         .matchedGeometryEffect(id: "pill", in: hero)
                 }
                 .padding(.horizontal, Layout.gutter)
@@ -482,7 +482,7 @@ private struct OpenChannelBadge: View {
     var body: some View {
         if model.mode == .videos, let channel = shown {
             HStack(spacing: 8) {
-                ChannelAvatar(channel: channel, size: 26)
+                ChannelAvatar(channel: channel, size: 32)
                 Text(channel.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.ink(0.9))
@@ -589,6 +589,9 @@ private struct TabChooser: View {
 private struct SearchPill: View {
     @Bindable var model: AppModel
     let compact: Bool
+    /// The same full-size pill, in the collapsed header rather than on the hero: a lighter
+    /// shadow, since it is one control among several, and it does not take focus.
+    var inHeader = false
     @FocusState private var focused: Bool
 
     /// The compact pill is exactly the header's control height, and everything inside it
@@ -690,9 +693,10 @@ private struct SearchPill: View {
         .themeEdge(ThemedCapsule(), lit: focused)
         // A contact shadow in the header, where the pill is one control among several; the
         // deep one only on the hero, where it is the whole page.
-        .shadow(color: .black.opacity(compact ? 0.14 : 0.35), radius: compact ? 3 : 22, y: compact ? 1 : 8)
+        .shadow(color: .black.opacity(compact || inHeader ? 0.18 : 0.35),
+                radius: compact || inHeader ? 6 : 22, y: compact || inHeader ? 2 : 8)
         // Landing on the hero, the one thing to do is type a URL.
-        .onAppear { if !compact { focused = true } }
+        .onAppear { if !compact && !inHeader { focused = true } }
     }
 
     /// "Search" whether the field holds a name or a channel's URL: opening a channel
