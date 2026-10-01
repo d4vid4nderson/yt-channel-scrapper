@@ -544,7 +544,11 @@ private struct PanelSwitches: View {
                 .background {
                     if isOn {
                         let themed = Theme.active.id != .classic
-                        shape.fill(themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
+                        // Ring World: the dark armour plate, with only the rim and lettering
+                        // in the visor's orange.
+                        shape.fill(Theme.active.markOnHighlight
+                                   ? (Theme.active.markFill ?? Theme.active.glowDeep)
+                                   : themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
                             .overlay {
                                 if themed { shape.strokeBorder(Self.chosen.opacity(0.7), lineWidth: 1) }
                             }
@@ -771,18 +775,25 @@ private struct SearchPill: View {
                 // action rather than one waiting for a URL. An outline rather than a
                 // filled plate, so an empty Search is not the heaviest thing in the pill.
                 let ready = model.canScrape || model.isBusy
+                // The mark's treatment where the theme gives its primary controls one: a
+                // dark plate rimmed and lettered in the highlight, not a bright fill.
+                let marked = Theme.active.markOnHighlight
+                let plate = Theme.active.markFill ?? Theme.active.glowDeep
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
-                    .foregroundStyle(ready ? Palette.onFill : Palette.fieldInk.opacity(0.42))
+                    .foregroundStyle(ready ? (marked ? Theme.active.litTint : Palette.onFill)
+                                     : Palette.fieldInk.opacity(0.42))
                     // Stop and Search both fit today. The frame is fixed, so anything
                     // longer would wrap inside the capsule rather than overflow it —
                     // truncating is the failure worth having.
                     .lineLimit(1)
                     .frame(width: compact ? 70 : 84, height: compact ? inner : 38)
-                    .background(ready ? Palette.accent : .clear, in: ThemedCapsule())
+                    .background(ready ? (marked ? plate : Palette.accent) : .clear, in: ThemedCapsule())
                     .overlay {
                         if !ready {
                             ThemedCapsule().strokeBorder(Palette.fieldInk.opacity(0.16), lineWidth: 1.5)
+                        } else if marked {
+                            ThemedCapsule().strokeBorder(Theme.active.litTint.opacity(0.9), lineWidth: 1)
                         }
                     }
                     .animation(.easeOut(duration: 0.12), value: ready)

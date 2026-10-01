@@ -114,11 +114,15 @@ struct ChromeButtonStyle: ButtonStyle {
         }
 
         private var themed: Bool { Theme.active.id != .classic }
+        /// A theme whose primary controls take the mark's treatment: a dark plate, rimmed
+        /// and lettered in the highlight (Ring World's armour green with the visor's orange)
+        /// rather than a bright fill.
+        private var marked: Bool { Theme.active.markOnHighlight }
 
         private func ink(lit: Bool) -> Color {
             guard enabled else { return Palette.ink(0.32) }
             switch kind {
-            case .primary: return Palette.onFill
+            case .primary: return marked ? Theme.active.litTint : Palette.onFill
             case .secondary: return isOn ? Palette.accent : Palette.ink(lit ? 1 : 0.85)
             case .ghost: return Palette.ink(lit ? 0.95 : 0.6)
             }
@@ -130,6 +134,10 @@ struct ChromeButtonStyle: ButtonStyle {
             switch kind {
             case .primary:
                 guard enabled else { return Palette.ink(0.07) }
+                if marked {
+                    let plate = Theme.active.markFill ?? Theme.active.glowDeep
+                    return pressed ? plate.opacity(0.8) : (lit ? Theme.active.glowDeep : plate)
+                }
                 return pressed ? Palette.accent.opacity(0.85) : (lit ? Palette.accentHot : Palette.accent)
             case .secondary:
                 if isOn { return Palette.accent.opacity(lit ? 0.2 : 0.14) }
@@ -142,6 +150,7 @@ struct ChromeButtonStyle: ButtonStyle {
         private func hairline(lit: Bool) -> Color {
             switch kind {
             case .primary:
+                if marked && enabled { return Theme.active.litTint.opacity(lit ? 1 : 0.85) }
                 return enabled ? .clear : Palette.ink(0.08)
             case .secondary:
                 if isOn { return Palette.accent.opacity(0.4) }
