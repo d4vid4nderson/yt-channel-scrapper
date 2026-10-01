@@ -62,12 +62,15 @@ struct PreviewPanel: View {
     }
 
     /// As much of the results area as the grip has been dragged to, between a floor that
-    /// keeps the picture worth watching and a ceiling that keeps the list's bar and one
-    /// row of the next videos in view.
+    /// keeps the picture worth watching and a ceiling that keeps the list's toolbar in view.
     private var stageHeight: CGFloat { max(available * clamped(fraction), 160) }
 
     private func clamped(_ value: Double) -> Double {
-        let ceiling = max((available - 52 - 170) / max(available, 1), 0.3)
+        // Room for the panel's own bar and the list's toolbar, and nothing else: drag all
+        // the way down and the picture has the page, with the tabs still there to come
+        // back from. Leaving a row of the list as well capped a 16:9 video well short of
+        // the window's width.
+        let ceiling = max((available - 52 - Chrome.bar * 2) / max(available, 1), 0.3)
         return min(max(value, 0.25), ceiling)
     }
 
