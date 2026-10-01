@@ -12,12 +12,15 @@ import SwiftUI
 /// AppKit class directly sidesteps the overlay, and gives the transport controls too.
 struct PlayerView: NSViewRepresentable {
     let player: AVPlayer
+    /// Zoom the picture to cover the frame, cropping what overhangs, rather than fitting
+    /// it whole inside black bars.
+    var fills = false
 
     func makeNSView(context: Context) -> AVPlayerView {
         let view = AVPlayerView()
         view.player = player
         view.controlsStyle = .inline
-        view.videoGravity = .resizeAspect
+        view.videoGravity = fills ? .resizeAspectFill : .resizeAspect
         view.showsFullScreenToggleButton = true
         view.allowsPictureInPicturePlayback = true
         return view
@@ -25,6 +28,8 @@ struct PlayerView: NSViewRepresentable {
 
     func updateNSView(_ view: AVPlayerView, context: Context) {
         if view.player !== player { view.player = player }
+        let gravity: AVLayerVideoGravity = fills ? .resizeAspectFill : .resizeAspect
+        if view.videoGravity != gravity { view.videoGravity = gravity }
     }
 
     static func dismantleNSView(_ view: AVPlayerView, coordinator: ()) {

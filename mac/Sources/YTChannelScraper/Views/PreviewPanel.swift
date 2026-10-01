@@ -37,6 +37,9 @@ struct PreviewPanel: View {
     @AppStorage("player.stageFraction") private var fraction: Double = 0.6
     /// The fraction when the current drag began, so the drag is measured from there.
     @State private var dragStart: Double?
+    /// Fill: the picture covers the stage at whatever height the grip gives it, cropping
+    /// the edges, instead of fitting whole. Off by default, and remembered.
+    @AppStorage("player.fill") private var fills = false
 
     var body: some View {
         // Every observable read happens here, in this view's own body.
@@ -52,10 +55,20 @@ struct PreviewPanel: View {
                 // Exactly the grip's height, unless the stream's shape at the page's width
                 // is shorter — then that, so a widescreen picture is never pillarboxed for
                 // height it cannot use.
-                PreviewStage(state: state)
-                    .aspectRatio(ratio, contentMode: .fit)
-                    .frame(maxWidth: .infinity)
-                    .frame(height: min(stageHeight, width / max(ratio, 0.1)))
+                // Filling, the stage is simply the grip's height and the picture covers it.
+                Group {
+                    if fills {
+                        PreviewStage(state: state, fills: true)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: stageHeight)
+                            .clipped()
+                    } else {
+                        PreviewStage(state: state)
+                            .aspectRatio(ratio, contentMode: .fit)
+                            .frame(maxWidth: .infinity)
+                            .frame(height: min(stageHeight, width / max(ratio, 0.1)))
+                    }
+                }
                     .background(.black)
 
                 bar(video)
@@ -140,6 +153,15 @@ struct PreviewPanel: View {
 
             Spacer(minLength: 8)
 
+            Button { fills.toggle() } label: {
+                Image(systemName: fills ? "arrow.down.right.and.arrow.up.left"
+                                        : "arrow.up.left.and.arrow.down.right")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.chrome(.secondary, square: true, isOn: fills))
+            .help(fills ? "Fit: show the whole picture" : "Fill: zoom the picture to fill the player, cropping the edges")
+            .accessibilityLabel(fills ? "Fit picture" : "Fill player")
+
             let saved = isSaved(video)
             Button { toggleSaved(video) } label: {
                 Image(systemName: saved ? "bookmark.fill" : "bookmark")
@@ -203,6 +225,7 @@ private struct TrailingIcon: LabelStyle {
 /// Its own view, so its read of `session.state` is tracked in its own body.
 private struct PreviewStage: View {
     let state: PreviewSession.State
+    var fills = false
 
     var body: some View {
         switch state {
@@ -215,7 +238,7 @@ private struct PreviewStage: View {
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
         case .ready(let player):
-            PlayerView(player: player)
+            PlayerView(player: player, fills: fills)
         case .failed(let message):
             VStack(spacing: 10) {
                 Image(systemName: "exclamationmark.triangle.fill")
