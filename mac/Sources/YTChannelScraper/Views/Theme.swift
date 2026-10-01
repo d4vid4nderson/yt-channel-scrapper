@@ -536,48 +536,47 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// Retrofuture: the spaceship screens of 1968–2009 — 2001, Alien, Blade Runner, Moon
-    /// — as the film designers of the day drew them. Near-black glass and warm grey
-    /// panels, off-white lettering like a flight manual's, caution orange for what
-    /// matters, HAL's red where something is lit or chosen, and the Nostromo's teal
-    /// phosphor in the readouts. Wide bold capitals (Syncopate Bold, bundled), a terminal
-    /// face in the LCD (Share Tech Mono), and panels marked like instruments.
+    /// Retrofuture: the ship and base screens of Moon and Alien — dark glass, monochrome
+    /// pale-cyan interface lettering, square panels marked with solid blocks and little
+    /// checkerboards, wide square capitals (Syncopate Bold, close to the films' Eurostile),
+    /// an OCR-like terminal face in the readouts (Share Tech Mono), and Lunar Industries'
+    /// orange as the one accent. Stars outside.
     /// (The id is the old teal Nostromo's, so a saved choice carries over.)
     static let nostromoTeal = Theme(
         id: .nostromoTeal,
         name: "Retrofuture",
-        tagline: "Spaceship screens, 1968 to 2009",
+        tagline: "Base and ship screens, after Moon and Alien",
         appearance: .dark,
-        ink: hex(0xE9E4D8),
-        accent: hex(0xF2902C),
-        accentHot: hex(0xFFAD55),
-        accent2: hex(0x6FE3D6),
-        edgeTint: hex(0xF2902C),
-        brand: hex(0xF2902C),
-        ground: hex(0x08090B),
-        surface: hex(0x141518),
-        card: hex(0x18191C).opacity(0.92),
-        field: hex(0x17181B),
-        fieldInk: hex(0xE9E4D8),
-        fieldRaised: hex(0x26272B),
+        ink: hex(0xD6F2F0),
+        accent: hex(0xF7931E),
+        accentHot: hex(0xFFAE4D),
+        accent2: hex(0x7FE6E6),
+        edgeTint: hex(0x7FE6E6),
+        brand: hex(0xF7931E),
+        ground: hex(0x06090B),
+        surface: hex(0x0C1215),
+        card: hex(0x0F161A).opacity(0.92),
+        field: hex(0x0E1518),
+        fieldInk: hex(0xD6F2F0),
+        fieldRaised: hex(0x1A2529),
         onFill: hex(0x140A02),
-        good: hex(0x6FE3D6),
-        warn: hex(0xF2C230),
-        glow: hex(0xF2902C),
-        glowDeep: hex(0x3A220E),
-        pickedMid: hex(0x1A1612),
-        pickedFar: hex(0x2A1C10),
-        pickedEdge: hex(0x4A3018),
-        pickedEdgeHot: hex(0x6A4420),
-        corners: .rounded(scale: 0.25),
+        good: hex(0x7FE6E6),
+        warn: hex(0xF7C23A),
+        glow: hex(0x7FE6E6),
+        glowDeep: hex(0x123438),
+        pickedMid: hex(0x0E1A1D),
+        pickedFar: hex(0x15272B),
+        pickedEdge: hex(0x24474D),
+        pickedEdgeHot: hex(0x36656C),
+        corners: .square,
         edge: .instrument,
-        type: Typeface(display: ["Syncopate-Bold"], displayCaps: true, displayTracking: 0.6),
+        type: Typeface(display: ["Syncopate-Bold"], displayCaps: true, displayTracking: 0.5),
         backdrop: .space,
-        aurora: [hex(0xF2902C), hex(0xE8392E), hex(0x3A220E), hex(0x6FE3D6)],
-        lcd: LCD(background: hex(0x030707), ink: hex(0x6FE3D6), glow: hex(0x6FE3D6),
+        aurora: [hex(0x123438), hex(0x0C2226), hex(0x081619), hex(0x123438)],
+        lcd: LCD(background: hex(0x030607), ink: hex(0x9FF0EE), glow: hex(0x7FE6E6),
                  font: "ShareTechMono-Regular"),
-        // HAL's eye.
-        highlight: hex(0xE8392E)
+        // Lunar Industries' orange, where something is lit or chosen.
+        highlight: hex(0xF7931E)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -1024,30 +1023,31 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 
 // MARK: - Skin chrome
 
-/// Retrofuture's panel marking. A hairline — the accent when lit — a ruler of short
-/// ticks along the leading part of the top edge, every fifth one taller, and a tab of the
-/// accent at the head of it, as the film designers labelled a screen's panels.
+/// Retrofuture's panel marking, after Moon's screens: a crisp rule in the screen's cyan
+/// (the accent when lit), a solid square block in the top-leading corner and a small
+/// two-by-two checkerboard in the top-trailing one.
 private struct InstrumentEdge<S: InsettableShape>: View {
     let shape: S
     let lit: Bool
 
     var body: some View {
         let theme = Theme.active
+        let rule = lit ? theme.litTint : theme.edgeTint
         ZStack {
-            shape.strokeBorder((lit ? theme.litTint : theme.ink).opacity(lit ? 0.75 : 0.16), lineWidth: 1)
+            shape.strokeBorder(rule.opacity(lit ? 0.8 : 0.35), lineWidth: 1)
+                .shadow(color: rule.opacity(lit ? 0.5 : 0.15), radius: lit ? 4 : 2)
             Canvas { c, size in
-                guard size.width > 60, size.height > 24 else { return }
-                var ticks = Path()
-                let start: CGFloat = 26, end = min(size.width * 0.38, start + 160)
-                var x = start, n = 0
-                while x < end {
-                    let tall: CGFloat = n % 5 == 0 ? 5 : 3
-                    ticks.addRect(CGRect(x: x, y: 2, width: 0.8, height: tall))
-                    x += 5; n += 1
+                guard size.width > 50, size.height > 22 else { return }
+                let block: CGFloat = size.height > 60 ? 6 : 4
+                c.fill(Path(CGRect(x: 3, y: 3, width: block, height: block)),
+                       with: .color((lit ? theme.litTint : theme.edgeTint).opacity(0.9)))
+                let cell = block / 2
+                let x0 = size.width - 3 - block, y0: CGFloat = 3
+                for (dx, dy) in [(0, 0), (1, 1)] {
+                    c.fill(Path(CGRect(x: x0 + CGFloat(dx) * cell, y: y0 + CGFloat(dy) * cell,
+                                       width: cell, height: cell)),
+                           with: .color(theme.edgeTint.opacity(0.7)))
                 }
-                c.fill(ticks, with: .color(theme.ink.opacity(lit ? 0.45 : 0.28)))
-                c.fill(Path(CGRect(x: 8, y: 2, width: 12, height: 3)),
-                       with: .color((lit ? theme.litTint : theme.accent).opacity(0.9)))
             }
         }
     }
@@ -2327,13 +2327,11 @@ struct ThemeBackdrop: View {
 
     // MARK: Retrofuture
 
-    /// Deep space, slowly: stars at three depths drifting past, a planet's edge lit along
-    /// the bottom like 2001's sunrise and breathing, faint columns of teal telemetry
-    /// scrolling down the leading edge, and the lightest scanlines over it all.
+    /// Outside the window: stars at three depths drifting past, and the room's screens
+    /// lighting the glass a little — soft cyan pooling in from two edges, breathing.
     private static func space(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                               _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
-        // Stars.
         for (layer, count, speed, size, weight) in [(0, 220, 2.0, 0.8, 0.35), (1, 90, 6.0, 1.2, 0.5),
                                                      (2, 30, 14.0, 1.8, 0.7)] {
             var rng = Seeded(state: 0x2001 &+ UInt64(layer) &* 977)
@@ -2347,40 +2345,15 @@ struct ThemeBackdrop: View {
                        with: .color(th.ink.opacity(weight * (0.5 + rng.next() * 0.5) * k)))
             }
         }
-        // The planet's limb, low across the bottom, lit from behind.
-        let centre = CGPoint(x: s.width * 0.62, y: s.height * 1.0 + max(s.width, s.height) * 0.9)
-        let radius = max(s.width, s.height) * 1.02
-        let breathe = 0.85 + 0.15 * sin(t * 0.15)
-        c.fill(Path(ellipseIn: CGRect(x: centre.x - radius, y: centre.y - radius,
-                                      width: radius * 2, height: radius * 2)),
-               with: .color(th.ground))
         var light = c
         light.blendMode = .plusLighter
-        light.fill(all, with: .radialGradient(
-            Gradient(stops: [.init(color: .clear, location: 0.86),
-                             .init(color: th.accent.opacity(0.30 * breathe * k), location: 0.9),
-                             .init(color: Color.white.opacity(0.18 * breathe * k), location: 0.905),
-                             .init(color: th.accent.opacity(0.10 * k), location: 0.94),
-                             .init(color: .clear, location: 1)]),
-            center: centre, startRadius: 0, endRadius: radius * 1.12))
-        // Telemetry: columns of figures scrolling down the leading edge, very dim.
-        var rng = Seeded(state: 0x6000)
-        let rowHeight: CGFloat = 13
-        let scroll = CGFloat((t * 9).truncatingRemainder(dividingBy: Double(rowHeight)))
-        let rows = Int(s.height / rowHeight) + 2
-        for column in 0..<3 {
-            let x = 14 + CGFloat(column) * 46
-            for row in 0..<rows {
-                let index = UInt64(row) &+ UInt64(floor(t * 9 / Double(rowHeight)))
-                var cell = Seeded(state: 0x7E1E &+ index &* 7919 &+ UInt64(column) &* 104729)
-                let value = String(format: "%04d", Int(cell.next() * 9999))
-                let y = CGFloat(row) * rowHeight + scroll - rowHeight
-                let text = Text(value).font(.system(size: 9, design: .monospaced))
-                    .foregroundColor(th.accent2.opacity((0.10 + rng.next() * 0.08) * k))
-                c.draw(text, at: CGPoint(x: x, y: y), anchor: .topLeading)
-            }
+        for (i, (x, y, r)) in [(0.0, 1.0, 0.7), (1.0, 0.0, 0.55)].enumerated() {
+            let breathe = 0.8 + 0.2 * sin(t * 0.2 + Double(i) * 2)
+            light.fill(all, with: .radialGradient(
+                Gradient(colors: [th.glow.opacity(0.10 * breathe * k), .clear]),
+                center: CGPoint(x: s.width * x, y: s.height * y), startRadius: 0,
+                endRadius: max(s.width, s.height) * r))
         }
-        scanlines(&c, s, th, k * 0.25, t, glow: false, roll: false)
     }
 
     // MARK: Nostromo
