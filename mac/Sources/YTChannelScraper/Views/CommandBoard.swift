@@ -71,7 +71,7 @@ struct CommandBoard: View {
     @ViewBuilder
     private var boardFill: some View {
         let shape = ThemedRect(cornerRadius: 14)
-        if [.city, .dunes, .parchment, .glitch, .grid, .ringWorld].contains(Theme.active.backdrop) {
+        if [.city, .dunes, .parchment, .glitch, .grid, .ringWorld, .space].contains(Theme.active.backdrop) {
             ZStack {
                 shape.fill(.ultraThinMaterial)
                 // Paper needs more of itself under sepia than glass does under neon.
