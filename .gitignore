@@ -32,3 +32,4 @@ mac/signing/
 # never in the shared edition. See build-mac-app.sh.
 assets/backdrops/
 /blade-runner-2049-cyberpunk-alley-4k-mm.jpg
+/Dune.jpg

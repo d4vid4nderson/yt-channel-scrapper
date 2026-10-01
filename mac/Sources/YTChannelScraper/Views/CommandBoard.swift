@@ -65,12 +65,13 @@ struct CommandBoard: View {
 
     // MARK: - The board
 
-    /// A breath of ink over the aurora — and over a picture (Blade Runner's street), frosted
+    /// A breath of ink over the aurora — and over a picture (Blade Runner's street, Dune's
+    /// storm), frosted
     /// glass with the surface through it, since a sign behind the text made it unreadable.
     @ViewBuilder
     private var boardFill: some View {
         let shape = ThemedRect(cornerRadius: 14)
-        if Theme.active.backdrop == .city {
+        if [.city, .dunes].contains(Theme.active.backdrop) {
             ZStack {
                 shape.fill(.ultraThinMaterial)
                 shape.fill(Palette.surface.opacity(0.62))

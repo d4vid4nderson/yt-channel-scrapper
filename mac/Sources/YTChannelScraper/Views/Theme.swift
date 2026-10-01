@@ -34,6 +34,10 @@ struct Theme: Identifiable, @unchecked Sendable {
     enum Corners: Sendable {
         case rounded(scale: CGFloat)
         case chamfered(scale: CGFloat)
+        /// All four corners cut, small: a slab of machined stone, Arrakeen's architecture
+        /// and the ornithopters' instruments — related to Blade Runner's two-corner cut,
+        /// not the same.
+        case facetted(scale: CGFloat)
         case square
     }
 
@@ -320,12 +324,15 @@ extension Theme {
         pickedFar: hex(0x2E1C0D),
         pickedEdge: hex(0x4A2E15),
         pickedEdgeHot: hex(0x6A3F1A),
-        corners: .square,
+        corners: .facetted(scale: 0.55),
         edge: .bevel,
-        type: Typeface(displayWeight: .light, displayCaps: true, displayTracking: 2),
+        // Syncopate (bundled, Apache): wide, thin capitals, the posters' lettering.
+        type: Typeface(display: ["Syncopate-Regular"], displayWeight: .light,
+                       displayCaps: true, displayTracking: 1),
         backdrop: .dunes,
         aurora: [hex(0xE0822F), hex(0xF2B45A), hex(0x8A3C12), hex(0xF7D08A)],
-        lcd: LCD(background: hex(0x0E0804), ink: hex(0xF2B45A), glow: hex(0xE0822F))
+        lcd: LCD(background: hex(0x0E0804), ink: hex(0xF2B45A), glow: hex(0xE0822F),
+                 font: "Jura-Medium")
     )
 
     /// A page from the Red Book, bound in Rivendell. Sepia ink on parchment, gilt rules,
@@ -634,8 +641,9 @@ struct ThemedRoot<Content: View>: View {
     var body: some View {
         let theme = ThemeStore.shared.theme
         content
-            .fontDesign(theme.type.design)
-            .fontWidth(theme.type.width)
+            // Design only, and no width: an environment width (even `.standard`) made
+            // SwiftUI re-resolve a theme's named heading face and fall back to the system.
+            .fontDesign(theme.type.design == .default ? nil : theme.type.design)
             .foregroundStyle(theme.id == .classic
                              ? AnyShapeStyle(.primary) : AnyShapeStyle(Palette.ink(1)))
             .tint(Palette.accent)
@@ -741,6 +749,8 @@ struct ThemedRect: InsettableShape {
                                     style: style).path(in: r)
         case .chamfered(let scale):
             return Chamfer(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
+        case .facetted(let scale):
+            return Facet(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
         case .square:
             return Rectangle().path(in: r)
         }
@@ -770,6 +780,8 @@ struct ThemedCapsule: InsettableShape {
             return RoundedRectangle(cornerRadius: half * scale, style: style).path(in: r)
         case .chamfered(let scale):
             return Chamfer(cut: half * 0.7 * scale).path(in: r)
+        case .facetted(let scale):
+            return Facet(cut: half * 0.5 * scale).path(in: r)
         case .square:
             return Rectangle().path(in: r)
         }
@@ -795,6 +807,26 @@ struct Chamfer: Shape {
         p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - c))
         p.addLine(to: CGPoint(x: rect.maxX - c, y: rect.maxY))
         p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + c))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// A rectangle with all four corners cut off on the diagonal.
+struct Facet: Shape {
+    var cut: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let c = min(cut, rect.width / 2, rect.height / 2)
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX + c, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - c, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + c))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - c))
+        p.addLine(to: CGPoint(x: rect.maxX - c, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX + c, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - c))
         p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + c))
         p.closeSubpath()
         return p
@@ -1192,15 +1224,36 @@ struct ThemeBackdrop: View {
     /// The street, if this build has its picture: `Backdrop-bladeRunner.jpg` in the app's
     /// resources, which only the family build carries (the art is not ours to hand out).
     /// Read once; nil means draw the scene without it.
-    nonisolated(unsafe) private static let cityPicture: Image? = {
-        guard let url = Bundle.main.url(forResource: "Backdrop-bladeRunner", withExtension: "jpg")
+    nonisolated(unsafe) private static let cityPicture = picture("bladeRunner")
+    /// Arrakis, likewise: `Backdrop-dune.jpg`, family build only.
+    nonisolated(unsafe) private static let dunePicture = picture("dune")
+
+    nonisolated private static func picture(_ name: String) -> Image? {
+        guard let url = Bundle.main.url(forResource: "Backdrop-\(name)", withExtension: "jpg")
         else { return nil }
         #if canImport(AppKit)
         return NSImage(contentsOf: url).map(Image.init(nsImage:))
         #else
         return UIImage(contentsOfFile: url.path).map(Image.init(uiImage:))
         #endif
-    }()
+    }
+
+    /// A picture filling the backdrop, breathing very slowly in and out so it never sits
+    /// dead still. Returns where it was drawn, for anything placed on it.
+    @discardableResult
+    private static func drawPicture(_ c: inout GraphicsContext, _ s: CGSize, _ picture: Image,
+                                    _ k: Double, _ t: Double) -> CGRect {
+        let image = c.resolve(picture)
+        let fit = max(s.width / image.size.width, s.height / image.size.height)
+        let zoom = fit * (1.04 + 0.02 * sin(t * 0.025))
+        let size = CGSize(width: image.size.width * zoom, height: image.size.height * zoom)
+        let frame = CGRect(x: (s.width - size.width) / 2, y: (s.height - size.height) / 2,
+                           width: size.width, height: size.height)
+        var layer = c
+        layer.opacity = min(1, 0.95 * k)
+        layer.draw(image, in: frame)
+        return frame
+    }
 
     /// The picture, breathing very slowly in and out so it never sits dead still; mist
     /// rolling across it in banks, low and heavy like ground fog, tinted by the signs; and
@@ -1211,15 +1264,7 @@ struct ThemeBackdrop: View {
         let all = Path(CGRect(origin: .zero, size: s))
         var flares: [Flare] = []
         if let picture = cityPicture {
-            let image = c.resolve(picture)
-            let fit = max(s.width / image.size.width, s.height / image.size.height)
-            let zoom = fit * (1.04 + 0.02 * sin(t * 0.025))
-            let size = CGSize(width: image.size.width * zoom, height: image.size.height * zoom)
-            let frame = CGRect(x: (s.width - size.width) / 2, y: (s.height - size.height) / 2,
-                               width: size.width, height: size.height)
-            var layer = c
-            layer.opacity = min(1, 0.95 * k)
-            layer.draw(image, in: frame)
+            let frame = drawPicture(&c, s, picture, k, t)
             flares = signs(&c, frame, k, t)
             // Darker at the top, where the page's title and search sit, and at the edges.
             c.fill(all, with: .linearGradient(
@@ -1395,22 +1440,84 @@ struct ThemeBackdrop: View {
 
     // MARK: Dune
 
-    /// Restraint: the warm light low on the horizon, and fine sand carried across it on
-    /// the wind. Nothing drawn that says "desert" — the palette already does.
+    /// Arrakis in a sandstorm: the picture (when the build has it) under a moving sky of
+    /// dust — wide banks of it rolling across on the wind and turning as they go — fine
+    /// sand streaming low, and spice drifting through the air in two depths, the near
+    /// motes large, soft and quick, the far ones pin-points that glint slowly. Without the
+    /// picture, the same weather over the warm horizon.
     private static func dunes(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                               _ k: Double, _ t: Double) {
-        horizonGlow(&c, s, th.glow, k * 0.8, height: 0.6)
+        let all = Path(CGRect(origin: .zero, size: s))
+        if let picture = dunePicture {
+            drawPicture(&c, s, picture, k, t)
+            c.fill(all, with: .linearGradient(
+                Gradient(stops: [.init(color: th.ground.opacity(0.55), location: 0),
+                                 .init(color: th.ground.opacity(0.25), location: 0.5),
+                                 .init(color: th.ground.opacity(0.45), location: 1)]),
+                startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+        } else {
+            horizonGlow(&c, s, th.glow, k * 0.8, height: 0.6)
+        }
+        // Dust banks, mostly with the wind (left to right), each at its own pace, swelling
+        // and sinking as they roll.
+        let dust = th.accentHot, sand = th.ink, shadow = th.glowDeep
+        for (i, (y, r, speed, tint, a)) in [(0.30, 0.45, 38.0, dust, 0.12), (0.62, 0.50, 24.0, sand, 0.10),
+                                            (0.85, 0.55, 46.0, dust, 0.14), (0.48, 0.38, 30.0, shadow, 0.16),
+                                            (0.92, 0.60, 18.0, sand, 0.10), (0.15, 0.40, 52.0, dust, 0.08),
+                                            (0.72, 0.42, -14.0, shadow, 0.12), (0.55, 0.32, 60.0, sand, 0.08)
+                                           ].enumerated() {
+            let reach = max(s.width, s.height) * r
+            let span = Double(s.width + reach * 2)
+            let x = (Double(i) * 0.31 * span + t * speed).truncatingRemainder(dividingBy: span)
+            let cx = CGFloat(x < 0 ? x + span : x) - reach
+            let cy = s.height * y + 30 * CGFloat(sin(t * 0.15 + Double(i) * 1.3))
+            let swell = reach * CGFloat(1 + 0.12 * sin(t * 0.2 + Double(i)))
+            c.fill(all, with: .radialGradient(
+                Gradient(stops: [.init(color: tint.opacity(a * k), location: 0),
+                                 .init(color: tint.opacity(a * 0.4 * k), location: 0.55),
+                                 .init(color: .clear, location: 1)]),
+                center: CGPoint(x: cx, y: cy), startRadius: 0, endRadius: swell))
+        }
+        // Sand streaming low on the wind.
         var rng = Seeded(state: 10191)
         for _ in 0..<Int(s.width * s.height / 2200) {
-            let speed = 6 + rng.next() * 16
+            let speed = 30 + rng.next() * 60
             let span = s.width + 20
             let x = (rng.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 10
-            // Heavier near the ground, as blown sand is.
             let y = s.height * (1 - pow(rng.next(), 1.8) * 0.9)
-                + 3 * sin(t * (0.3 + rng.next() * 0.4) + rng.next() * 6)
+                + 4 * sin(t * (0.3 + rng.next() * 0.4) + rng.next() * 6)
             let r = 0.5 + rng.next() * 0.9
-            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
-                   with: .color(th.ink.opacity((0.06 + rng.next() * 0.10) * k)))
+            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r * 2.5, height: r)),
+                   with: .color(sand.opacity((0.06 + rng.next() * 0.10) * k)))
+        }
+        var glow = c
+        glow.blendMode = .plusLighter
+        // Spice blows in from the right, into Paul's face, against the dust's drift.
+        // Far spice: pin-points drifting up and across, each glinting on a slow cycle.
+        var far = Seeded(state: 0xD0E)
+        for _ in 0..<Int(s.width * s.height / 9000) {
+            let speed = 8 + far.next() * 18
+            let rise = 3 + far.next() * 8
+            let span = Double(s.width + 40), tall = Double(s.height + 40)
+            let x = span - (far.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 20
+            let y = tall - (far.next() * tall + t * rise).truncatingRemainder(dividingBy: tall) - 20
+            let glint = 0.5 + 0.5 * sin(t * (0.4 + far.next() * 0.5) + far.next() * 6)
+            let r = 0.8 + far.next() * 1.2
+            glow.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
+                      with: .color(th.accent.opacity((0.15 + 0.35 * glint) * k)))
+        }
+        // Near spice: few, large, soft and quick, bobbing as they pass the lens.
+        var near = Seeded(state: 0x5B1CE)
+        for _ in 0..<16 {
+            let speed = 50 + near.next() * 70
+            let span = Double(s.width + 80)
+            let x = span - (near.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 40
+            let y = near.next() * Double(s.height) + 26 * sin(t * (0.5 + near.next() * 0.5) + near.next() * 6)
+            let r = CGFloat(3 + near.next() * 5)
+            let point = CGPoint(x: x, y: y)
+            glow.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
+                      with: .radialGradient(Gradient(colors: [th.accentHot.opacity(0.32 * k), .clear]),
+                                            center: point, startRadius: 0, endRadius: r))
         }
     }
 
