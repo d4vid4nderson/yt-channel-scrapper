@@ -2125,6 +2125,38 @@ struct ThemeBackdrop: View {
             light.fill(all, with: .radialGradient(
                 Gradient(colors: [th.accent2.opacity(0.35 * pulse * k), th.accent2.opacity(0.10 * k), .clear]),
                 center: beam, startRadius: 0, endRadius: frame.width * 0.08))
+            // The Warthog's gun, firing now and then: short bursts of muzzle flash at the
+            // barrel's tip (measured off the picture), the flame thrown out along the barrel.
+            // Small and dim — gunfire across the valley, not a strobe in your face.
+            let burstSlot = 5.5
+            let burstIndex = UInt64(max(0, floor(t / burstSlot)))
+            var burst = Seeded(state: 0x4A27 &+ burstIndex &* 7919)
+            let firing = burst.next() < 0.7
+            let burstStart = burst.next() * (burstSlot - 1.4)
+            let burstLength = 0.5 + burst.next() * 0.8
+            let into = t.truncatingRemainder(dividingBy: burstSlot) - burstStart
+            if firing, into > 0, into < burstLength {
+                let shot = UInt64(floor(t * 12))
+                var flicker = Seeded(state: 0xF1A5 &+ shot &* 104729)
+                if shot % 2 == 0, flicker.next() > 0.2 {
+                    let level = 0.6 + flicker.next() * 0.4
+                    let tip = CGPoint(x: frame.minX + frame.width * 0.167, y: frame.minY + frame.height * 0.690)
+                    let flame = Color(red: 1, green: 0.85, blue: 0.5)
+                    let r = frame.width * 0.009
+                    light.fill(Path(ellipseIn: CGRect(x: tip.x - r * 2, y: tip.y - r * 2, width: r * 4, height: r * 4)),
+                               with: .radialGradient(Gradient(colors: [flame.opacity(0.55 * level * k), .clear]),
+                                                     center: tip, startRadius: 0, endRadius: r * 2))
+                    // The flame, out along the barrel (up and to the left).
+                    var spike = c
+                    spike.blendMode = .plusLighter
+                    spike.translateBy(x: tip.x, y: tip.y)
+                    spike.rotate(by: .degrees(-152))
+                    let length = r * CGFloat(2.5 + flicker.next() * 1.5)
+                    spike.fill(Path(ellipseIn: CGRect(x: 0, y: -r * 0.35, width: length, height: r * 0.7)),
+                               with: .linearGradient(Gradient(colors: [Color.white.opacity(0.8 * level * k), .clear]),
+                                                     startPoint: .zero, endPoint: CGPoint(x: length, y: 0)))
+                }
+            }
         } else {
             horizonGlow(&c, s, th.glowDeep, k, height: 0.5)
         }
