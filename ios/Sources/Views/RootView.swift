@@ -42,6 +42,17 @@ struct RootView: View {
             if isMinor && (model.tab == .search || model.tab == .inbox) { model.tab = .home }
         }
         .task { await model.diagnoseIfAsked() }
+        #if DEBUG
+        // `-ytcsPlay <videoID>`: open the player on a video at launch, for exercising the
+        // player and PiP in the simulator without tapping through. Debug builds only.
+        .task {
+            let args = ProcessInfo.processInfo.arguments
+            if let index = args.firstIndex(of: "-ytcsPlay"), index + 1 < args.count,
+               let video = Video(json: ["id": args[index + 1], "title": "Debug"]) {
+                model.play(video)
+            }
+        }
+        #endif
         .task {
             model.applyChildSetup()
             if model.isMinor && (model.tab == .search || model.tab == .inbox) { model.tab = .home }

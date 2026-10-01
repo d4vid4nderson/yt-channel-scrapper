@@ -217,7 +217,10 @@ struct BrowseView: View {
             }
             ShelfVideos(videos: items, perPage: perPage, rows: isLarge,
                         snapshot: snapshot, emptyNote: emptyNote)
-            if isLarge { MiniPlayer(snapshot: snapshot) }
+            if isLarge {
+                Spacer(minLength: 0)
+                MiniPlayer(snapshot: snapshot)
+            }
         }
     }
 
@@ -281,7 +284,6 @@ private struct ShelfVideos: View {
             Spacer(minLength: 0)
         } else if rows {
             ForEach(videos) { VideoButton(video: $0, snapshot: snapshot, style: .row) }
-            Spacer(minLength: 0)
         } else {
             HStack(alignment: .top, spacing: 10) {
                 ForEach(videos) { VideoButton(video: $0, snapshot: snapshot, style: .tile) }

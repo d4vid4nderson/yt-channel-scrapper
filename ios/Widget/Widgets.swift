@@ -542,8 +542,10 @@ struct PlayerLarge: View {
     var body: some View {
         let progress = snapshot.progress!
         VStack(alignment: .leading, spacing: 8) {
+            // The art takes whatever height the rest leaves, so the widget is filled on
+            // every phone size instead of ending in a gap.
             Color.clear
-                .frame(height: 104)
+                .frame(minHeight: 100, maxHeight: .infinity)
                 .overlay {
                     if let image = load(item.image) {
                         Image(uiImage: image).resizable().scaledToFill()
@@ -584,10 +586,9 @@ struct PlayerLarge: View {
             if let shelf = snapshot.playingShelf {
                 MoreFromChannel(shelf: shelf, snapshot: snapshot, perPage: 2)
                     .padding(.top, 2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            Spacer(minLength: 0)
         }
-        .frame(maxHeight: .infinity, alignment: .top)
     }
 }
 

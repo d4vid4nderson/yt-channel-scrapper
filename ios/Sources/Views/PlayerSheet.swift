@@ -177,17 +177,6 @@ struct PlayerSheet: View {
     @ViewBuilder
     private var actions: some View {
         repeatButton
-        if item.isVideo, ThemedPiP.shared.isSupported {
-            Button {
-                ThemedPiP.shared.start()
-            } label: {
-                Image(systemName: "pip.enter")
-                    .font(.system(size: 13, weight: .semibold))
-            }
-            .buttonStyle(.bordered)
-            .tint(Color.secondaryText)
-            .accessibilityLabel("Picture in Picture")
-        }
         if let video = item.video {
             // Bookmarking is the one thing a minor can add to the library, and it is
             // theirs to undo: the same button takes it off again.
@@ -268,24 +257,33 @@ struct Stage: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.updatesNowPlayingInfoCenter = false
-        // Picture in Picture is `ThemedPiP`'s, not AVKit's: AVKit's window cannot wear
-        // the theme. Swiping home with the player open floats the video over the Home
-        // Screen — the nearest iOS comes to a video widget, since a widget is a drawing
-        // and cannot hold a player. Only for a video: an audio file has nothing to float.
-        controller.allowsPictureInPicturePlayback = false
-        if poster == nil { ThemedPiP.shared.attach(player: player, source: controller.view) }
+        // Swiping home with the player open floats the video over the Home Screen rather
+        // than leaving only its sound — the nearest iOS comes to a video widget, since a
+        // widget is a drawing and cannot hold a player. The widgets' controls drive the
+        // same player, so they work on the floating one too.
+        //
         // Touching `view` forces the controller to load, which is what makes
-        // `contentOverlayView` exist to hang the poster on.
+        // `contentOverlayView` exist to hang the poster — and the themed PiP — on.
         controller.view.backgroundColor = .black
         if let poster { context.coordinator.show(poster, in: controller) }
+        // `ThemedPiP`'s, not AVKit's: AVKit's window cannot wear the theme. Only for a
+        // video — an audio file has nothing to float. If it cannot set up, AVKit's own
+        // stays on, so there is always a PiP.
+        controller.canStartPictureInPictureAutomaticallyFromInline = true
+        controller.allowsPictureInPicturePlayback = !attachThemedPiP(to: controller)
         return controller
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
         if controller.player !== player {
             controller.player = player
-            if poster == nil { ThemedPiP.shared.attach(player: player, source: controller.view) }
+            controller.allowsPictureInPicturePlayback = !attachThemedPiP(to: controller)
         }
+    }
+
+    private func attachThemedPiP(to controller: AVPlayerViewController) -> Bool {
+        guard poster == nil, let overlay = controller.contentOverlayView else { return false }
+        return ThemedPiP.shared.attach(player: player, over: overlay)
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }
