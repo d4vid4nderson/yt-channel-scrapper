@@ -359,7 +359,9 @@ extension Theme {
         accentHot: hex(0xD8644A),
         accent2: hex(0xC9A04A),
         edgeTint: hex(0xB08A3E),
-        brand: hex(0xB8452E),
+        // Gilt, not oxblood: the mark is drawn as an outline, and oxblood vanished on the
+        // dark paper.
+        brand: hex(0xD9B060),
         ground: hex(0x120C07),
         surface: hex(0x1B130B),
         card: hex(0x21170D).opacity(0.92),
@@ -1153,7 +1155,10 @@ extension View {
     func displayType(_ size: CGFloat, classic: Font.Weight = .bold) -> some View {
         let theme = Theme.active
         let type = theme.type
-        return font(.display(size, classic: classic))
+        // No environment design on a named face: a theme's app-wide `.serif` (Middle-
+        // earth's) made SwiftUI re-resolve Uncial Antiqua to the system serif.
+        return fontDesign(type.displayName == nil ? theme.type.design : nil)
+            .font(.display(size, classic: classic))
             .textCase(type.displayCaps ? .uppercase : nil)
             .tracking(type.displayTracking * min(size, 24) / 20)
             .shadow(color: type.displayGlow ? theme.glow.opacity(0.75) : .clear,
@@ -1245,7 +1250,7 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let cityPicture = picture("bladeRunner")
     /// Arrakis, likewise: `Backdrop-dune.jpg`, family build only.
     nonisolated(unsafe) private static let dunePicture = picture("dune")
-    /// The Shire: `Backdrop-middleEarth.jpg`, family build only.
+    /// Rivendell: `Backdrop-middleEarth.jpg`, family build only.
     nonisolated(unsafe) private static let shirePicture = picture("middleEarth")
 
     nonisolated private static func picture(_ name: String) -> Image? {
@@ -1543,20 +1548,19 @@ struct ThemeBackdrop: View {
 
     // MARK: Middle-earth
 
-    /// The map's look, whatever is on it: dark paper lit by one candle. The Shire picture
-    /// where the build has it (family build only), turned to sepia and darkened, or the
-    /// paper alone; then the candlelight — a warm pool a little above the middle, breathing
+    /// The map's look, whatever is on it: dark paper lit by one candle. The Rivendell
+    /// painting where the build has it (family build only), in its own colours and only a
+    /// little darkened, or the paper alone; then the candlelight — a warm pool a little above the middle, breathing
     /// very slowly — and the edges falling away into shadow. Nothing drifting through it.
     private static func parchment(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
+        let pictured = shirePicture != nil
         if let picture = shirePicture {
+            // The painting in its own colours, only a little darker, so the page's text
+            // stays readable over it.
             drawPicture(&c, s, picture, k, t)
-            // Sepia: the picture's colour replaced by the paper's, then darkened.
-            var tone = c
-            tone.blendMode = .color
-            tone.fill(all, with: .color(Color(red: 0.55, green: 0.38, blue: 0.20).opacity(0.85)))
-            c.fill(all, with: .color(th.ground.opacity(0.45)))
+            c.fill(all, with: .color(th.ground.opacity(0.25)))
         } else {
             // Paper grain: fine flecks of darker ink.
             var rng = Seeded(state: 1954)
@@ -1572,13 +1576,13 @@ struct ThemeBackdrop: View {
         var light = c
         light.blendMode = .plusLighter
         light.fill(all, with: .radialGradient(
-            Gradient(stops: [.init(color: th.glow.opacity(0.22 * k), location: 0),
+            Gradient(stops: [.init(color: th.glow.opacity((pictured ? 0.08 : 0.22) * k), location: 0),
                              .init(color: th.glowDeep.opacity(0.10 * k), location: 0.5),
                              .init(color: .clear, location: 1)]),
             center: candle, startRadius: 0, endRadius: reach))
         c.fill(all, with: .radialGradient(
-            Gradient(stops: [.init(color: .clear, location: 0.35),
-                             .init(color: Color.black.opacity(0.65 * k), location: 1)]),
+            Gradient(stops: [.init(color: .clear, location: 0.4),
+                             .init(color: Color.black.opacity((pictured ? 0.45 : 0.65) * k), location: 1)]),
             center: candle, startRadius: 0, endRadius: max(s.width, s.height) * 0.78))
     }
 
