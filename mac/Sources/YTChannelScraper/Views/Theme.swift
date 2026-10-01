@@ -163,6 +163,8 @@ struct Theme: Identifiable, @unchecked Sendable {
     var highlight: Color? = nil
 
     var litTint: Color { highlight ?? edgeTint }
+    /// Now and then a glint of light on the hero's title and mark (`Glint`).
+    var glints = false
 
     var colorScheme: ColorScheme? {
         switch appearance {
@@ -478,7 +480,8 @@ extension Theme {
         aurora: [hex(0x18E4FF), hex(0x0A6FA8), hex(0x0B3D66), hex(0x7FF3FF)],
         lcd: LCD(background: hex(0x00070A), ink: hex(0x7FF3FF), glow: hex(0x18E4FF)),
         // The other side's orange, where something is lit or chosen.
-        highlight: hex(0xFF9B26)
+        highlight: hex(0xFF9B26),
+        glints: true
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
@@ -992,6 +995,63 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 }
 
 // MARK: - Skin chrome
+
+/// A lens glint on a point of the hero — the end of the title's last letter, the corner
+/// of the mark: every so often, at an uneven moment, a small four-pointed star of light
+/// swells there over a fraction of a second and fades. Nothing in themes without
+/// `glints`, and still (absent) under Reduce Motion.
+struct Glint: View {
+    /// Keeps two glints from firing together.
+    var seed: UInt64 = 0
+    var size: CGFloat = 26
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        let theme = Theme.active
+        if theme.glints && !reduceMotion {
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let level = Self.level(t, seed: seed)
+                Canvas { c, s in
+                    guard level > 0 else { return }
+                    c.blendMode = .plusLighter
+                    let p = CGPoint(x: s.width / 2, y: s.height / 2)
+                    let white = Color.white
+                    c.fill(Path(ellipseIn: CGRect(x: p.x - s.width / 2, y: p.y - s.height / 2,
+                                                  width: s.width, height: s.height)),
+                           with: .radialGradient(Gradient(colors: [theme.accent.opacity(0.45 * level), .clear]),
+                                                 center: p, startRadius: 0, endRadius: s.width / 2))
+                    for (w, h) in [(s.width, 1.6), (1.6, s.height * 0.7)] {
+                        c.fill(Path(ellipseIn: CGRect(x: p.x - w / 2, y: p.y - h / 2, width: w, height: h)),
+                               with: .radialGradient(Gradient(colors: [white.opacity(0.95 * level), .clear]),
+                                                     center: p, startRadius: 0, endRadius: max(w, h) / 2))
+                    }
+                    c.fill(Path(ellipseIn: CGRect(x: p.x - 2.5, y: p.y - 2.5, width: 5, height: 5)),
+                           with: .color(white.opacity(level)))
+                }
+                .frame(width: size, height: size)
+                .rotationEffect(.degrees(12 * level))
+            }
+            .allowsHitTesting(false)
+        }
+    }
+
+    /// 0 most of the time; a swell lasting about 0.9s at uneven moments, a few seconds
+    /// apart.
+    private static func level(_ t: Double, seed: UInt64) -> Double {
+        let slot = 4.5
+        let shifted = t + Double(seed) * 2.1
+        let index = UInt64(max(0, floor(shifted / slot)))
+        var x = (index &+ seed &* 7919) &* 6364136223846793005 &+ 1442695040888963407
+        x ^= x >> 33
+        let roll = Double(x % 1000) / 1000
+        guard roll < 0.55 else { return 0 }
+        let start = Double((x >> 10) % 1000) / 1000 * (slot - 1)
+        let age = shifted.truncatingRemainder(dividingBy: slot) - start
+        guard age > 0, age < 0.9 else { return 0 }
+        return sin(.pi * age / 0.9)
+    }
+}
 
 /// Retro's hover: the control's rule breaking up — printed in red and cyan out of
 /// register by an amount that jumps a few times a second, slices of it torn sideways,

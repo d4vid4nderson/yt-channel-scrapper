@@ -390,6 +390,10 @@ struct RootView: View {
                     HStack(spacing: 16) {
                         BrandMark(width: 44)
                             .matchedGeometryEffect(id: "brand", in: hero)
+                            // A theme's occasional glint on the mark's corner.
+                            .overlay(alignment: .topTrailing) {
+                                Glint(seed: 1, size: 22).offset(x: 8, y: -8)
+                            }
                         Text(Paths.displayName)
                             .displayType(30)
                             .foregroundStyle(Palette.ink(1))
@@ -397,6 +401,10 @@ struct RootView: View {
                             // at 40pt; it shrinks rather than being cut off.
                             .lineLimit(1)
                             .minimumScaleFactor(0.4)
+                            // And on the tip of the last letter.
+                            .overlay(alignment: .topTrailing) {
+                                Glint(seed: 2, size: 30).offset(x: 12, y: -6)
+                            }
                             .transition(.opacity)
                     }
                     SearchPill(model: model, compact: false)
