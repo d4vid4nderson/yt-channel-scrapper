@@ -1232,6 +1232,7 @@ struct ThemeBackdrop: View {
         // which is what makes it read as falling through wind rather than as scratches.
         let slant = 0.16
         let area = s.width * s.height
+        let flares = cityFlares(s, th, t)
         for (layer, count, speed, length, weight, width) in [
             (0, area / 2600, 560.0, 14.0, 0.10, 0.6),
             (1, area / 8000, 1050.0, 30.0, 0.18, 0.9),
@@ -1250,6 +1251,96 @@ struct ThemeBackdrop: View {
                 streaks.addLine(to: CGPoint(x: x - len * slant, y: y + len))
             }
             c.stroke(streaks, with: .color(th.ink.opacity(weight * k)), lineWidth: width)
+            // The same drops again where a flare is, in its colour: rain catching the
+            // light as it falls through it.
+            for flare in flares {
+                var lit = c
+                lit.blendMode = .plusLighter
+                let reach = flare.reach * 0.9
+                lit.clip(to: Path(ellipseIn: CGRect(x: flare.at.x - reach, y: flare.at.y - reach,
+                                                    width: reach * 2, height: reach * 2)))
+                lit.stroke(streaks, with: .radialGradient(
+                    Gradient(colors: [flare.color.opacity(0.75 * flare.level * k), .clear]),
+                    center: flare.at, startRadius: 0, endRadius: reach),
+                    lineWidth: width + 0.4)
+            }
+        }
+        for flare in flares { drawFlare(&c, s, flare, k) }
+    }
+
+    /// A passing light's flare: where it is now, its colour, how far its light reaches,
+    /// and how bright it is right now (0…1).
+    private struct Flare {
+        let at: CGPoint
+        let color: Color
+        let reach: CGFloat
+        let level: Double
+    }
+
+    /// The flares alive at `t`: lights on passing vehicles — spinners crossing the street
+    /// high up, traffic lower down. Each enters past one edge, crosses the frame on its
+    /// lane (climbing or sinking a little as it goes) and leaves past the other, brightest
+    /// mid-crossing where it faces the lens most squarely. Three independent streams, each
+    /// with a vehicle in most of its slots: lane, direction, speed and colour drawn from
+    /// that slot's own seed, so random to look at and the same on every frame.
+    private static func cityFlares(_ s: CGSize, _ th: Theme, _ t: Double) -> [Flare] {
+        var flares: [Flare] = []
+        for (stream, slot) in [(0, 7.0), (1, 11.0), (2, 17.0)] {
+            let shifted = t + Double(stream) * 3.1
+            let index = UInt64(max(0, floor(shifted / slot)))
+            let age = shifted.truncatingRemainder(dividingBy: slot)
+            var rng = Seeded(state: 0x2049 &+ index &* 7919 &+ UInt64(stream) &* 104729)
+            guard rng.next() < 0.8 else { continue }
+            let crossing = 3 + rng.next() * 3.5          // seconds to cross the frame
+            guard age < crossing else { continue }
+            let progress = age / crossing
+            let leftward = rng.next() < 0.5
+            let margin = s.width * 0.2
+            let startX = leftward ? s.width + margin : -margin
+            let endX = leftward ? -margin : s.width + margin
+            let lane = s.height * (0.12 + rng.next() * 0.55)
+            let climb = s.height * (rng.next() * 0.16 - 0.08)
+            let at = CGPoint(x: startX + (endX - startX) * progress,
+                             y: lane + climb * progress)
+            let facing = sin(.pi * progress)
+            let colors = [th.accent2, th.ink, Theme.hex(0xFFB23A), th.accent]
+            let color = colors[Int(rng.next() * Double(colors.count)) % colors.count]
+            flares.append(Flare(at: at,
+                                color: color,
+                                reach: min(s.width, s.height) * (0.16 + rng.next() * 0.14),
+                                level: pow(facing, 1.6)))
+        }
+        return flares
+    }
+
+    /// A film lens's flare: a hot core, the long horizontal streak an anamorphic lens
+    /// throws, and a few faint ghosts strung out along the line through the frame's centre.
+    /// All of it added as light.
+    private static func drawFlare(_ c: inout GraphicsContext, _ s: CGSize, _ flare: Flare, _ k: Double) {
+        var light = c
+        light.blendMode = .plusLighter
+        let p = flare.at, a = flare.level * k
+        let core = flare.reach * 0.35
+        light.fill(Path(ellipseIn: CGRect(x: p.x - core, y: p.y - core, width: core * 2, height: core * 2)),
+                   with: .radialGradient(Gradient(colors: [Color.white.opacity(0.35 * a),
+                                                           flare.color.opacity(0.28 * a), .clear]),
+                                         center: p, startRadius: 0, endRadius: core))
+        let streak = s.width * 0.9
+        for (height, weight) in [(2.0, 0.55), (10.0, 0.14)] {
+            let rect = CGRect(x: p.x - streak / 2, y: p.y - height / 2, width: streak, height: height)
+            light.fill(Path(ellipseIn: rect), with: .linearGradient(
+                Gradient(colors: [.clear, flare.color.opacity(weight * a), .clear]),
+                startPoint: CGPoint(x: rect.minX, y: p.y), endPoint: CGPoint(x: rect.maxX, y: p.y)))
+        }
+        let centre = CGPoint(x: s.width / 2, y: s.height / 2)
+        for (f, r, w) in [(0.45, 0.10, 0.10), (0.9, 0.05, 0.14), (1.35, 0.16, 0.06)] {
+            let g = CGPoint(x: p.x + (centre.x - p.x) * f * 2, y: p.y + (centre.y - p.y) * f * 2)
+            let radius = flare.reach * r
+            light.fill(Path(ellipseIn: CGRect(x: g.x - radius, y: g.y - radius,
+                                              width: radius * 2, height: radius * 2)),
+                       with: .radialGradient(Gradient(colors: [flare.color.opacity(w * a),
+                                                               flare.color.opacity(w * 0.4 * a), .clear]),
+                                             center: g, startRadius: 0, endRadius: radius))
         }
     }
 
