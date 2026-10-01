@@ -233,6 +233,18 @@ struct RootView: View {
     /// theme has taken the toolbar down in full screen.
     @ViewBuilder
     private var panelToggles: some View {
+            // Only once there is somewhere to come back from; on the landing view it
+            // would be a button that does nothing.
+            if collapsed {
+                PanelToggle(
+                    icon: "house.fill",
+                    title: "Home",
+                    isOn: false,
+                    help: "Back to the start — the URL is kept  (⇧⌘H)",
+                    toggle: model.goHome
+                )
+                .keyboardShortcut("h", modifiers: [.command, .shift])
+            }
             PanelToggle(
                 icon: "bookmark.fill",
                 title: "Saved",
@@ -326,9 +338,9 @@ struct RootView: View {
             }
 
             if collapsed {
+                // No brand mark beside the pill here: the way home is the house in the
+                // toolbar, and the pill gets the width.
                 HStack(spacing: 10) {
-                    HomeButton(action: model.goHome)
-                        .matchedGeometryEffect(id: "brand", in: hero)
                     SearchPill(model: model, compact: true)
                         .matchedGeometryEffect(id: "pill", in: hero)
                 }
@@ -397,25 +409,6 @@ struct RootView: View {
 }
 
 // MARK: - Chrome
-
-/// The brand mark, which doubles as the way back to the landing view.
-private struct HomeButton: View {
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            BrandMark(width: 30)
-                .scaleEffect(hovering ? 1.08 : 1)
-        }
-        .buttonStyle(.plain)
-        .help("Back to the start — the URL is kept")
-        .pointingHand()
-        .accessibilityLabel("Back to the start")
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.15), value: hovering)
-    }
-}
 
 /// The search pill's Videos / Shorts / Live / Music choice, for a themed window.
 private struct TabChooser: View {

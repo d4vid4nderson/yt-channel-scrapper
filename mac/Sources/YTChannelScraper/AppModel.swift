@@ -464,6 +464,8 @@ final class AppModel {
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
         browsingTabs = false
+        // The landing view has no player in it; what was playing carries on in the bar.
+        dismissPreview()
         scraper.reset()
         search.reset()
         lastSearch = nil
