@@ -28,6 +28,12 @@ struct PreviewPanel: View {
     /// not asking for silence, so what is playing goes down to the Now Playing bar.
     let dismiss: () -> Void
 
+    /// How much of the results area the picture takes, set by dragging the grip under
+    /// the panel and kept between launches. 0.6 is where it started.
+    @AppStorage("player.stageFraction") private var fraction: Double = 0.6
+    /// The fraction when the current drag began, so the drag is measured from there.
+    @State private var dragStart: Double?
+
     var body: some View {
         // Every observable read happens here, in this view's own body.
         let video = session.video
@@ -49,14 +55,51 @@ struct PreviewPanel: View {
             }
             .background(Palette.sheetSurface)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.ink(0.12)).frame(height: 1) }
+            .overlay(alignment: .bottom) { grip }
             .onExitCommand(perform: dismiss)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
     }
 
-    /// Most of the room, never all of it: below 3/5 of the results area the list keeps
-    /// enough rows to pick the next video from.
-    private var stageHeight: CGFloat { max(available * 0.6, 220) }
+    /// As much of the results area as the grip has been dragged to, between a floor that
+    /// keeps the picture worth watching and a ceiling that keeps the list's bar and one
+    /// row of the next videos in view.
+    private var stageHeight: CGFloat { max(available * clamped(fraction), 160) }
+
+    private func clamped(_ value: Double) -> Double {
+        let ceiling = max((available - 52 - 170) / max(available, 1), 0.3)
+        return min(max(value, 0.25), ceiling)
+    }
+
+    /// The divider between the player and the list, dragged up or down to trade picture
+    /// for list. Double-click puts it back where it started. Straddles the panel's lower
+    /// edge so it is easy to catch without taking room of its own.
+    private var grip: some View {
+        ZStack {
+            Color.clear
+            Capsule()
+                .fill(Palette.ink(dragStart == nil ? 0.28 : 0.55))
+                .frame(width: 36, height: 4)
+        }
+        .frame(height: 12)
+        .contentShape(Rectangle())
+        .offset(y: 6)
+        .onHover { inside in
+            if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+        }
+        .gesture(
+            DragGesture(minimumDistance: 1, coordinateSpace: .global)
+                .onChanged { drag in
+                    let start = dragStart ?? clamped(fraction)
+                    if dragStart == nil { dragStart = start }
+                    fraction = clamped(start + drag.translation.height / max(available, 1))
+                }
+                .onEnded { _ in dragStart = nil }
+        )
+        .onTapGesture(count: 2) { fraction = 0.6 }
+        .help("Drag to make the player larger or smaller; double-click to reset")
+        .zIndex(1)
+    }
 
     /// What it is and what to do with it, in one line under the picture so the picture
     /// can have the height.

@@ -29,17 +29,8 @@ struct RootView: View {
         VStack(spacing: 0) {
             if themedFullScreen { fullScreenBar }
             HStack(spacing: 0) {
-                // Each panel carries its handle on its inner edge (see `EdgeTab`), so the
-                // handle is where the panel is in every view, and the panel is above the
-                // page so the handle can lie over it.
                 SavedChannelsDrawer(model: model)
-                    .drawerSlot(open: model.showChannelsDrawer, side: .leading) {
-                        EdgeTab(edge: .leading, icon: "bookmark.fill",
-                                title: "Saved", shortcut: "⌘1",
-                                isOpen: model.showChannelsDrawer,
-                                toggle: model.toggleChannelsDrawer)
-                    }
-                    .zIndex(1)
+                    .drawerSlot(open: model.showChannelsDrawer, side: .leading)
 
                 VStack(spacing: 0) {
                     page
@@ -48,26 +39,11 @@ struct RootView: View {
                         updater: model.updater,
                         isPresented: $model.showDownloads
                     )
-                    .bottomDrawerSlot(open: model.showDownloads) {
-                        // A dot, not a tally: that something is running is the part
-                        // worth a mark, and the panel one click away has the numbers.
-                        EdgeTab(edge: .bottom, icon: "arrow.down.circle.fill",
-                                title: "Downloads", shortcut: "⌘2",
-                                busy: model.downloader.activeCount > 0,
-                                isOpen: model.showDownloads,
-                                toggle: model.toggleDownloads)
-                    }
-                    .zIndex(1)
+                    .bottomDrawerSlot(open: model.showDownloads)
                 }
 
                 FamilyDrawer(model: model)
-                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing) {
-                        EdgeTab(edge: .trailing, icon: "person.2.fill",
-                                title: "Family", shortcut: "⌘3",
-                                isOpen: model.showFamilyDrawer,
-                                toggle: model.toggleFamilyDrawer)
-                    }
-                    .zIndex(1)
+                    .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
             }
 
             // Its own module, full width, between the page and the footer: the window
@@ -287,6 +263,8 @@ struct RootView: View {
                 toggleSaved: { model.toggleSaved($0) },
                 dismiss: model.dismissPreview
             )
+            // Over the list, so the resize grip on its lower edge can be caught.
+            .zIndex(1)
             if let error = model.statusError, model.showsResults {
                 ErrorBanner(message: error) { model.goHome() }
                 Divider()
@@ -387,6 +365,78 @@ struct RootView: View {
 }
 
 // MARK: - Chrome
+
+/// Saved, Downloads and Family, inside the search pill beside Search.
+///
+/// They have been toolbar buttons, a header cluster, and handles on the window's edges;
+/// the handles lay over the page and covered the list. The pill is the one control that
+/// is on screen in every view — the hero's and the header's are the same view — so here
+/// the buttons are always beside Search and never over anything. Drawn in the field's own
+/// ink, since the pill is a light surface in Classic and a theme's ink would vanish on it.
+private struct PanelButtons: View {
+    @Bindable var model: AppModel
+    let height: CGFloat
+
+    var body: some View {
+        HStack(spacing: 2) {
+            button("bookmark.fill", "Saved", "⌘1",
+                   isOn: model.showChannelsDrawer, action: model.toggleChannelsDrawer)
+            // A dot, not a tally: that something is running is the part worth a mark,
+            // and the panel one click away has the numbers.
+            button("arrow.down.circle.fill", "Downloads", "⌘2",
+                   busy: model.downloader.activeCount > 0,
+                   isOn: model.showDownloads, action: model.toggleDownloads)
+            button("person.2.fill", "Family", "⌘3",
+                   isOn: model.showFamilyDrawer, action: model.toggleFamilyDrawer)
+        }
+    }
+
+    private func button(_ icon: String, _ title: String, _ shortcut: String,
+                        busy: Bool = false, isOn: Bool,
+                        action: @escaping () -> Void) -> some View {
+        PillIconButton(icon: icon, busy: busy, isOn: isOn, height: height, action: action)
+            .help("\(isOn ? "Close" : "Open") \(title)  (\(shortcut))")
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(isOn ? .isSelected : [])
+    }
+}
+
+private struct PillIconButton: View {
+    let icon: String
+    let busy: Bool
+    let isOn: Bool
+    let height: CGFloat
+    let action: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: height > 30 ? 13 : 12, weight: .medium))
+                .foregroundStyle(isOn ? Palette.accent
+                                 : Palette.fieldInk.opacity(hovering ? 0.85 : 0.55))
+                .overlay(alignment: .topTrailing) {
+                    if busy {
+                        Circle().fill(Palette.accent)
+                            .frame(width: 5, height: 5)
+                            .offset(x: 3, y: -2)
+                    }
+                }
+                .frame(width: height, height: height)
+                .background {
+                    if isOn || hovering {
+                        ThemedCapsule().fill(isOn ? Palette.fieldRaised
+                                                  : Palette.fieldInk.opacity(0.07))
+                    }
+                }
+                .contentShape(ThemedCapsule())
+        }
+        .buttonStyle(.plain)
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .pointingHand()
+    }
+}
 
 /// The channel that is open, at the head of the header row: its picture and its name, so
 /// the row says whose videos are below before you read the list. Nothing while there is
@@ -569,6 +619,8 @@ private struct SearchPill: View {
                 TabChooser(tab: $model.tab, compact: compact)
                     .frame(height: compact ? inner : 34)
             }
+
+            PanelButtons(model: model, height: compact ? inner : 34)
 
             Button {
                 model.isBusy ? model.stop() : model.submit()
