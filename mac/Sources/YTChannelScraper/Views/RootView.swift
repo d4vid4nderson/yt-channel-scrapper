@@ -24,6 +24,11 @@ struct RootView: View {
     /// kept. Nothing is dimmed, because nothing is blocked.
     private var isClassic: Bool { Theme.active.id == .classic }
     @State private var isFullScreen = false
+    /// The window's width and the toolbar title's, measured, so the search pill in the
+    /// toolbar can be given exactly the room between them. A toolbar item that asks for
+    /// more than there is gets moved, with everything after it, into the » overflow menu.
+    @State private var windowWidth: CGFloat = 1000
+    @State private var titleWidth: CGFloat = 200
 
     var body: some View {
         VStack(spacing: 0) {
@@ -77,6 +82,7 @@ struct RootView: View {
             VersionFooter(updater: model.appUpdater)
         }
         .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id ?? model.nowLoading?.id)
+        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) { windowWidth = $0 }
         .frame(minWidth: 820, minHeight: 520)
         // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
         // own grey in the strip between the toolbar and the header.
@@ -111,6 +117,21 @@ struct RootView: View {
                         .displayType(13, classic: .semibold)
                         .foregroundStyle(Palette.ink(0.85))
                         .fixedSize()
+                        .onGeometryChange(for: CGFloat.self, of: { $0.size.width }) {
+                            titleWidth = $0
+                        }
+                }
+            }
+            // Once the hero has collapsed, the search lives here, in one row with the
+            // title and the panel buttons, rather than in a band of its own under them.
+            // Leading, straight after the title, not centred: a centred item has to fit
+            // twice over the wider of its two sides, and spilled onto the title.
+            if collapsed {
+                if #available(macOS 26, *) {
+                    ToolbarItem(placement: .navigation) { toolbarPill }
+                        .sharedBackgroundVisibility(.hidden)
+                } else {
+                    ToolbarItem(placement: .navigation) { toolbarPill }
                 }
             }
         }
@@ -156,14 +177,13 @@ struct RootView: View {
             // One number drives the whole transition: the header's height. The results
             // are offset by exactly that, so they are revealed from underneath as it
             // shrinks rather than being covered by it — one motion, not two.
-            let headerHeight = collapsed ? Layout.headerHeight : geo.size.height
+            // Collapsed, the header is nothing at all: the search pill has gone up into the
+            // window's toolbar, level with the title and the panel buttons.
+            let headerHeight = collapsed ? 0 : geo.size.height
 
             ZStack(alignment: .top) {
-                resultsArea(height: max(geo.size.height - Layout.headerHeight, 0))
-                    .frame(
-                        width: geo.size.width,
-                        height: max(geo.size.height - Layout.headerHeight, 0)
-                    )
+                resultsArea(height: geo.size.height)
+                    .frame(width: geo.size.width, height: geo.size.height)
                     .offset(y: headerHeight)
 
                 header(height: headerHeight)
@@ -229,6 +249,25 @@ struct RootView: View {
         }
     }
 
+    private var toolbarPill: some View {
+        // Room to give way, down to a field and its button: a toolbar item that cannot
+        // shrink to fit is moved, with everything after it, into the » overflow menu.
+        // Narrow, the type menu goes — the tabs over the channel's list cover it.
+        SearchPill(model: model, compact: true, showsType: pillWidth >= 360)
+            .frame(minWidth: 170, idealWidth: pillWidth, maxWidth: pillWidth)
+            // Clear of the title; a theme's corner brackets reach a few points out.
+            .padding(.leading, 12)
+    }
+
+    /// What is left of the toolbar row once the traffic lights, the title and the four
+    /// panel buttons have theirs, less some air either side.
+    private var pillWidth: CGFloat {
+        let lights: CGFloat = 80
+        let buttons: CGFloat = 4 * 40 + 24
+        let air: CGFloat = 84
+        return min(max(windowWidth - lights - titleWidth - buttons - air, 170), 1000)
+    }
+
     /// The three panel buttons: in the window toolbar, or in `fullScreenBar` when a
     /// theme has taken the toolbar down in full screen.
     @ViewBuilder
@@ -281,10 +320,14 @@ struct RootView: View {
                 .displayType(13, classic: .semibold)
                 .foregroundStyle(Palette.ink(0.85))
             Spacer()
+            if collapsed {
+                toolbarPill
+                Spacer()
+            }
             panelToggles
         }
         .padding(.horizontal, Layout.gutter)
-        .frame(height: 40)
+        .frame(height: 52)
         .background(Palette.ground)
         .overlay(alignment: .bottom) {
             Rectangle().fill(Theme.active.edgeTint.opacity(0.35)).frame(height: 1)
@@ -337,16 +380,7 @@ struct RootView: View {
                 AuroraBackground().transition(.opacity)
             }
 
-            if collapsed {
-                // No brand mark beside the pill here: the way home is the house in the
-                // toolbar, and the pill gets the width.
-                HStack(spacing: 10) {
-                    SearchPill(model: model, compact: true)
-                        .matchedGeometryEffect(id: "pill", in: hero)
-                }
-                .padding(.horizontal, Layout.gutter)
-                .frame(maxHeight: .infinity, alignment: .center)
-            } else {
+            if !collapsed {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
                     HStack(spacing: 16) {
@@ -486,6 +520,8 @@ private struct TabChooser: View {
 private struct SearchPill: View {
     @Bindable var model: AppModel
     let compact: Bool
+    /// Off in a narrow toolbar, where the field needs the width more.
+    var showsType = true
     @FocusState private var focused: Bool
 
     var body: some View {
@@ -506,7 +542,9 @@ private struct SearchPill: View {
             .font(.system(size: compact ? 13 : 14))
             .padding(.leading, compact ? 14 : 18)
 
-            if Theme.active.id == .classic {
+            if !showsType {
+                EmptyView()
+            } else if Theme.active.id == .classic {
                 Menu {
                     Picker("Type", selection: $model.tab) {
                         ForEach(ChannelTab.allCases) { Text($0.label).tag($0) }
