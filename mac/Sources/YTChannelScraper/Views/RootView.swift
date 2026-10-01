@@ -34,6 +34,29 @@ struct RootView: View {
 
                 VStack(spacing: 0) {
                     page
+                        // The panels' handles, each on the edge its panel comes out of,
+                        // the same in every view. See `EdgeTab`.
+                        .overlay(alignment: .leading) {
+                            EdgeTab(edge: .leading, icon: "bookmark.fill",
+                                    title: "Saved", shortcut: "⌘1",
+                                    isOpen: model.showChannelsDrawer,
+                                    toggle: model.toggleChannelsDrawer)
+                        }
+                        .overlay(alignment: .trailing) {
+                            EdgeTab(edge: .trailing, icon: "person.2.fill",
+                                    title: "Family", shortcut: "⌘3",
+                                    isOpen: model.showFamilyDrawer,
+                                    toggle: model.toggleFamilyDrawer)
+                        }
+                        .overlay(alignment: .bottom) {
+                            // A dot, not a tally: that something is running is the part
+                            // worth a mark, and the panel one click away has the numbers.
+                            EdgeTab(edge: .bottom, icon: "arrow.down.circle.fill",
+                                    title: "Downloads", shortcut: "⌘2",
+                                    busy: model.downloader.activeCount > 0,
+                                    isOpen: model.showDownloads,
+                                    toggle: model.toggleDownloads)
+                        }
                     DownloadsDrawer(
                         downloader: model.downloader,
                         updater: model.updater,
@@ -86,7 +109,6 @@ struct RootView: View {
         .animation(Layout.drawerEase, value: model.showChannelsDrawer)
         .animation(Layout.drawerEase, value: model.showFamilyDrawer)
         .animation(Layout.drawerEase, value: model.showDownloads)
-        .toolbar { chrome }
         .toolbar(themedFullScreen ? .hidden : .visible, for: .windowToolbar)
         // Read back on appearing as well: a theme change rebuilds this view mid-full-screen.
         .onAppear {
@@ -205,85 +227,30 @@ struct RootView: View {
 
     // MARK: - Toolbar
 
-    /// The three panels live on the window's own chrome, in one cluster at the trailing
-    /// end: left, bottom, right, in the order their edges sit around the window.
-    ///
-    /// Together rather than split across the bar, because they are one set of controls
-    /// doing one kind of thing — a button on each end would read as two unrelated things
-    /// rather than three views of what you have kept.
-    ///
-    /// The icon is a picture of the window with that panel out, so each button says which
-    /// edge it opens without a word on it — and a toggle rather than a plain button, so a
-    /// lit one is a panel that is open, and pressing it again is how you put it away.
-    @ToolbarContentBuilder
-    private var chrome: some ToolbarContent {
-        // The system title used to be what pushed this cluster to the trailing end. A
-        // theme swaps that title for its own, so the gap has to be asked for.
-        if #available(macOS 26, *), !isClassic {
-            ToolbarSpacer(.flexible, placement: .primaryAction)
-        }
-        // On the landing view only. Once a channel is open they move down into the
-        // header row, to the right of the search, so the title bar is just the title.
-        if !collapsed {
-            ToolbarItemGroup(placement: .primaryAction) {
-                panelToggles
-            }
-        }
-    }
-
-    /// The three panel buttons: in the window toolbar, or in `fullScreenBar` when a
-    /// theme has taken the toolbar down in full screen.
-    @ViewBuilder
-    private var panelToggles: some View {
-            // Only once there is somewhere to come back from; on the landing view it
-            // would be a button that does nothing.
-            if collapsed {
-                PanelToggle(
-                    icon: "house.fill",
-                    title: "Home",
-                    isOn: false,
-                    help: "Back to the start — the URL is kept  (⇧⌘H)",
-                    toggle: model.goHome
-                )
-                .keyboardShortcut("h", modifiers: [.command, .shift])
-            }
-            PanelToggle(
-                icon: "bookmark.fill",
-                title: "Saved",
-                isOn: model.showChannelsDrawer,
-                help: "The channels and videos you have saved  (⌘1)",
-                toggle: model.toggleChannelsDrawer
-            )
-            PanelToggle(
-                icon: "arrow.down.circle.fill",
-                title: "Downloads",
-                // A dot, not a tally: that something is running is the part worth a mark
-                // on the chrome, and the panel one click away has the numbers.
-                busy: model.downloader.activeCount > 0,
-                isOn: model.showDownloads,
-                help: "What is downloading, and where it went  (⌘2)",
-                toggle: model.toggleDownloads
-            )
-            PanelToggle(
-                icon: "person.2.fill",
-                title: "Family",
-                isOn: model.showFamilyDrawer,
-                help: "Who you can send videos to  (⌘3)",
-                toggle: model.toggleFamilyDrawer
-            )
+    /// Home, once there is somewhere to come back from; on the landing view it would be a
+    /// button that does nothing. It sits at the head of the header row. The panels'
+    /// buttons are not here at all any more: they are handles on the window's edges.
+    private var homeButton: some View {
+        PanelToggle(
+            icon: "house.fill",
+            title: "Home",
+            isOn: false,
+            help: "Back to the start — the URL is kept  (⇧⌘H)",
+            toggle: model.goHome
+        )
+        .keyboardShortcut("h", modifiers: [.command, .shift])
     }
 
     /// Full screen puts the toolbar in a strip of the system's own drawing, which no
     /// toolbar background reaches — it came up AppKit grey over a themed window. So a
-    /// theme hides it there and draws this in its place: its lettering, the same three
-    /// buttons, its ground and its edge.
+    /// theme hides it there and draws this in its place: its lettering, its ground and
+    /// its edge.
     private var fullScreenBar: some View {
         HStack(spacing: 8) {
             Text(Paths.displayName)
                 .displayType(13, classic: .semibold)
                 .foregroundStyle(Palette.ink(0.85))
             Spacer()
-            if !collapsed { panelToggles }
         }
         .padding(.horizontal, Layout.gutter)
         .frame(height: 52)
@@ -340,14 +307,13 @@ struct RootView: View {
             }
 
             if collapsed {
-                // One row under the title bar: whose channel this is, the search, and the
-                // panel buttons — the title bar above it holds only the title.
+                // One row under the title bar: home, whose channel this is, and the
+                // search — the title bar above it holds only the title.
                 HStack(spacing: 12) {
+                    homeButton
                     OpenChannelBadge(model: model)
                     SearchPill(model: model, compact: true)
                         .matchedGeometryEffect(id: "pill", in: hero)
-                    HStack(spacing: 6) { panelToggles }
-                        .fixedSize()
                 }
                 .padding(.horizontal, Layout.gutter)
                 .frame(maxHeight: .infinity, alignment: .center)
