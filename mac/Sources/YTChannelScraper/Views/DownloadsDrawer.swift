@@ -279,31 +279,19 @@ private struct UpdaterFooter: View {
     }
 }
 
+/// The window's own plates (`ChromeButtonStyle`): the primary for Update, a secondary
+/// for Check. It drew its own, with on-fill lettering on both — fine on the accent, but
+/// on the faint secondary plate that was dark text on a dark panel in a dark theme.
 private struct FooterButton: View {
     let title: String
     var prominent = false
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
-        Button(action: action) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Palette.onFill)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(
-                    prominent
-                        ? AnyShapeStyle(Palette.accent.opacity(hovering ? 0.85 : 1))
-                        : AnyShapeStyle(Palette.ink(hovering ? 0.22 : 0.1)),
-                    in: ThemedCapsule()
-                )
-        }
-        .buttonStyle(.plain)
-        .help(prominent
-              ? "Download the newer yt-dlp and use it from the next download on"
-              : "See whether a newer yt-dlp has been released")
-        .pointingHand()
-        .onHover { hovering = $0 }
+        Button(title, action: action)
+            .buttonStyle(.chrome(prominent ? .primary : .secondary))
+            .help(prominent
+                  ? "Download the newer yt-dlp and use it from the next download on"
+                  : "See whether a newer yt-dlp has been released")
     }
 }
