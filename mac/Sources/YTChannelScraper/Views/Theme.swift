@@ -1556,11 +1556,13 @@ struct ThemeBackdrop: View {
                                   _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
         let pictured = shirePicture != nil
+        var frame: CGRect?
         if let picture = shirePicture {
             // The painting in its own colours, only a little darker, so the page's text
             // stays readable over it.
-            drawPicture(&c, s, picture, k, t)
+            frame = drawPicture(&c, s, picture, k, t)
             c.fill(all, with: .color(th.ground.opacity(0.25)))
+            if let frame { windows(&c, frame, k, t) }
         } else {
             // Paper grain: fine flecks of darker ink.
             var rng = Seeded(state: 1954)
@@ -1584,6 +1586,111 @@ struct ThemeBackdrop: View {
             Gradient(stops: [.init(color: .clear, location: 0.4),
                              .init(color: Color.black.opacity((pictured ? 0.45 : 0.65) * k), location: 1)]),
             center: candle, startRadius: 0, endRadius: max(s.width, s.height) * 0.78))
+        if pictured {
+            sunlight(&c, s, k, t)
+            mist(&c, s, k, t)
+        }
+    }
+
+    /// Lights in the Rivendell painting, as fractions of it across and down, measured off
+    /// the painting itself: the flames and lamps it already shows, at full strength, and
+    /// a few of the left hall's dark windows, softly.
+    private static let rivendellWindows: [(x: Double, y: Double, lit: Bool)] = [
+        (0.7716, 0.5138, true), (0.8200, 0.5138, true),   // the far hall's two fires
+        (0.7177, 0.5232, true), (0.7258, 0.5207, true),   // its lamps by the stair
+        (0.4968, 0.3903, true), (0.5060, 0.3903, true),   // lamps under the balcony
+        (0.3070, 0.4478, false), (0.3410, 0.4480, false), // the left hall's arches
+        (0.2656, 0.2947, false), (0.3768, 0.3560, false), // a tower, the tall window
+    ]
+
+    /// Candlelight in the windows: each a small warm point with a halo, wavering on its
+    /// own two slow beats so the house looks lived in. A waver, never a flicker — the
+    /// light does not go out or jump.
+    private static func windows(_ c: inout GraphicsContext, _ picture: CGRect, _ k: Double, _ t: Double) {
+        var light = c
+        light.blendMode = .plusLighter
+        let flame = Color(red: 1, green: 0.74, blue: 0.38)
+        for (i, window) in rivendellWindows.enumerated() {
+            let n = Double(i)
+            let waver = 0.75 + 0.15 * sin(t * (0.9 + n * 0.07) + n * 2.3)
+                + 0.10 * sin(t * (1.7 + n * 0.11) + n * 1.1)
+            let p = CGPoint(x: picture.minX + picture.width * window.x,
+                            y: picture.minY + picture.height * window.y)
+            let r = picture.width * (window.lit ? 0.0035 : 0.005)
+            let layers: [(CGFloat, Double)] = window.lit ? [(1.0, 0.6), (4.0, 0.12)] : [(1.0, 0.22), (3.0, 0.06)]
+            for (scale, weight) in layers {
+                let radius = r * scale
+                light.fill(Path(ellipseIn: CGRect(x: p.x - radius, y: p.y - radius,
+                                                  width: radius * 2, height: radius * 2)),
+                           with: .radialGradient(Gradient(colors: [flame.opacity(weight * waver * k), .clear]),
+                                                 center: p, startRadius: 0, endRadius: radius))
+            }
+        }
+    }
+
+    /// The sun the painting is lit by, from beyond the top-left corner: a warm bloom where
+    /// it enters and long beams falling across the valley. Drawn soft — the beams are
+    /// blurred heavily, so they read as light through haze rather than as shapes — each
+    /// brightening and fading on a long slow breath and swinging a hair as it does.
+    private static func sunlight(_ c: inout GraphicsContext, _ s: CGSize, _ k: Double, _ t: Double) {
+        let sun = CGPoint(x: -s.width * 0.04, y: -s.height * 0.08)
+        let warm = Color(red: 1, green: 0.88, blue: 0.64)
+        var light = c
+        light.blendMode = .plusLighter
+        light.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
+            Gradient(stops: [.init(color: warm.opacity(0.30 * k), location: 0),
+                             .init(color: warm.opacity(0.08 * k), location: 0.35),
+                             .init(color: .clear, location: 1)]),
+            center: sun, startRadius: 0, endRadius: max(s.width, s.height) * 0.55))
+        light.drawLayer { layer in
+            layer.addFilter(.blur(radius: max(s.width, s.height) * 0.03))
+            let length = hypot(s.width, s.height) * 1.2
+            for (i, (angle, spread, weight)) in [(0.42, 0.035, 0.20), (0.55, 0.05, 0.16), (0.70, 0.03, 0.22),
+                                                 (0.84, 0.045, 0.14), (1.0, 0.03, 0.12)].enumerated() {
+                let n = Double(i)
+                let breath = 0.55 + 0.45 * sin(t * (0.05 + n * 0.012) + n * 1.9)
+                let a = angle + 0.015 * sin(t * 0.03 + n)
+                var beam = Path()
+                beam.move(to: sun)
+                beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(a - spread)),
+                                         y: sun.y + length * CGFloat(sin(a - spread))))
+                beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(a + spread)),
+                                         y: sun.y + length * CGFloat(sin(a + spread))))
+                beam.closeSubpath()
+                layer.fill(beam, with: .radialGradient(
+                    Gradient(colors: [warm.opacity(weight * breath * k), .clear]),
+                    center: sun, startRadius: 0, endRadius: length * 0.85))
+            }
+        }
+    }
+
+    /// Spray from the falls rising out of the valley: a standing bank of it along the
+    /// bottom, and puffs that lift off it, swell and thin out as they climb, each on its
+    /// own long cycle. Drawn as mist — pale and matte, not lit.
+    private static func mist(_ c: inout GraphicsContext, _ s: CGSize, _ k: Double, _ t: Double) {
+        let all = Path(CGRect(origin: .zero, size: s))
+        let haze = Color(red: 0.86, green: 0.88, blue: 0.90)
+        c.fill(all, with: .linearGradient(
+            Gradient(stops: [.init(color: .clear, location: 0.6),
+                             .init(color: haze.opacity(0.14 * k), location: 1)]),
+            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+        for i in 0..<10 {
+            let n = Double(i)
+            let life = 18 + (n * 7).truncatingRemainder(dividingBy: 11)
+            let shifted = t + n * 4.7
+            let cycle = UInt64(max(0, floor(shifted / life)))
+            let p = shifted.truncatingRemainder(dividingBy: life) / life
+            var rng = Seeded(state: 0x41DE &+ cycle &* 6151 &+ UInt64(i) &* 9973)
+            let x = s.width * CGFloat(rng.next()) + CGFloat(p) * s.width * CGFloat(rng.next() * 0.12 - 0.06)
+            let y = s.height * (1.08 - 0.4 * CGFloat(p))
+            let r = max(s.width, s.height) * CGFloat(0.12 + 0.22 * p + rng.next() * 0.05)
+            let alpha = sin(.pi * p) * 0.16 * k
+            c.fill(all, with: .radialGradient(
+                Gradient(stops: [.init(color: haze.opacity(alpha), location: 0),
+                                 .init(color: haze.opacity(alpha * 0.4), location: 0.5),
+                                 .init(color: .clear, location: 1)]),
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: r))
+        }
     }
 
     // MARK: The Prancing Pony
