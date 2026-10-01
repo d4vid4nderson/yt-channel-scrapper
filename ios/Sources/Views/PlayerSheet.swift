@@ -257,33 +257,22 @@ struct Stage: UIViewControllerRepresentable {
         let controller = AVPlayerViewController()
         controller.player = player
         controller.updatesNowPlayingInfoCenter = false
+        // Touching `view` forces the controller to load, which is what makes
+        // `contentOverlayView` exist to hang the poster on.
+        controller.view.backgroundColor = .black
+        if let poster { context.coordinator.show(poster, in: controller) }
         // Swiping home with the player open floats the video over the Home Screen rather
         // than leaving only its sound — the nearest iOS comes to a video widget, since a
         // widget is a drawing and cannot hold a player. The widgets' controls drive the
-        // same player, so they work on the floating one too.
-        //
-        // Touching `view` forces the controller to load, which is what makes
-        // `contentOverlayView` exist to hang the poster — and the themed PiP — on.
-        controller.view.backgroundColor = .black
-        if let poster { context.coordinator.show(poster, in: controller) }
-        // `ThemedPiP`'s, not AVKit's: AVKit's window cannot wear the theme. Only for a
-        // video — an audio file has nothing to float. If it cannot set up, AVKit's own
-        // stays on, so there is always a PiP.
+        // same player, so they work on the floating one too. AVKit's own PiP, by choice:
+        // a themed one (an accent frame drawn onto every frame) was built and taken out
+        // again, because a frame round the picture distracts from the video.
         controller.canStartPictureInPictureAutomaticallyFromInline = true
-        controller.allowsPictureInPicturePlayback = !attachThemedPiP(to: controller)
         return controller
     }
 
     func updateUIViewController(_ controller: AVPlayerViewController, context: Context) {
-        if controller.player !== player {
-            controller.player = player
-            controller.allowsPictureInPicturePlayback = !attachThemedPiP(to: controller)
-        }
-    }
-
-    private func attachThemedPiP(to controller: AVPlayerViewController) -> Bool {
-        guard poster == nil, let overlay = controller.contentOverlayView else { return false }
-        return ThemedPiP.shared.attach(player: player, over: overlay)
+        if controller.player !== player { controller.player = player }
     }
 
     func makeCoordinator() -> Coordinator { Coordinator() }

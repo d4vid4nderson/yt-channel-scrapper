@@ -244,7 +244,6 @@ final class Playback {
             player.replaceCurrentItem(with: nil)
         }
         NowPlaying.shared.end()
-        ThemedPiP.shared.detach()
         Self.releaseAudioSession()
         state = .working("Finding a stream…")
         item = nil
