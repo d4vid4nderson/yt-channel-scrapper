@@ -59,7 +59,6 @@ struct DownloadsDrawer: View {
                 downloader.clearFinished()
             }
             .disabled(!hasFinished)
-            .opacity(hasFinished ? 1 : 0.4)
             SheetButton(title: "Close", icon: "xmark", action: close)
         }
         .padding(.horizontal, 20)

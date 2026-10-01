@@ -20,21 +20,21 @@ struct QualityMenu: View {
 
     var body: some View {
         Button(action: present) {
-            HStack(spacing: 9) {
+            HStack(spacing: 7) {
                 Image(systemName: "slider.horizontal.3")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
-                Text(face).font(.system(size: 12.5))
+                    .foregroundStyle(Palette.ink(0.5))
+                Text(face).monospacedDigit()
                 // `menuStyle(.button)` drew this itself; a plain button has to say so.
                 Image(systemName: "chevron.down")
-                    .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Palette.ink(0.5))
             }
-            .padding(.leading, 5)
-            .padding(.trailing, 7)
-            .padding(.vertical, 5)
         }
-        .modifier(FaceStyle())
+        // The window's toolbar plate (`ChromeButtonStyle`), in Classic as in every theme:
+        // the system's bordered bezel was a different height and corner from everything
+        // else on the row.
+        .buttonStyle(.chrome())
         .fixedSize()
         .background(MenuAnchor { anchor = $0 })
     }
@@ -101,16 +101,4 @@ private struct MenuAnchor: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSView, context: Context) {}
-}
-
-/// The system's bordered button in Classic, the theme's own otherwise — a grey AppKit
-/// bezel was the one control on the results bar still wearing the system's look.
-private struct FaceStyle: ViewModifier {
-    func body(content: Content) -> some View {
-        if Theme.active.id == .classic {
-            content.buttonStyle(.bordered)
-        } else {
-            content.buttonStyle(ThemedButtonStyle())
-        }
-    }
 }

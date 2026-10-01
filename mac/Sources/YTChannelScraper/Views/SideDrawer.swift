@@ -72,25 +72,24 @@ extension View {
 
 /// The drawers' own button: light on the dark surface, never the system pill, which would
 /// repaint white-on-white here.
+///
+/// The same square plate as every icon button in the window's bars (`ChromeButtonStyle`),
+/// rather than the disc it was: the player's bar, the toolbars and the panels each had
+/// their own idea of what an icon button looked like, and three shapes for one job is
+/// what made the window feel assembled rather than designed.
 struct SheetButton: View {
     let title: String
     let icon: String
     let action: () -> Void
-    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Palette.ink(1))
-                .frame(width: 28, height: 28)
-                .background(Palette.ink(hovering ? 0.22 : 0.1), in: Circle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(.chrome(.secondary, square: true))
         .help(title)
         .accessibilityLabel(title)
-        .pointingHand()
-        .onHover { hovering = $0 }
     }
 }
 

@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 /// Watch a video before deciding to download it — the scraper doubling as a viewer.
@@ -59,11 +60,17 @@ struct PreviewPanel: View {
 
     /// What it is and what to do with it, in one line under the picture so the picture
     /// can have the height.
+    ///
+    /// The controls are the window's standard 28pt plates, in reading order of how far
+    /// each one takes you: keep it, take it elsewhere (YouTube, the notch), then the one
+    /// thing this panel is for — Download, the only accent here — and, past a rule, out.
+    /// It used to be a bookmark disc, a red pill, two grey capsules and a close disc, five
+    /// controls in four shapes.
     private func bar(_ video: Video) -> some View {
-        HStack(spacing: 10) {
-            VStack(alignment: .leading, spacing: 2) {
+        HStack(spacing: 8) {
+            VStack(alignment: .leading, spacing: 3) {
                 Text(video.title)
-                    .font(.system(size: 13.5, weight: .semibold))
+                    .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.ink(1))
                     .lineLimit(1)
                     .truncationMode(.tail)
@@ -71,7 +78,7 @@ struct PreviewPanel: View {
                 Text([video.channelName ?? "", video.durationText, video.viewsText]
                         .filter { !$0.isEmpty }.joined(separator: "  ·  "))
                     .font(.system(size: 11).monospacedDigit())
-                    .foregroundStyle(Palette.ink(0.6))
+                    .foregroundStyle(Palette.ink(0.55))
                     .lineLimit(1)
             }
             // The title is the part that gives way in a narrow window; the buttons keep
@@ -80,70 +87,63 @@ struct PreviewPanel: View {
 
             Spacer(minLength: 8)
 
-            CircleButton(
-                icon: isSaved(video) ? "bookmark.fill" : "bookmark",
-                title: isSaved(video)
-                    ? "Remove from Saved"
-                    : "Save this video to your shelf",
-                tint: isSaved(video) ? Palette.accent : nil,
-                action: { toggleSaved(video) }
-            )
+            let saved = isSaved(video)
+            Button { toggleSaved(video) } label: {
+                Image(systemName: saved ? "bookmark.fill" : "bookmark")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.chrome(.secondary, square: true, isOn: saved))
+            .help(saved ? "Remove from Saved" : "Save this video to your shelf")
+            .accessibilityLabel(saved ? "Remove from Saved" : "Save")
+
+            Button { NSWorkspace.shared.open(video.url) } label: {
+                Label("YouTube", systemImage: "arrow.up.right")
+                    .labelStyle(TrailingIcon())
+            }
+            .buttonStyle(.chrome())
+            .help("Open this video on YouTube, in your browser")
+
+            Button(action: popOut) {
+                HStack(spacing: 6) {
+                    NotchIcon(width: 14)
+                    Text("Notch Player")
+                }
+            }
+            .buttonStyle(.chrome())
+            .help("Keep it playing in the notch and put the window away")
 
             Button {
                 download(video)
             } label: {
-                Label("Download", systemImage: "arrow.down.circle.fill")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Palette.onFill)
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(Palette.accent, in: ThemedCapsule())
+                Label("Download", systemImage: "arrow.down")
             }
-            .buttonStyle(.plain)
+            .buttonStyle(.chrome(.primary))
             .help("Queue this video at the chosen quality; it keeps playing here")
-            .pointingHand()
 
-            Link(destination: video.url) {
-                Text("Open on YouTube")
-                    .font(.system(size: 12))
-                    .foregroundStyle(Palette.ink(0.75))
-                    .lineLimit(1)
-                    .fixedSize()
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 7)
-                    .background(Palette.ink(0.1), in: ThemedCapsule())
+            ChromeSeparator()
+
+            Button(action: dismiss) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 11, weight: .bold))
             }
-            .buttonStyle(.plain)
-            .help("Open this video in your browser")
-            .pointingHand()
-
-            Button(action: popOut) {
-                HStack(spacing: 6) {
-                    NotchIcon(width: 15)
-                    Text("Notch Player")
-                }
-                .font(.system(size: 12))
-                .foregroundStyle(Palette.ink(0.75))
-                .lineLimit(1)
-                .fixedSize()
-                .padding(.horizontal, 12)
-                .padding(.vertical, 7)
-                .background(Palette.ink(0.1), in: ThemedCapsule())
-            }
-            .buttonStyle(.plain)
-            .help("Keep it playing in the notch and put the window away")
-            .pointingHand()
-
-            CircleButton(
-                icon: "xmark",
-                title: "Close the player — it keeps playing in the bar at the bottom  (esc)",
-                action: dismiss
-            )
+            .buttonStyle(.chrome(.ghost, square: true))
+            .help("Close the player — it keeps playing in the bar at the bottom  (esc)")
+            .accessibilityLabel("Close the player")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.leading, 16)
+        .padding(.trailing, 10)
+        .frame(height: 52)
+    }
+}
+
+/// "YouTube ↗": the arrow says it leaves the app, so it goes after the word, where the
+/// eye arrives at it last.
+private struct TrailingIcon: LabelStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        HStack(spacing: 5) {
+            configuration.title
+            configuration.icon.font(.system(size: 10, weight: .semibold))
+        }
     }
 }
 
@@ -177,28 +177,5 @@ private struct PreviewStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
-    }
-}
-
-private struct CircleButton: View {
-    let icon: String
-    let title: String
-    /// Only the bookmark uses it. Close is chrome and stays white.
-    var tint: Color?
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundStyle(tint ?? Palette.ink(1))
-                .frame(width: 28, height: 28)
-                .background(Palette.ink(hovering ? 0.22 : 0.1), in: Circle())
-        }
-        .buttonStyle(.plain)
-        .help(title)
-        .pointingHand()
-        .onHover { hovering = $0 }
     }
 }

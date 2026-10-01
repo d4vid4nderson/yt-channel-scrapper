@@ -7,12 +7,15 @@ import SwiftUI
 /// once a channel was open — so they were in a different place depending on where you
 /// were. A handle on the edge is where the panel itself is and never moves between views.
 ///
-/// It is drawn as part of the panel, not as a button beside it: the panel's own surface
-/// and hairline, flush against its edge, square where it joins and rounded only where it
-/// sticks out — so with the panel open it reads as the panel's tab, and with it closed as
-/// the panel's edge peeking out of the window. It sits one point over the seam to cover
-/// the panel's hairline there, which is what makes the two one outline. It lives inside
-/// the panel's slot (`drawerSlot(open:side:tab:)`), so the two move as one.
+/// It is drawn as part of the panel, not as a button beside it. Its base flares into the
+/// panel's edge through two concave fillets, the way a folder's tab grows out of the
+/// folder, so the eye follows one continuous outline from the panel's hairline round the
+/// tab and back — there is no point at which the tab could be read as a separate object
+/// laid on top. The surface is the panel's flat plate rather than its lit `sheetSurface`:
+/// that wash is sized to whatever it fills, and squeezed into a tab it tinted the handle a
+/// muddy red that matched nothing. It sits one point over the seam to cover the panel's
+/// hairline there, which is what makes the two one outline, and it lives inside the panel's
+/// slot (`drawerSlot(open:side:tab:)`), so the two move as one.
 struct EdgeTab: View {
     enum Edge { case leading, trailing, bottom }
 
@@ -27,13 +30,17 @@ struct EdgeTab: View {
 
     @State private var hovering = false
 
-    /// How far a tab sticks out from its panel, and how long it is along the edge. Close to
-    /// square on purpose: a tall sliver read as a scrollbar rather than as a handle.
-    static let depth: CGFloat = 26
-    static let length: CGFloat = 32
+    /// How far a tab sticks out from its panel, and how long its face is along the edge.
+    /// A little longer than deep, so it reads as a tab and not as a square button; nowhere
+    /// near the old tall sliver, which read as a scrollbar.
+    static let depth: CGFloat = 24
+    static let length: CGFloat = 36
+    /// The concave sweep at each end of the base, along the edge. Part of the tab's frame,
+    /// so the frame is this much longer at each end than the face.
+    nonisolated static let flare: CGFloat = 7
 
     var body: some View {
-        let shape = TabShape(edge: edge, closed: true)
+        let fill = TabShape(edge: edge, closed: true)
         Button(action: toggle) {
             Image(systemName: icon)
                 .font(.system(size: 12, weight: .semibold))
@@ -45,27 +52,46 @@ struct EdgeTab: View {
                             .offset(x: 3, y: -2)
                     }
                 }
-                .foregroundStyle(isOpen ? Palette.accent : Palette.ink(hovering ? 0.95 : 0.65))
+                .foregroundStyle(isOpen ? Palette.accent : Palette.ink(hovering ? 0.95 : 0.6))
+                // Nudged off the base toward the face, so the glyph sits in the middle of
+                // what sticks out rather than of the whole frame.
+                .offset(nudge)
                 .frame(width: size.width, height: size.height)
-                .background { Palette.sheetSurface.clipShape(shape) }
+                .background {
+                    ZStack {
+                        Palette.surface
+                        Palette.ink(hovering ? 0.06 : 0.025)
+                    }
+                    .clipShape(fill)
+                }
                 .overlay {
                     TabShape(edge: edge, closed: false)
-                        .stroke(Palette.ink(hovering ? 0.32 : 0.2), lineWidth: 1)
+                        .stroke(Palette.ink(hovering ? 0.3 : 0.2), lineWidth: 1)
                 }
-                .contentShape(shape)
+                .contentShape(fill)
         }
         .buttonStyle(.plain)
         .help("\(isOpen ? "Close" : "Open") \(title)  (\(shortcut))")
         .accessibilityLabel(title)
         .accessibilityAddTraits(isOpen ? .isSelected : [])
         .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
         .pointingHand()
         .offset(seam)
     }
 
     private var size: CGSize {
-        edge == .bottom ? CGSize(width: Self.length, height: Self.depth)
-                        : CGSize(width: Self.depth, height: Self.length)
+        let along = Self.length + Self.flare * 2
+        return edge == .bottom ? CGSize(width: along, height: Self.depth)
+                               : CGSize(width: Self.depth, height: along)
+    }
+
+    private var nudge: CGSize {
+        switch edge {
+        case .leading:  CGSize(width: 1, height: 0)
+        case .trailing: CGSize(width: -1, height: 0)
+        case .bottom:   CGSize(width: 0, height: -1)
+        }
     }
 
     /// Over the panel's hairline by its own width.
@@ -112,18 +138,21 @@ extension View {
     }
 }
 
-/// A tab's outline: square on the side that joins the panel, the theme's corner on the
-/// two that stick out. `closed: false` leaves the joining side undrawn, for the hairline,
-/// so the tab and the panel share one outline instead of a line between them.
+/// A tab's outline: a face standing off the base on two sides, the theme's corner where
+/// it turns, and a concave fillet where each side meets the base, sweeping out along the
+/// panel's edge. `closed: false` leaves the base undrawn, for the hairline, so the tab and
+/// the panel share one outline instead of a line between them.
 ///
 /// Drawn once in a frame where the tab sticks out along +u from a base at u = 0, and
-/// mapped onto whichever edge it is on — which is how three edges get one shape.
+/// mapped onto whichever edge it is on — which is how three edges get one shape. A
+/// chamfering theme cuts both the corners and the fillets on the diagonal; a square one
+/// has neither, and its tab is a plain block.
 private struct TabShape: Shape {
     let edge: EdgeTab.Edge
     let closed: Bool
 
     func path(in rect: CGRect) -> Path {
-        let (depth, length) = edge == .bottom ? (rect.height, rect.width) : (rect.width, rect.height)
+        let (depth, along) = edge == .bottom ? (rect.height, rect.width) : (rect.width, rect.height)
         func at(_ u: CGFloat, _ v: CGFloat) -> CGPoint {
             switch edge {
             case .leading:  CGPoint(x: rect.minX + u, y: rect.minY + v)
@@ -132,24 +161,34 @@ private struct TabShape: Shape {
             }
         }
 
+        let f = min(EdgeTab.flare, along / 4, depth / 2)
+        let a = f, b = along - f     // where the face's two sides stand
         var p = Path()
-        p.move(to: at(0, 0))
         switch Theme.active.corners {
         case .rounded(let scale):
-            let r = min(8 * scale, depth, length / 2)
-            p.addArc(tangent1End: at(depth, 0), tangent2End: at(depth, length), radius: r)
-            p.addArc(tangent1End: at(depth, length), tangent2End: at(0, length), radius: r)
+            let r = min(8 * scale, depth - f, (b - a) / 2)
+            p.move(to: at(0, 0))
+            p.addArc(tangent1End: at(0, a), tangent2End: at(f, a), radius: f)
+            p.addArc(tangent1End: at(depth, a), tangent2End: at(depth, b), radius: r)
+            p.addArc(tangent1End: at(depth, b), tangent2End: at(f, b), radius: r)
+            p.addArc(tangent1End: at(0, b), tangent2End: at(0, along), radius: f)
+            p.addLine(to: at(0, along))
         case .chamfered(let scale):
-            let c = min(6 * scale, depth / 2, length / 2)
-            p.addLine(to: at(depth - c, 0))
-            p.addLine(to: at(depth, c))
-            p.addLine(to: at(depth, length - c))
-            p.addLine(to: at(depth - c, length))
+            let c = min(6 * scale, depth / 2, (b - a) / 2)
+            p.move(to: at(0, 0))
+            p.addLine(to: at(f, a))
+            p.addLine(to: at(depth - c, a))
+            p.addLine(to: at(depth, a + c))
+            p.addLine(to: at(depth, b - c))
+            p.addLine(to: at(depth - c, b))
+            p.addLine(to: at(f, b))
+            p.addLine(to: at(0, along))
         case .square:
-            p.addLine(to: at(depth, 0))
-            p.addLine(to: at(depth, length))
+            p.move(to: at(0, a))
+            p.addLine(to: at(depth, a))
+            p.addLine(to: at(depth, b))
+            p.addLine(to: at(0, b))
         }
-        p.addLine(to: at(0, length))
         if closed { p.closeSubpath() }
         return p
     }

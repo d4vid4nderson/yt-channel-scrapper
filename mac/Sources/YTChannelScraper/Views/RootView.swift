@@ -102,10 +102,11 @@ struct RootView: View {
         }
         .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id ?? model.nowLoading?.id)
         .frame(minWidth: 820, minHeight: 520)
-        // Under everything, up into the title bar: a theme's window otherwise shows AppKit's
-        // own grey in the strip between the toolbar and the header.
+        // Under everything, up into the title bar: the window otherwise shows AppKit's own
+        // grey in the strip between the toolbar and the header — Classic included, once
+        // the header is a row of its own under the title bar.
         .background {
-            if !isClassic { Palette.ground.ignoresSafeArea() }
+            Palette.ground.ignoresSafeArea()
         }
         .animation(Layout.drawerEase, value: model.showChannelsDrawer)
         .animation(Layout.drawerEase, value: model.showFamilyDrawer)
@@ -179,8 +180,8 @@ struct RootView: View {
             // One number drives the whole transition: the header's height. The results
             // are offset by exactly that, so they are revealed from underneath as it
             // shrinks rather than being covered by it — one motion, not two.
-            let headerHeight = collapsed ? Layout.headerHeight : geo.size.height
-            let resultsHeight = max(geo.size.height - Layout.headerHeight, 0)
+            let headerHeight = collapsed ? Chrome.header : geo.size.height
+            let resultsHeight = max(geo.size.height - Chrome.header, 0)
 
             ZStack(alignment: .top) {
                 resultsArea(height: resultsHeight)
@@ -231,14 +232,17 @@ struct RootView: View {
     /// Home, once there is somewhere to come back from; on the landing view it would be a
     /// button that does nothing. It sits at the head of the header row. The panels'
     /// buttons are not here at all any more: they are handles on the window's edges.
+    ///
+    /// The header's height, exactly the search pill's, so the row is one line of equal
+    /// parts rather than a small button beside a tall field.
     private var homeButton: some View {
-        PanelToggle(
-            icon: "house.fill",
-            title: "Home",
-            isOn: false,
-            help: "Back to the start — the URL is kept  (⇧⌘H)",
-            toggle: model.goHome
-        )
+        Button(action: model.goHome) {
+            Image(systemName: "house")
+                .font(.system(size: 13, weight: .medium))
+        }
+        .buttonStyle(.chrome(height: Chrome.large, square: true))
+        .help("Back to the start — the URL is kept  (⇧⌘H)")
+        .accessibilityLabel("Home")
         .keyboardShortcut("h", modifiers: [.command, .shift])
     }
 
@@ -271,7 +275,9 @@ struct RootView: View {
     /// clicked replaces it there. See `PreviewPanel`.
     private func resultsArea(height: CGFloat) -> some View {
         VStack(spacing: 0) {
-            Divider()
+            // The seam under the header, in the palette's hairline rather than AppKit's
+            // divider grey, which belongs to no theme.
+            Rectangle().fill(Palette.ink(0.10)).frame(height: 1)
             PreviewPanel(
                 session: model.preview,
                 available: height,
@@ -310,7 +316,7 @@ struct RootView: View {
             if collapsed {
                 // One row under the title bar: home, whose channel this is, and the
                 // search — the title bar above it holds only the title.
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     homeButton
                     OpenChannelBadge(model: model)
                     SearchPill(model: model, compact: true)
@@ -391,7 +397,7 @@ private struct OpenChannelBadge: View {
     var body: some View {
         if model.mode == .videos, let channel = shown {
             HStack(spacing: 8) {
-                ChannelAvatar(channel: channel, size: 28)
+                ChannelAvatar(channel: channel, size: 26)
                 Text(channel.title)
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(Palette.ink(0.9))
@@ -408,8 +414,14 @@ private struct OpenChannelBadge: View {
     /// The scraped channel once its page has answered; until then, whichever one was
     /// clicked to open it, so the name is there from the first moment.
     private var shown: Channel? {
+        // A listing from yt-dlp carries no picture, so a saved copy of the channel — which
+        // has one — is preferred, then whichever channel was clicked to open it.
         if var ref = model.scrapedChannel {
             if !model.scraper.channel.isEmpty { ref.title = model.scraper.channel }
+            if ref.avatar == nil {
+                ref.avatar = (model.library.channels.first { $0.id == ref.id }
+                              ?? model.openingChannel)?.avatar
+            }
             return ref
         }
         return model.openingChannel
@@ -434,7 +446,7 @@ private struct TabChooser: View {
             }
             .foregroundStyle(Palette.fieldInk)
             .padding(.horizontal, compact ? 10 : 12)
-            .padding(.vertical, compact ? 5 : 8)
+            .frame(maxHeight: .infinity)
             .background(Palette.fieldRaised, in: ThemedCapsule())
             .contentShape(ThemedCapsule())
         }
@@ -494,23 +506,34 @@ private struct SearchPill: View {
     let compact: Bool
     @FocusState private var focused: Bool
 
+    /// The compact pill is exactly the header's control height, and everything inside it
+    /// is that less its 3pt rim — so the tab menu and Search sit in it concentrically, as
+    /// parts of one control, rather than as buttons of their own size dropped into a field.
+    private var inner: CGFloat { Chrome.large - 6 }
+
     var body: some View {
-        HStack(spacing: compact ? 6 : 8) {
-            ZStack(alignment: .leading) {
-                if model.urlText.isEmpty {
-                    Text("Paste a channel URL or @handle — or type a name to search")
-                        .foregroundStyle(Palette.fieldInk.opacity(0.42))
-                        .lineLimit(1)
+        HStack(spacing: compact ? 4 : 8) {
+            HStack(spacing: compact ? 7 : 10) {
+                // A search field says so before anything is typed in it.
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: compact ? 11.5 : 14, weight: .medium))
+                    .foregroundStyle(Palette.fieldInk.opacity(0.45))
+                ZStack(alignment: .leading) {
+                    if model.urlText.isEmpty {
+                        Text("Paste a channel URL or @handle — or type a name to search")
+                            .foregroundStyle(Palette.fieldInk.opacity(0.42))
+                            .lineLimit(1)
+                    }
+                    TextField("", text: $model.urlText)
+                        .textFieldStyle(.plain)
+                        .foregroundStyle(Palette.fieldInk)
+                        .tint(Palette.accent)
+                        .focused($focused)
+                        .onSubmit { model.submit() }
                 }
-                TextField("", text: $model.urlText)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(Palette.fieldInk)
-                    .tint(Palette.accent)
-                    .focused($focused)
-                    .onSubmit { model.submit() }
             }
             .font(.system(size: compact ? 13 : 14))
-            .padding(.leading, compact ? 14 : 18)
+            .padding(.leading, compact ? 11 : 18)
 
             if Theme.active.id == .classic {
                 Menu {
@@ -536,7 +559,7 @@ private struct SearchPill: View {
                 .menuIndicator(.hidden)
                 .fixedSize()
                 .padding(.horizontal, compact ? 10 : 12)
-                .padding(.vertical, compact ? 5 : 8)
+                .frame(height: compact ? inner : 34)
                 .background(Palette.fieldRaised, in: ThemedCapsule())
                 .help("Which tab of the channel to list")
                 .pointingHand()
@@ -544,6 +567,7 @@ private struct SearchPill: View {
                 // A theme cannot reach inside a native menu, so it gets a picker of its
                 // own — same choices, in the theme's lettering and edge.
                 TabChooser(tab: $model.tab, compact: compact)
+                    .frame(height: compact ? inner : 34)
             }
 
             Button {
@@ -551,19 +575,20 @@ private struct SearchPill: View {
             } label: {
                 // The label is the answer to "what will return do with what I have
                 // typed?", so it has to track the field rather than sit on one word.
+                // Not ready is a neutral plate, not a faded accent: pink read as a softer
+                // action rather than one waiting for a URL.
+                let ready = model.canScrape || model.isBusy
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
-                    .foregroundStyle(Palette.onFill)
+                    .foregroundStyle(ready ? Palette.onFill : Palette.fieldInk.opacity(0.35))
                     // Stop and Search both fit today. The frame is fixed, so anything
                     // longer would wrap inside the capsule rather than overflow it —
                     // truncating is the failure worth having.
                     .lineLimit(1)
-                    .frame(width: compact ? 66 : 78)
-                    .padding(.vertical, compact ? 7 : 10)
-                    .background(
-                        Palette.accent.opacity(model.canScrape || model.isBusy ? 1 : 0.45),
-                        in: ThemedCapsule()
-                    )
+                    .frame(width: compact ? 70 : 84, height: compact ? inner : 38)
+                    .background(ready ? Palette.accent : Palette.fieldInk.opacity(0.07),
+                                in: ThemedCapsule())
+                    .animation(.easeOut(duration: 0.12), value: ready)
             }
             .buttonStyle(.plain)
             .disabled(!model.canScrape && !model.isBusy)
@@ -571,11 +596,14 @@ private struct SearchPill: View {
             .help(helpText)
             .pointingHand()
         }
-        .padding(compact ? 5 : 7)
+        .padding(compact ? 3 : 7)
+        .frame(height: compact ? Chrome.large : nil)
         .background(Palette.field, in: ThemedCapsule())
         .overlay(ThemedCapsule().strokeBorder(Palette.ink(0.10), lineWidth: 1))
         .themeEdge(ThemedCapsule(), lit: focused)
-        .shadow(color: .black.opacity(compact ? 0.2 : 0.35), radius: compact ? 8 : 22, y: compact ? 3 : 8)
+        // A contact shadow in the header, where the pill is one control among several; the
+        // deep one only on the hero, where it is the whole page.
+        .shadow(color: .black.opacity(compact ? 0.14 : 0.35), radius: compact ? 3 : 22, y: compact ? 1 : 8)
         // Landing on the hero, the one thing to do is type a URL.
         .onAppear { if !compact { focused = true } }
     }
@@ -634,12 +662,7 @@ private struct ResultsList: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if model.mode == .videos, model.scraper.rawURL != nil {
-                ChannelTabBar(model: model)
-                Divider()
-            }
-            controls
-            Divider()
+            ResultsToolbar(model: model)
             ScrollViewReader { proxy in
             ScrollView {
                 // Cards, not list rows — they need the gap to read as separate surfaces.
@@ -745,151 +768,221 @@ private struct ResultsList: View {
         )
         .id(video.id)
     }
+}
 
-    private var controls: some View {
-        HStack(spacing: 10) {
-            // First, because it is the only control here that leaves the list rather than
-            // acting on it. Named after what you searched for: "Back" alone makes you
-            // remember, and remembering is the thing that was missing.
-            if let query = model.searchToReturnTo {
-                Button {
-                    model.returnToSearch()
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: "chevron.left")
-                            .font(.system(size: 10, weight: .semibold))
-                        Text(query)
-                            .font(.system(size: 12.5))
-                            .lineLimit(1)
-                            .truncationMode(.tail)
-                            .frame(maxWidth: 140)
+
+// MARK: - Results toolbar
+
+/// Everything that acts on the list, in one toolbar over it: the channel's tabs and its
+/// Refresh, the selection, the filter, what is listed, and the download.
+///
+/// These were two rows — a tab bar of accent capsules and a controls row of grey ones —
+/// stacked under the header, so an open channel spent three bands of chrome before its
+/// first video. Most windows are wide enough for one row, and get one. A narrow one (the
+/// 820pt minimum, or any width with a panel open) gets the same controls in two rows, in
+/// the same order, rather than having them squeezed until labels break: `ViewThatFits`
+/// tries the single row at its ideal width and falls back.
+///
+/// Every control is the window's 28pt plate (`ChromeButtonStyle`) and the tabs are one
+/// segmented track, so the row reads by what its controls say rather than by their shapes.
+/// The accent is spent once: on Download, and only when there is something ticked for it.
+private struct ResultsToolbar: View {
+    @Bindable var model: AppModel
+
+    /// Only an open channel has tabs, and only a channel can be refreshed.
+    private var hasTabs: Bool { model.mode == .videos && model.scraper.rawURL != nil }
+
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 8) {
+                navigation
+                if hasTabs || model.searchToReturnTo != nil { ChromeSeparator() }
+                selection
+                status(withRefreshLine: true)
+                if hasTabs { refreshButton }
+                actions
+            }
+            .frame(height: Chrome.bar)
+
+            VStack(spacing: 0) {
+                if hasTabs || model.searchToReturnTo != nil {
+                    HStack(spacing: 8) {
+                        navigation
+                        Spacer(minLength: 8)
+                        if hasTabs {
+                            RefreshLine(scraper: model.scraper)
+                            refreshButton
+                        }
                     }
-                    .chip()
+                    .frame(height: Chrome.bar)
                 }
-                .buttonStyle(.plain)
-                .help("Back to the results for “" + query + "” (⌘[)")
-                .keyboardShortcut("[", modifiers: .command)
-                .pointingHand()
-                .transition(.opacity)
-            }
-
-            Button {
-                model.toggleAllVisible()
-            } label: {
                 HStack(spacing: 8) {
-                    CheckBox(isOn: model.allVisiblePicked, size: 15)
-                    Text("Select all")
-                        .font(.system(size: 12.5))
-                        .lineLimit(1)
-                        .fixedSize(horizontal: true, vertical: false)
+                    selection
+                    status(withRefreshLine: false)
+                    actions
                 }
-                .chip(active: model.allVisiblePicked)
+                .frame(height: Chrome.bar)
             }
-            .buttonStyle(.plain)
-            .help(model.allVisiblePicked
-                  ? "Untick every video currently listed"
-                  : "Tick every video currently listed")
-            .pointingHand()
+        }
+        .padding(.horizontal, Layout.gutter)
+        .chromeBar()
+    }
 
-            HStack(spacing: 6) {
-                Image(systemName: "line.3.horizontal.decrease")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                TextField("Filter titles…", text: $model.filterText)
-                    .textFieldStyle(.plain)
-                    .font(.system(size: 12.5))
-                    // Was a hard 150. A fixed width in a row that has to fit a narrow
-                    // window means the squeeze lands somewhere else — on the labels
-                    // either side, which then broke mid-word.
-                    .frame(minWidth: 70, idealWidth: 150, maxWidth: 150)
+    /// Where the list is: back to the search it came from, and which of the channel's tabs.
+    @ViewBuilder
+    private var navigation: some View {
+        // First, because it is the only control here that leaves the list rather than
+        // acting on it. Named after what you searched for: "Back" alone makes you
+        // remember, and remembering is the thing that was missing.
+        if let query = model.searchToReturnTo {
+            Button {
+                model.returnToSearch()
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(query)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: 140)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
-            .chip()
+            .buttonStyle(.chrome())
+            .help("Back to the results for “" + query + "” (⌘[)")
+            .keyboardShortcut("[", modifiers: .command)
+            .transition(.opacity)
+        }
 
-            // Sits against the channel's name in the count line, so it reads as
-            // keeping the channel rather than anything to do with the selection.
-            if model.mode != .saved, let channel = model.scrapedChannel {
-                SaveMark(
-                    isSaved: model.library.contains(channel.id),
-                    size: 14,
-                    action: { model.toggleSaved(channel) }
-                )
+        // The type used to be chosen only in the search pill, before scraping — switching
+        // meant changing the menu and scraping again. Here it is a tab on the channel
+        // itself, and since each tab is kept (`ListingCache`), going back to one already
+        // read is instant.
+        if hasTabs {
+            ChromeSegmented(
+                options: ChannelTab.allCases,
+                selection: model.scraper.tab,
+                label: { $0.label },
+                help: { "This channel's \($0.label.lowercased())" },
+                pick: { model.showTab($0) }
+            )
+        }
+    }
+
+    /// What is picked and which rows are shown.
+    @ViewBuilder
+    private var selection: some View {
+        Button {
+            model.toggleAllVisible()
+        } label: {
+            HStack(spacing: 7) {
+                CheckBox(isOn: model.allVisiblePicked, size: 14)
+                Text("Select all")
             }
+        }
+        .buttonStyle(.chrome())
+        .help(model.allVisiblePicked
+              ? "Untick every video currently listed"
+              : "Tick every video currently listed")
 
+        // Was a hard 150. A fixed width in a row that has to fit a narrow window means
+        // the squeeze lands somewhere else — on the labels either side, which then broke
+        // mid-word. The ideal is what the single-row layout is measured at.
+        ChromeField(icon: "line.3.horizontal.decrease", prompt: "Filter titles",
+                    text: $model.filterText)
+            .frame(minWidth: 80, idealWidth: 130, maxWidth: 170)
+
+        // Sits against the count, so it reads as keeping the channel rather than anything
+        // to do with the selection.
+        if model.mode != .saved, let channel = model.scrapedChannel {
+            SaveMark(
+                isSaved: model.library.contains(channel.id),
+                size: 14,
+                action: { model.toggleSaved(channel) }
+            )
+        }
+    }
+
+    /// The readout: how many, how many picked, and — on the single row — how fresh.
+    ///
+    /// The row's designated victim. Everything else is a control with a fixed label; this
+    /// is the only part that can lose characters and still make sense, so it is the only
+    /// part allowed to, and its small ideal width is what lets the single row be chosen
+    /// whenever the controls themselves fit.
+    private func status(withRefreshLine: Bool) -> some View {
+        HStack(spacing: 6) {
+            if model.scraper.isBusy && !model.isLoadingList {
+                ProgressView().controlSize(.mini)
+            }
             Text(countText)
-                .font(.system(size: 11.5).monospacedDigit())
-                .foregroundStyle(.secondary)
-                // The row's designated victim. Everything else is a control with a fixed
-                // label; this is the only part that can lose characters and still make
-                // sense, so it is the only part allowed to.
                 .lineLimit(1)
                 .truncationMode(.tail)
-                .layoutPriority(-1)
                 .help(countText)
-
-            Spacer(minLength: 12)
-
-            if model.scraper.isBusy {
-                ProgressView().controlSize(.small)
+                .layoutPriority(1)
+            if withRefreshLine && hasTabs {
+                RefreshLine(scraper: model.scraper, leadingDot: true)
             }
-
-            // Quality and Download sit with the list they act on, the way the web app's
-            // results bar had them, now that there is no window toolbar.
-            // The mp3 sits under the qualities rather than among them because it is not
-            // one of them: every quality above is a choice of one file, and this asks for
-            // a second one alongside whichever was chosen.
-            QualityMenu(
-                quality: $model.quality,
-                alsoAudio: $model.alsoAudio,
-                face: model.formatLabel
-            )
-            .help(model.quality.isAudioOnly
-                  ? "Which quality to fetch for the videos you pick"
-                  : "Which quality to fetch for the videos you pick, and whether to keep an mp3 beside each one")
-            .pointingHand()
-
-            Button {
-                model.downloadPicked()
-            } label: {
-                Text(model.picked.isEmpty ? "Download" : "Download \(model.picked.count)")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(Palette.onFill)
-                    .lineLimit(1)
-                    .fixedSize(horizontal: true, vertical: false)
-                    .padding(.horizontal, 14)
-                    .padding(.vertical, 7)
-                    .background(
-                        Palette.accent.opacity(model.picked.isEmpty ? 0.4 : 1),
-                        in: ThemedCapsule()
-                    )
-            }
-            .buttonStyle(.plain)
-            .disabled(model.picked.isEmpty)
-            .keyboardShortcut("d", modifiers: .command)
-            .help(model.picked.isEmpty
-                  ? "Tick some videos first, then download them here"
-                  : "Download the \(model.picked.count) ticked video\(model.picked.count == 1 ? "" : "s") at \(model.formatLabel)  (⌘D)")
-            .pointingHand()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
+        .font(.system(size: 11.5).monospacedDigit())
+        .foregroundStyle(Palette.ink(0.55))
+        .padding(.leading, 4)
+        .frame(minWidth: 0, idealWidth: 72, maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Reads only the newest videos onto the kept list; the line beside it says how old
+    /// the list is, because it no longer re-reads itself on every open.
+    private var refreshButton: some View {
+        Button {
+            model.refreshListing()
+        } label: {
+            Image(systemName: "arrow.clockwise")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .buttonStyle(.chrome(square: true))
+        .disabled(!model.scraper.canRefresh)
+        .keyboardShortcut("r", modifiers: .command)
+        .help("Look for new videos on this tab  (⌘R)")
+        .accessibilityLabel("Refresh")
+    }
+
+    /// Quality and Download sit with the list they act on, the way the web app's results
+    /// bar had them. The mp3 sits under the qualities rather than among them because it is
+    /// not one of them: every quality above is a choice of one file, and this asks for a
+    /// second one alongside whichever was chosen.
+    @ViewBuilder
+    private var actions: some View {
+        QualityMenu(
+            quality: $model.quality,
+            alsoAudio: $model.alsoAudio,
+            face: model.formatLabel
+        )
+        .help(model.quality.isAudioOnly
+              ? "Which quality to fetch for the videos you pick"
+              : "Which quality to fetch for the videos you pick, and whether to keep an mp3 beside each one")
+
+        Button {
+            model.downloadPicked()
+        } label: {
+            Label(model.picked.isEmpty ? "Download" : "Download \(model.picked.count)",
+                  systemImage: "arrow.down")
+                .monospacedDigit()
+        }
+        .buttonStyle(.chrome(.primary))
+        .disabled(model.picked.isEmpty)
+        .keyboardShortcut("d", modifiers: .command)
+        .help(model.picked.isEmpty
+              ? "Tick some videos first, then download them here"
+              : "Download the \(model.picked.count) ticked video\(model.picked.count == 1 ? "" : "s") at \(model.formatLabel)  (⌘D)")
     }
 
     private var countText: String {
         // While the list is still coming there is nothing to count, and "0 videos" over a
         // page of skeletons reads as an answer rather than a wait. The channel's name is
-        // the useful thing to hold there — it is what you clicked.
-        if model.isLoadingList {
-            guard let name = model.loadingChannelName else { return "Reading the channel…" }
-            return "\(name)  ·  Reading the channel…"
-        }
+        // not repeated here: the header's badge carries it, from the first moment.
+        if model.isLoadingList { return "Reading the channel…" }
         let total = model.listedVideos.count
         let shown = model.visible.count
         var parts: [String] = []
-        if model.mode == .saved {
-            parts.append("Saved videos")
-        } else if !model.scraper.channel.isEmpty {
-            parts.append(model.scraper.channel)
-        }
+        if model.mode == .saved { parts.append("Saved videos") }
         // A kept video can come from beyond what has been loaded, which would otherwise
         // read as "26 of 25". The count describes the channel's listing; the kept ones
         // are reported as their own fact.
@@ -902,73 +995,30 @@ private struct ResultsList: View {
     }
 }
 
-
-// MARK: - Channel tabs
-
-/// Videos / Shorts / Live / Music across the top of an open channel, and the Refresh that
-/// goes with them.
-///
-/// The type used to be chosen only in the search pill, before scraping — switching meant
-/// changing the menu and scraping again. Here it is a tab on the channel itself, and since
-/// each tab is kept (`ListingCache`), going back to one already read is instant. Refresh
-/// reads only the newest videos onto the kept list; the line beside it says how old the
-/// list is, because it no longer re-reads itself on every open.
-private struct ChannelTabBar: View {
-    @Bindable var model: AppModel
+/// "Updated 16 minutes ago · 3 new videos", or that a refresh is under way.
+private struct RefreshLine: View {
+    let scraper: Scraper
+    /// On the single row it follows the count, and takes the count's separator.
+    var leadingDot = false
 
     var body: some View {
-        HStack(spacing: 6) {
-            ForEach(ChannelTab.allCases) { option in
-                let isOn = option == model.scraper.tab
-                Button { model.showTab(option) } label: {
-                    Text(option.label)
-                        .font(.system(size: 12.5, weight: isOn ? .semibold : .regular))
-                        .foregroundStyle(isOn ? Palette.onFill : Palette.ink(0.75))
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 5)
-                        .background(isOn ? Palette.accent : Palette.ink(0.08), in: ThemedCapsule())
-                        .contentShape(ThemedCapsule())
-                }
-                .buttonStyle(.plain)
-                .help("This channel's \(option.label.lowercased())")
-                .pointingHand()
-            }
-
-            Spacer(minLength: 12)
-
-            Group {
-                if model.scraper.isRefreshing {
-                    HStack(spacing: 6) {
-                        ProgressView().controlSize(.mini)
-                        Text("Checking for new videos…")
-                    }
-                } else if let refreshed = model.scraper.refreshed {
-                    // Re-drawn each minute so "just now" moves on.
-                    TimelineView(.everyMinute) { _ in
-                        Text(Self.updated(refreshed) + Self.added(model.scraper.added))
-                    }
+        Group {
+            if scraper.isRefreshing {
+                Text(prefix + "Checking for new videos…")
+            } else if let refreshed = scraper.refreshed {
+                // Re-drawn each minute so "just now" moves on.
+                TimelineView(.everyMinute) { _ in
+                    Text(prefix + Self.updated(refreshed) + Self.added(scraper.added))
                 }
             }
-            .font(.system(size: 11.5))
-            .foregroundStyle(.secondary)
-            .lineLimit(1)
-
-            Button {
-                model.refreshListing()
-            } label: {
-                Label("Refresh", systemImage: "arrow.clockwise")
-                    .font(.system(size: 12))
-                    .chip()
-            }
-            .buttonStyle(.plain)
-            .disabled(!model.scraper.canRefresh)
-            .keyboardShortcut("r", modifiers: .command)
-            .help("Look for new videos on this tab  (⌘R)")
-            .pointingHand()
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
+        .font(.system(size: 11.5).monospacedDigit())
+        .foregroundStyle(Palette.ink(0.5))
+        .lineLimit(1)
+        .truncationMode(.tail)
     }
+
+    private var prefix: String { leadingDot ? "·  " : "" }
 
     private static func updated(_ date: Date) -> String {
         if Date.now.timeIntervalSince(date) < 60 { return "Updated just now" }
@@ -995,7 +1045,6 @@ private struct ChannelResults: View {
     var body: some View {
         VStack(spacing: 0) {
             controls
-            Divider()
             ScrollView {
                 LazyVStack(spacing: 10) {
                     if model.isLoadingList {
@@ -1018,32 +1067,42 @@ private struct ChannelResults: View {
         }
     }
 
+    /// The same toolbar band as a channel's list, so moving between a search and a
+    /// channel changes what the bar says and not where it is or how tall.
     private var controls: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: 8) {
             Text("Channels matching “\(model.search.query)”")
-                .font(.system(size: 12.5, weight: .medium))
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundStyle(Palette.ink(0.9))
+                .lineLimit(1)
+                .truncationMode(.tail)
             Text(model.isLoadingList ? "Searching…" : "\(model.search.results.count)")
                 .font(.system(size: 11.5).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.ink(0.55))
 
             Spacer(minLength: 12)
 
             if model.search.isBusy {
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.mini)
             }
 
             Text("Bookmark a channel to keep it in the side panel")
                 .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Palette.ink(0.5))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .layoutPriority(-1)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 9)
-        .frame(height: 42)
+        .padding(.horizontal, Layout.gutter)
+        .frame(height: Chrome.bar)
+        .chromeBar()
     }
 }
 
 
-/// The one-line heading over each half of a channel's list.
+/// The one-line heading over each half of a channel's list. Small capitals with a little
+/// tracking, as a section label on an instrument is: it names a group and is not one more
+/// line of content to read.
 private struct GroupLabel: View {
     let text: String
     var accented = false
@@ -1056,91 +1115,13 @@ private struct GroupLabel: View {
                     .foregroundStyle(Palette.accent)
             }
             Text(text)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10.5, weight: .semibold))
+                .textCase(.uppercase)
+                .tracking(0.8)
+                .foregroundStyle(Palette.ink(0.5))
             Spacer(minLength: 0)
         }
         .padding(.horizontal, 4)
         .padding(.top, accented ? 0 : 10)
-    }
-}
-
-
-// MARK: - Toolbar control
-
-/// One panel's button. Built on `Toggle` rather than `Button` so the chrome shows which
-/// panels are open — the toolbar's pressed state is the only thing on screen saying so
-/// once the tabs are gone, and the accent on the open one makes it unmissable.
-private struct PanelToggle: View {
-    let icon: String
-    /// Carried for the tooltip and for VoiceOver. The button itself is the icon alone.
-    let title: String
-    var busy = false
-    let isOn: Bool
-    let help: String
-    let toggle: () -> Void
-
-    var body: some View {
-        if Theme.active.id == .classic { system } else { themed }
-    }
-
-    /// A theme draws its own lit state. The toolbar's pressed fill is the system's and
-    /// ignores the tint on a themed window, so an icon in `onFill` — near-black on the
-    /// Nostromo — was being drawn on a dark pill and vanished.
-    private var themed: some View {
-        Button(action: toggle) {
-            glyph
-                .foregroundStyle(isOn ? Palette.onFill : Palette.ink(0.7))
-                .padding(.horizontal, 7)
-                .padding(.vertical, 5)
-                .background(isOn ? Palette.accent : .clear,
-                            in: ThemedRect(cornerRadius: 7, style: .continuous))
-                .themeEdge(radius: 7, lit: isOn)
-                .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        .help(help)
-        .accessibilityLabel(title)
-        .accessibilityAddTraits(isOn ? .isSelected : [])
-        .pointingHand()
-    }
-
-    private var glyph: some View {
-        Image(systemName: icon)
-            .font(.system(size: 14, weight: .medium))
-            .frame(width: 21, height: 16)
-            .overlay(alignment: .topTrailing) {
-                if busy {
-                    Circle()
-                        .fill(isOn ? Palette.onFill : Palette.accent)
-                        .frame(width: 5.5, height: 5.5)
-                }
-            }
-    }
-
-    private var system: some View {
-        Toggle(isOn: Binding(get: { isOn }, set: { _ in toggle() })) {
-            Image(systemName: icon)
-                .font(.system(size: 14, weight: .medium))
-                // White on the lit one, because the lit one is filled with the accent.
-                .foregroundStyle(isOn ? AnyShapeStyle(Palette.onFill) : AnyShapeStyle(.primary))
-                // The frame leaves the corner the dot sits in, so it is never clipped by
-                // the button drawn around it.
-                .frame(width: 21, height: 16)
-                .overlay(alignment: .topTrailing) {
-                    if busy {
-                        Circle()
-                            .fill(isOn ? Palette.onFill : Palette.accent)
-                            .frame(width: 5.5, height: 5.5)
-                    }
-                }
-        }
-        .toggleStyle(.button)
-        // Without this the pressed state is the user's system accent — blue, on a window
-        // that has exactly one accent and it is red.
-        .tint(Palette.accent)
-        .help(help)
-        .accessibilityLabel(title)
-        .pointingHand()
     }
 }
