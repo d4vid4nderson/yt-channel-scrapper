@@ -23,7 +23,7 @@ import UIKit
 struct Theme: Identifiable, @unchecked Sendable {
 
     enum ID: String, CaseIterable, Identifiable, Sendable {
-        case classic, bladeRunner, dune, middleEarth, prancingPony, synthwave, grid, nostromo, nostromoTeal
+        case classic, bladeRunner, dune, middleEarth, synthwave, grid, nostromo, nostromoTeal
         var id: String { rawValue }
     }
 
@@ -48,8 +48,9 @@ struct Theme: Identifiable, @unchecked Sendable {
         case neon
         /// A gilt double rule with an interlaced knot in each corner — elven work.
         case knotwork
-        /// A carved bevel, dark below and lit above, with a brass nail at each corner.
-        case carved
+        /// Misregistration: the shape's rule printed twice, in `accent` and `accent2`,
+        /// a pixel or two apart — a glitched signal, held still.
+        case glitch
         /// Only the corners, as a targeting reticle draws them.
         case brackets
         /// `accent` running into `accent2` along the edge, and glowing.
@@ -63,7 +64,7 @@ struct Theme: Identifiable, @unchecked Sendable {
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, city, dunes, parchment, tavern, sunset, grid, scanlines }
+    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, scanlines }
 
     /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
     /// into the panel, its own lettering colour, and a little of that colour's light.
@@ -92,6 +93,8 @@ struct Theme: Identifiable, @unchecked Sendable {
         var displayTracking: CGFloat = 0
         /// Headings lit in the theme's glow, as if the light were on them — Arrakis's sun.
         var displayGlow = false
+        /// Headings printed out of register in `accent` and `accent2` — Retro's glitch.
+        var displaySplit = false
 
         /// The display face this device actually has, if any.
         var displayName: String? { display.first(where: Theme.hasFont) }
@@ -180,7 +183,6 @@ extension Theme {
         case .bladeRunner: bladeRunner
         case .dune: dune
         case .middleEarth: middleEarth
-        case .prancingPony: prancingPony
         case .synthwave: synthwave
         case .grid: grid
         case .nostromo: nostromo
@@ -392,78 +394,46 @@ extension Theme {
         lcd: LCD(background: hex(0x0C0804), ink: hex(0xE8C77A), glow: hex(0xC9883A))
     )
 
-    /// The Prancing Pony, Bree. Dark oak and firelight, brass on everything that is held,
-    /// ale-red for what you press, and the inn sign's painted capitals.
-    static let prancingPony = Theme(
-        id: .prancingPony,
-        name: "The Prancing Pony",
-        tagline: "Oak beams, firelight and a pint in Bree",
-        appearance: .dark,
-        ink: hex(0xF3E3C3),
-        accent: hex(0xD9A441),
-        accentHot: hex(0xF0BE5A),
-        accent2: hex(0x9A3A2C),
-        edgeTint: hex(0xC8963A),
-        brand: hex(0xD9A441),
-        ground: hex(0x160D07),
-        surface: hex(0x22150C),
-        card: hex(0x2A1A0F).opacity(0.92),
-        field: hex(0x2E1D11),
-        fieldInk: hex(0xF3E3C3),
-        fieldRaised: hex(0x3E2816),
-        onFill: hex(0x1E1208),
-        good: hex(0x9DB86A),
-        warn: hex(0xE8A13A),
-        glow: hex(0xFF8A2A),
-        glowDeep: hex(0x7A2E12),
-        pickedMid: hex(0x2A190D),
-        pickedFar: hex(0x3A200F),
-        pickedEdge: hex(0x5A3A18),
-        pickedEdgeHot: hex(0x7A5020),
-        corners: .rounded(scale: 0.25),
-        edge: .carved,
-        type: Typeface(design: .serif, display: ["Copperplate-Bold"],
-                       displayCaps: true, displayTracking: 0.5),
-        backdrop: .tavern,
-        aurora: [hex(0xFF8A2A), hex(0xD9A441), hex(0x7A2E12), hex(0xFFC46B)],
-        lcd: LCD(background: hex(0x0F0804), ink: hex(0xF0BE5A), glow: hex(0xD9A441))
-    )
-
-    /// 1986, on a VHS cover. A violet sky with stars over a magenta floor, chrome panels,
-    /// and heavy italic capitals. No sun: it sat behind whatever was centred on the page.
+    /// Retro: a signal coming apart. The palette is the glitch picture's — coral, teal
+    /// and a cold pale grey on black — the panels' rules printed twice out of register,
+    /// headings in Rubik Glitch (its letters already broken) with the same red and cyan
+    /// split, and a terminal's VT323 in the LCD. Square corners, as pixels are.
+    /// The `synthwave` id is kept so a saved choice and its icon carry over.
     static let synthwave = Theme(
         id: .synthwave,
-        name: "Synthwave",
-        tagline: "Chrome sunsets and a magenta grid",
+        name: "Retro",
+        tagline: "A glitched signal on old tape",
         appearance: .dark,
-        ink: hex(0xFCE8FF),
-        accent: hex(0xFF2A6D),
-        accentHot: hex(0xFF5A8C),
-        accent2: hex(0x05D9E8),
-        edgeTint: hex(0xFF2A6D),
-        brand: hex(0xFF2A6D),
-        ground: hex(0x0D0221),
-        surface: hex(0x140433),
-        card: hex(0x1A083D).opacity(0.88),
-        field: hex(0x1E0B45),
-        fieldInk: hex(0xFCE8FF),
-        fieldRaised: hex(0x2E1560),
+        ink: hex(0xE4EAEC),
+        accent: hex(0xF2553C),
+        accentHot: hex(0xFF7A5C),
+        accent2: hex(0x3CC8C0),
+        edgeTint: hex(0xF2553C),
+        brand: hex(0xF2553C),
+        ground: hex(0x090A0C),
+        surface: hex(0x111316),
+        card: hex(0x15181B).opacity(0.9),
+        field: hex(0x15181C),
+        fieldInk: hex(0xE4EAEC),
+        fieldRaised: hex(0x23272C),
         onFill: .white,
-        good: hex(0x05FFA1),
-        warn: hex(0xFFD319),
-        glow: hex(0xFF2A6D),
-        glowDeep: hex(0x7B2CBF),
-        pickedMid: hex(0x1C0838),
-        pickedFar: hex(0x2E0B45),
-        pickedEdge: hex(0x4A1260),
-        pickedEdgeHot: hex(0x6A1A80),
-        corners: .rounded(scale: 0.6),
-        edge: .bevel,
-        type: Typeface(display: ["AvenirNext-HeavyItalic"],
-                       displayCaps: true, displayTracking: 0.4),
-        backdrop: .sunset,
-        aurora: [hex(0xFF2A6D), hex(0xFF8C42), hex(0x7B2CBF), hex(0xFFD319)],
-        lcd: LCD(background: hex(0x08011A), ink: hex(0x05D9E8), glow: hex(0x05D9E8))
+        good: hex(0x3CC8C0),
+        warn: hex(0xFFC44A),
+        glow: hex(0xF2553C),
+        glowDeep: hex(0x1E5A5A),
+        pickedMid: hex(0x1A1214),
+        pickedFar: hex(0x2A1416),
+        pickedEdge: hex(0x5A2A24),
+        pickedEdgeHot: hex(0x7A3A30),
+        corners: .square,
+        edge: .glitch,
+        type: Typeface(display: ["RubikGlitch-Regular"], displayCaps: true,
+                       displayTracking: 0.5, displaySplit: true),
+        backdrop: .glitch,
+        aurora: [hex(0xF2553C), hex(0x3CC8C0), hex(0x1E5A5A), hex(0xE4EAEC)],
+        lcd: LCD(background: hex(0x050607), ink: hex(0x3CC8C0), glow: hex(0x3CC8C0),
+                 font: "VT323-Regular"),
+        highlight: hex(0x3CC8C0)
     )
 
     /// Inside the machine, 1982. Black, light cycles drawing their trails low across it,
@@ -925,28 +895,12 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
                     }
                 }
             }
-        case .carved:
-            ZStack {
-                // Light from above: the top edge catches it, the bottom falls into shadow.
-                shape.strokeBorder(
-                    LinearGradient(colors: [theme.ink.opacity(0.22), .black.opacity(0.55)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 2)
-                shape.inset(by: 2)
-                    .stroke(theme.edgeTint.opacity(lit ? 0.65 : 0.35), lineWidth: 0.8)
-                Canvas { c, size in
-                    guard min(size.width, size.height) >= 22 else { return }
-                    let r: CGFloat = 2.4, o: CGFloat = 6
-                    for (x, y) in [(o, o), (size.width - o, o), (o, size.height - o),
-                                   (size.width - o, size.height - o)] {
-                        let nail = CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)
-                        c.fill(Path(ellipseIn: nail), with: .radialGradient(
-                            Gradient(colors: [Color(red: 1, green: 0.9, blue: 0.6), theme.edgeTint,
-                                              Color(red: 0.25, green: 0.15, blue: 0.05)]),
-                            center: CGPoint(x: x - r * 0.35, y: y - r * 0.35),
-                            startRadius: 0, endRadius: r * 1.4))
-                    }
-                }
+        case .glitch:
+            if lit {
+                GlitchEdge(shape: shape)
+            } else {
+                // At rest, one quiet rule. The signal only breaks up when you reach for it.
+                shape.strokeBorder(theme.ink.opacity(0.2), lineWidth: 1)
             }
         case .brackets:
             Brackets(length: 9)
@@ -965,6 +919,52 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 }
 
 // MARK: - Skin chrome
+
+/// Retro's hover: the control's rule breaking up — printed in red and cyan out of
+/// register by an amount that jumps a few times a second, slices of it torn sideways,
+/// and a thin bar of noise across it now and then. Only while the pointer is on it, and
+/// only over that one control: small, and asked for, rather than anything on the screen
+/// flashing at you.
+private struct GlitchEdge<S: InsettableShape>: View {
+    let shape: S
+
+    var body: some View {
+        let theme = Theme.active
+        TimelineView(.animation(minimumInterval: 1.0 / 24)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            // Stepped, not smooth: a new reading every ~80ms, as a glitch has.
+            let step = floor(t * 12)
+            let j = { (salt: Double) -> CGFloat in
+                CGFloat(sin(step * 12.9898 + salt * 78.233) * 43758.5453).truncatingRemainder(dividingBy: 1)
+            }
+            let split = 1.5 + abs(j(1)) * 3
+            ZStack {
+                shape.strokeBorder(theme.accent.opacity(0.9), lineWidth: 1)
+                    .offset(x: -split, y: j(2) * 1.2)
+                shape.strokeBorder(theme.accent2.opacity(0.9), lineWidth: 1)
+                    .offset(x: split, y: j(3) * 1.2)
+                shape.strokeBorder(theme.ink.opacity(0.5), lineWidth: 1)
+                GeometryReader { geo in
+                    let size = geo.size
+                    ZStack(alignment: .topLeading) {
+                        ForEach(0..<3, id: \.self) { i in
+                            let show = j(10 + Double(i)) > 0.1
+                            let y = size.height * abs(j(20 + Double(i)))
+                            let w = size.width * (0.2 + abs(j(30 + Double(i))) * 0.6)
+                            let x = (size.width - w) * abs(j(40 + Double(i)))
+                            Rectangle()
+                                .fill((i % 2 == 0 ? theme.accent : theme.accent2).opacity(show ? 0.55 : 0))
+                                .frame(width: w, height: 1 + abs(j(50 + Double(i))) * 2)
+                                .offset(x: x + j(60 + Double(i)) * 6, y: y)
+                        }
+                    }
+                    .frame(width: size.width, height: size.height, alignment: .topLeading)
+                    .clipShape(shape)
+                }
+            }
+        }
+    }
+}
 
 /// A raised panel, lit from above: the bevel every Winamp skin built its chrome from.
 ///
@@ -1163,6 +1163,10 @@ extension View {
             .tracking(type.displayTracking * min(size, 24) / 20)
             .shadow(color: type.displayGlow ? theme.glow.opacity(0.75) : .clear,
                     radius: type.displayGlow ? min(size * 0.35, 10) : 0)
+            .shadow(color: type.displaySplit ? theme.accent.opacity(0.8) : .clear,
+                    radius: 0, x: type.displaySplit ? -max(1, size * 0.05) : 0)
+            .shadow(color: type.displaySplit ? theme.accent2.opacity(0.8) : .clear,
+                    radius: 0, x: type.displaySplit ? max(1, size * 0.05) : 0)
     }
 }
 
@@ -1213,8 +1217,7 @@ struct ThemeBackdrop: View {
             case .city: Self.city(&context, size, theme, k, t)
             case .dunes: Self.dunes(&context, size, theme, k, t)
             case .parchment: Self.parchment(&context, size, theme, k, t)
-            case .tavern: Self.tavern(&context, size, theme, k, t)
-            case .sunset: Self.sunset(&context, size, theme, k, t)
+            case .glitch: Self.glitch(&context, size, theme, k, t)
             case .grid: Self.grid(&context, size, theme, k, t)
             case .scanlines where glass:
                 Self.scanlines(&context, size, theme, k * 0.45, t, glow: false)
@@ -1603,17 +1606,20 @@ struct ThemeBackdrop: View {
         (0.2656, 0.2947, false), (0.3768, 0.3560, false), // a tower, the tall window
     ]
 
-    /// Candlelight in the windows: each a small warm point with a halo, wavering on its
-    /// own two slow beats so the house looks lived in. A waver, never a flicker — the
-    /// light does not go out or jump.
+    /// Candlelight in the windows: each a small warm point with a halo, flickering as a
+    /// flame does — several quick beats on top of a slow one, irregular, never going out.
+    /// Points this small dancing a little are not the full-screen flashing the "nothing
+    /// flickers" rule guards against; the owner asked for flames that move.
     private static func windows(_ c: inout GraphicsContext, _ picture: CGRect, _ k: Double, _ t: Double) {
         var light = c
         light.blendMode = .plusLighter
         let flame = Color(red: 1, green: 0.74, blue: 0.38)
         for (i, window) in rivendellWindows.enumerated() {
             let n = Double(i)
-            let waver = 0.75 + 0.15 * sin(t * (0.9 + n * 0.07) + n * 2.3)
-                + 0.10 * sin(t * (1.7 + n * 0.11) + n * 1.1)
+            let waver = 0.72 + 0.10 * sin(t * (0.9 + n * 0.07) + n * 2.3)
+                + 0.08 * sin(t * (4.3 + n * 0.37) + n * 1.1)
+                + 0.06 * sin(t * (7.1 + n * 0.53) + n * 0.4)
+                + 0.04 * sin(t * (11.3 + n * 0.71) + n * 2.9)
             let p = CGPoint(x: picture.minX + picture.width * window.x,
                             y: picture.minY + picture.height * window.y)
             let r = picture.width * (window.lit ? 0.0035 : 0.005)
@@ -1638,18 +1644,21 @@ struct ThemeBackdrop: View {
         var light = c
         light.blendMode = .plusLighter
         light.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
-            Gradient(stops: [.init(color: warm.opacity(0.30 * k), location: 0),
-                             .init(color: warm.opacity(0.08 * k), location: 0.35),
+            Gradient(stops: [.init(color: warm.opacity((0.42 + 0.10 * sin(t * 0.21)) * k), location: 0),
+                             .init(color: warm.opacity(0.14 * k), location: 0.3),
                              .init(color: .clear, location: 1)]),
-            center: sun, startRadius: 0, endRadius: max(s.width, s.height) * 0.55))
+            center: sun, startRadius: 0,
+            endRadius: max(s.width, s.height) * (0.6 + 0.05 * CGFloat(sin(t * 0.17)))))
         light.drawLayer { layer in
             layer.addFilter(.blur(radius: max(s.width, s.height) * 0.03))
             let length = hypot(s.width, s.height) * 1.2
-            for (i, (angle, spread, weight)) in [(0.42, 0.035, 0.20), (0.55, 0.05, 0.16), (0.70, 0.03, 0.22),
-                                                 (0.84, 0.045, 0.14), (1.0, 0.03, 0.12)].enumerated() {
+            for (i, (angle, spread, weight)) in [(0.42, 0.035, 0.42), (0.55, 0.05, 0.34), (0.70, 0.03, 0.46),
+                                                 (0.84, 0.045, 0.30), (1.0, 0.03, 0.26)].enumerated() {
                 let n = Double(i)
-                let breath = 0.55 + 0.45 * sin(t * (0.05 + n * 0.012) + n * 1.9)
-                let a = angle + 0.015 * sin(t * 0.03 + n)
+                // Each beam brightens and fades, and swings across the valley and back,
+                // as light through moving cloud does.
+                let breath = 0.45 + 0.55 * sin(t * (0.11 + n * 0.023) + n * 1.9)
+                let a = angle + 0.07 * sin(t * (0.07 + n * 0.017) + n * 1.3)
                 var beam = Path()
                 beam.move(to: sun)
                 beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(a - spread)),
@@ -1671,20 +1680,21 @@ struct ThemeBackdrop: View {
         let all = Path(CGRect(origin: .zero, size: s))
         let haze = Color(red: 0.86, green: 0.88, blue: 0.90)
         c.fill(all, with: .linearGradient(
-            Gradient(stops: [.init(color: .clear, location: 0.6),
-                             .init(color: haze.opacity(0.14 * k), location: 1)]),
+            Gradient(stops: [.init(color: .clear, location: 0.5),
+                             .init(color: haze.opacity(0.12 * k), location: 0.8),
+                             .init(color: haze.opacity(0.30 * k), location: 1)]),
             startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
-        for i in 0..<10 {
+        for i in 0..<16 {
             let n = Double(i)
-            let life = 18 + (n * 7).truncatingRemainder(dividingBy: 11)
+            let life = 12 + (n * 7).truncatingRemainder(dividingBy: 9)
             let shifted = t + n * 4.7
             let cycle = UInt64(max(0, floor(shifted / life)))
             let p = shifted.truncatingRemainder(dividingBy: life) / life
             var rng = Seeded(state: 0x41DE &+ cycle &* 6151 &+ UInt64(i) &* 9973)
             let x = s.width * CGFloat(rng.next()) + CGFloat(p) * s.width * CGFloat(rng.next() * 0.12 - 0.06)
-            let y = s.height * (1.08 - 0.4 * CGFloat(p))
-            let r = max(s.width, s.height) * CGFloat(0.12 + 0.22 * p + rng.next() * 0.05)
-            let alpha = sin(.pi * p) * 0.16 * k
+            let y = s.height * (1.1 - 0.6 * CGFloat(p))
+            let r = max(s.width, s.height) * CGFloat(0.12 + 0.24 * p + rng.next() * 0.05)
+            let alpha = sin(.pi * p) * 0.30 * k
             c.fill(all, with: .radialGradient(
                 Gradient(stops: [.init(color: haze.opacity(alpha), location: 0),
                                  .init(color: haze.opacity(alpha * 0.4), location: 0.5),
@@ -1693,63 +1703,61 @@ struct ThemeBackdrop: View {
         }
     }
 
-    // MARK: The Prancing Pony
-
-    /// The hearth: a warm glow from low in one corner that breathes as a fire does, with
-    /// embers drifting up out of it, and the room darkening away from it. The breathing is slow and never
-    /// dips far — firelight, not flicker.
-    private static func tavern(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
-                               _ k: Double, _ t: Double) {
-        // The hearth.
-        let fire = CGPoint(x: s.width * 0.12, y: s.height * 1.02)
-        let breathe = 1 + 0.05 * sin(t * 1.3) + 0.03 * sin(t * 2.9 + 1)
-        let reach = max(s.width, s.height) * 0.85 * breathe
-        c.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
-            Gradient(stops: [
-                .init(color: th.glow.opacity(0.30 * k), location: 0),
-                .init(color: th.glowDeep.opacity(0.18 * k), location: 0.4),
-                .init(color: .clear, location: 1),
-            ]), center: fire, startRadius: 0, endRadius: reach))
-        // Embers, rising and wandering, fading as they climb.
-        var embers = Seeded(state: 2941)
-        for _ in 0..<26 {
-            let life = 7 + embers.next() * 6
-            let age = (t / life + embers.next()).truncatingRemainder(dividingBy: 1)
-            let rise = s.height * 0.75 * age
-            let x = fire.x + (embers.next() - 0.3) * s.width * 0.45
-                + 22 * sin(t * (0.6 + embers.next()) + embers.next() * 6)
-            let yy = fire.y - 20 - rise
-            let r = 0.8 + embers.next() * 1.6
-            c.fill(Path(ellipseIn: CGRect(x: x - r, y: yy - r, width: r * 2, height: r * 2)),
-                   with: .color(Color(red: 1, green: 0.62, blue: 0.25).opacity((1 - age) * 0.7 * k)))
-        }
-        // The room darkens away from the fire.
-        c.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
-            Gradient(stops: [.init(color: .clear, location: 0.5),
-                             .init(color: .black.opacity(0.45 * k), location: 1)]),
-            center: CGPoint(x: s.width / 2, y: s.height / 2), startRadius: 0,
-            endRadius: max(s.width, s.height) * 0.8))
-    }
-
     // MARK: Synthwave and the Grid
 
-    /// A violet sky with fixed stars over a magenta floor running away to the horizon.
-    /// The stars do not twinkle — nothing on this screen flickers.
-    private static func sunset(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+    /// Retro's picture: `Backdrop-synthwave.jpg`, family build only.
+    nonisolated(unsafe) private static let retroPicture = picture("synthwave")
+
+    /// A glitched signal: the picture (when the build has it) darkened, its colour
+    /// fringing red and cyan, a few bands of it slid sideways and sliding back, small
+    /// blocks of noise coming and going, scanlines, and a tracking band rolling slowly
+    /// down. Everything moves smoothly — a real glitch jumps and flashes, and nothing on
+    /// this screen may.
+    private static func glitch(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                _ k: Double, _ t: Double) {
-        // Low, below where the page's content usually ends, so the horizon line does not
-        // run through a card.
-        let horizon = s.height * 0.84
-        horizonGlow(&c, s, th.glowDeep, k * 1.4, height: 0.75)
-        var rng = Seeded(state: 1986)
-        for _ in 0..<Int(s.width * horizon / 6000) {
-            let r = 0.4 + rng.next() * 1.0
-            let star = CGRect(x: rng.next() * s.width, y: rng.next() * horizon * 0.9, width: r, height: r)
-            c.fill(Path(ellipseIn: star), with: .color(th.ink.opacity((0.12 + rng.next() * 0.28) * k)))
+        let all = Path(CGRect(origin: .zero, size: s))
+        if let picture = retroPicture {
+            let frame = drawPicture(&c, s, picture, k, t)
+            let image = c.resolve(picture)
+            // Fringing: the picture again in red and in cyan, a few pixels either side.
+            let split = 3 + 2 * CGFloat(sin(t * 0.4))
+            for (dx, tint) in [(-split, th.accent), (split, th.accent2)] {
+                var fringe = c
+                fringe.blendMode = .plusLighter
+                fringe.opacity = 0.18 * k
+                fringe.addFilter(.colorMultiply(tint))
+                fringe.draw(image, in: frame.offsetBy(dx: dx, dy: 0))
+            }
+            // Bands slid out of line, each easing out and back on its own slow cycle.
+            for i in 0..<4 {
+                let n = Double(i)
+                let y = s.height * CGFloat((0.15 + n * 0.22 + 0.04 * sin(t * 0.07 + n)).truncatingRemainder(dividingBy: 1))
+                let h = s.height * CGFloat(0.015 + 0.02 * (0.5 + 0.5 * sin(t * 0.13 + n * 2)))
+                let shift = s.width * CGFloat(0.025 * sin(t * (0.23 + n * 0.05) + n * 1.7))
+                var band = c
+                band.clip(to: Path(CGRect(x: 0, y: y, width: s.width, height: h)))
+                band.opacity = min(1, 0.95 * k)
+                band.draw(image, in: frame.offsetBy(dx: shift, dy: 0))
+            }
+            c.fill(all, with: .color(th.ground.opacity(0.5)))
         }
-        c.fill(Path(CGRect(x: 0, y: horizon - 1, width: s.width, height: 2)),
-               with: .color(th.accent.opacity(0.22 * k)))
-        perspectiveGrid(&c, s, horizon: horizon, color: th.accent, k: k * 0.8, t: t, speed: 0.35)
+        // Blocks of noise: small rectangles of the two colours, each fading in, holding a
+        // moment and fading out, at a place drawn from its slot's seed.
+        for i in 0..<10 {
+            let n = Double(i)
+            let life = 5 + (n * 3).truncatingRemainder(dividingBy: 4)
+            let shifted = t + n * 1.3
+            let cycle = UInt64(max(0, floor(shifted / life)))
+            let p = shifted.truncatingRemainder(dividingBy: life) / life
+            var rng = Seeded(state: 0x6117 &+ cycle &* 7919 &+ UInt64(i) &* 104729)
+            let rect = CGRect(x: s.width * CGFloat(rng.next()), y: s.height * CGFloat(rng.next()),
+                              width: s.width * CGFloat(0.02 + rng.next() * 0.08),
+                              height: CGFloat(2 + rng.next() * 10))
+            let fade = min(1, min(p, 1 - p) * 4)
+            let tint = rng.next() < 0.5 ? th.accent : th.accent2
+            c.fill(Path(rect), with: .color(tint.opacity(0.35 * fade * k)))
+        }
+        scanlines(&c, s, th, k * 0.55, t, glow: false, roll: true)
     }
 
     /// Light cycles: a few trails of light drawn low across the dark, each on its own
@@ -1776,37 +1784,6 @@ struct ThemeBackdrop: View {
                 Gradient(colors: [.clear, color.opacity(0.12 * k)]),
                 startPoint: CGPoint(x: start, y: y), endPoint: CGPoint(x: head, y: y)))
         }
-    }
-
-    /// A floor of lines running away to a vanishing point, travelling towards you: the
-    /// cross-lines are spaced in perspective and slide one gap nearer every `1 / speed`
-    /// seconds, so the loop has no seam.
-    private static func perspectiveGrid(_ c: inout GraphicsContext, _ s: CGSize, horizon: CGFloat,
-                                        color: Color, k: Double, t: Double, speed: Double) {
-        var floor = Path()
-        let vanish = CGPoint(x: s.width / 2, y: horizon)
-        let spread = s.width * 2.4
-        for i in -14...14 {
-            floor.move(to: vanish)
-            floor.addLine(to: CGPoint(x: s.width / 2 + CGFloat(i) / 14 * spread / 2, y: s.height))
-        }
-        let step = 1.45
-        let phase = (t * speed).truncatingRemainder(dividingBy: 1)
-        var n = -1.0
-        while true {
-            let depth = CGFloat(3 * pow(step, n + phase))
-            if horizon + depth >= s.height { break }
-            floor.move(to: CGPoint(x: 0, y: horizon + depth))
-            floor.addLine(to: CGPoint(x: s.width, y: horizon + depth))
-            n += 1
-        }
-        floor.move(to: CGPoint(x: 0, y: horizon)); floor.addLine(to: CGPoint(x: s.width, y: horizon))
-        var faded = c
-        faded.clip(to: Path(CGRect(x: 0, y: horizon, width: s.width, height: s.height - horizon)))
-        faded.stroke(floor, with: .linearGradient(
-            Gradient(colors: [color.opacity(0.05 * k), color.opacity(0.32 * k)]),
-            startPoint: CGPoint(x: 0, y: horizon), endPoint: CGPoint(x: 0, y: s.height)),
-            lineWidth: 0.8)
     }
 
     // MARK: Nostromo

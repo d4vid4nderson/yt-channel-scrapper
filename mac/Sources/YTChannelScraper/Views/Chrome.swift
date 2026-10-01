@@ -100,6 +100,10 @@ struct ChromeButtonStyle: ButtonStyle {
                         Bevel(shape: shape, lit: lit, pressed: configuration.isPressed || isOn)
                             .allowsHitTesting(false)
                     }
+                    // Retro's buttons break up under the pointer.
+                    if themed, Theme.active.edge == .glitch, kind != .primary, lit {
+                        Color.clear.themeEdge(shape, lit: true).allowsHitTesting(false)
+                    }
                 }
                 .modifier(PrimaryEdge(on: kind == .primary && enabled, shape: shape, lit: lit))
                 .contentShape(shape)
