@@ -29,9 +29,17 @@ struct ChannelView: View {
                     get: { model.listing.tab },
                     set: { model.listing.show($0) }
                 ))
-                .padding(.vertical, 8)
+                .padding(.top, 8)
 
-                live
+                freshness
+                    .padding(.vertical, 6)
+
+                if let error = model.listing.error, !model.listing.hasResults {
+                    Placeholder(icon: "exclamationmark.triangle", title: "Nothing to show",
+                                detail: error)
+                } else {
+                    live
+                }
             }
 
             if model.isSelecting && !model.picked.isEmpty {
@@ -53,6 +61,16 @@ struct ChannelView: View {
                 }
             }
             ToolbarItem(placement: .topBarTrailing) {
+                if !model.isMinor {
+                    Button {
+                        Task { await model.listing.refresh() }
+                    } label: {
+                        Label("Refresh", systemImage: "arrow.clockwise")
+                    }
+                    .disabled(model.listing.isRefreshing)
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 // Nothing to pick a quality for once downloading is gone.
                 if !model.isMinor { QualityMenu(model: model) }
             }
@@ -69,6 +87,11 @@ struct ChannelView: View {
                 row(for: video)
             }
 
+            // The first read of a channel never seen before.
+            if model.listing.isLoading && !model.listing.hasResults {
+                loadingRow
+            }
+
             // Reaching this row is what asks for the next page — no "load more"
             // button, because an infinite list is what a phone expects.
             if model.listing.continuation != nil {
@@ -79,6 +102,41 @@ struct ChannelView: View {
         .listStyle(.plain)
         .scrollContentBackground(.hidden)
         .animation(.default, value: model.isSelecting)
+        .refreshable { await model.listing.refresh() }
+    }
+
+    /// When the list last heard from YouTube, since it is kept on the phone and opens
+    /// without asking — and what the last refresh brought, so a pull that found nothing
+    /// says so instead of looking like it did not happen.
+    private var freshness: some View {
+        HStack(spacing: 6) {
+            if model.listing.isRefreshing {
+                ProgressView().controlSize(.mini).tint(Color.secondaryText)
+                Text("Checking for new videos…")
+            } else if let refreshed = model.listing.refreshed {
+                // Re-rendered each minute, so "just now" does not sit there for an hour.
+                TimelineView(.everyMinute) { _ in
+                    Text(Self.updated(refreshed) + Self.added(model.listing.added))
+                }
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundStyle(Color.secondaryText)
+        .frame(maxWidth: .infinity, minHeight: 14)
+    }
+
+    private static func updated(_ date: Date) -> String {
+        if Date.now.timeIntervalSince(date) < 60 { return "Updated just now" }
+        return "Updated " + date.formatted(.relative(presentation: .named))
+    }
+
+    private static func added(_ count: Int?) -> String {
+        switch count {
+        case nil: ""
+        case 0?: " · nothing new"
+        case 1?: " · 1 new video"
+        case let n?: " · \(n) new videos"
+        }
     }
 
     /// Minor Mode's version of the channel: what has been approved from it, and nothing

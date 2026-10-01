@@ -208,7 +208,10 @@ final class WidgetFeed {
         }
 
         if !model.isMinor {
-            let wanted = (playingShelf.map { [$0.id] } ?? []) + homeChannels.map(\.id)
+            // Every saved channel, not only the ones Home shows: the same lists are what
+            // the channels open from, so keeping them fresh here is what makes that instant.
+            var wanted = (playingShelf.map { [$0.id] } ?? []) + homeChannels.map(\.id)
+            wanted += model.library.recent.map(\.id).filter { !wanted.contains($0) }
             ChannelPages.shared.refresh(wanted) { [weak self, weak model] in
                 guard let self, let model else { return }
                 self.update(from: model)
@@ -335,64 +338,47 @@ final class WidgetFeed {
     }
 }
 
-/// The first page of each saved channel, kept for the Browse widget on a parent's phone.
+/// Keeps the saved channels' Videos tabs fresh, for the Browse widget and for opening
+/// them, on a parent's phone.
 ///
-/// The app only ever reads a channel live, when you open it, and keeps nothing. A widget
-/// browsing channels without opening the app needs *something* for each one, so this
-/// fetches the first page of the channels Home lists — a few at a time, each at most every
-/// six hours — and remembers it in Caches. Never used on a minor's phone, whose widget
-/// offers approved videos and nothing else.
+/// The lists themselves live in `ChannelCache` — the same one a channel opens from — so
+/// what the widget offers and what the app shows are one copy. This only refreshes them:
+/// whichever are older than `ChannelCache.staleAfter`, one channel at a time with a pause
+/// between, newest page or two spliced on top (`Listing.read`). Never used on a minor's
+/// phone, whose widget offers approved videos and nothing else.
 @MainActor
 final class ChannelPages {
     static let shared = ChannelPages()
 
-    private struct Page: Codable {
-        var fetched: Date
-        var videos: [Video]
-    }
-
-    private static let maxAge: TimeInterval = 6 * 60 * 60
-    private static let file: URL = {
-        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
-        return caches.appendingPathComponent("widget-channel-pages.json")
-    }()
-
-    private var pages: [String: Page]
     private var running: Task<Void, Never>?
 
-    private init() {
-        pages = (try? Data(contentsOf: Self.file))
-            .flatMap { try? JSONDecoder().decode([String: Page].self, from: $0) } ?? [:]
+    private init() {}
+
+    func videos(for channelID: String) -> [Video] {
+        Array((ChannelCache.shared.entry(channelID: channelID, tab: .videos)?.videos ?? []).prefix(12))
     }
 
-    func videos(for channelID: String) -> [Video] { pages[channelID]?.videos ?? [] }
-
-    /// Fetch whichever of these channels are missing or stale, then call `done` once if
-    /// anything new arrived. One pass at a time; a call while one runs is dropped, and
-    /// the next update picks up whatever it missed.
-    func refresh(_ channelIDs: [String], done: @escaping @MainActor () -> Void) {
+    /// Refresh whichever of these channels are missing or stale, then call `done` once if
+    /// anything was refreshed. One pass at a time; a call while one runs is dropped, and
+    /// the next picks up whatever it missed.
+    func refresh(_ channelIDs: [String], done: @escaping @MainActor () -> Void = {}) {
         guard running == nil else { return }
-        let stale = channelIDs.filter {
-            guard let page = pages[$0] else { return true }
-            return Date().timeIntervalSince(page.fetched) > Self.maxAge
-        }
+        let cache = ChannelCache.shared
+        let stale = channelIDs.filter { cache.isStale(channelID: $0, tab: .videos) }
         guard !stale.isEmpty else { return }
         running = Task { [weak self] in
             var changed = false
             for id in stale {
                 guard !Task.isCancelled else { break }
-                guard let page = try? await YouTubeAPI.listChannelTab(browseID: id, tab: .videos)
-                else { continue }
-                self?.pages[id] = Page(fetched: Date(), videos: Array(page.videos.prefix(12)))
-                changed = true
+                let kept = cache.entry(channelID: id, tab: .videos)
+                if let entry = try? await Listing.read(browseID: id, tab: .videos, onto: kept) {
+                    cache.store(entry, channelID: id, tab: .videos)
+                    changed = true
+                }
+                // A breath between channels, so this never reads as a burst to YouTube.
+                try? await Task.sleep(for: .seconds(1))
             }
-            guard let self else { return }
-            self.running = nil
-            // Channels no longer on Home go with the write.
-            self.pages = self.pages.filter { channelIDs.contains($0.key) }
-            if let data = try? JSONEncoder().encode(self.pages) {
-                try? data.write(to: Self.file, options: .atomic)
-            }
+            self?.running = nil
             if changed { done() }
         }
     }

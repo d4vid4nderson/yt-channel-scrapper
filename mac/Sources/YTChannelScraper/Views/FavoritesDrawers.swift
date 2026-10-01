@@ -205,7 +205,7 @@ struct SavedChannelsDrawer: View {
             ForEach(videos) { video in
                 DrawerVideoRow(
                     video: video,
-                    preview: { model.preview.open(video) },
+                    preview: { model.openCard(video) },
                     download: { model.download([video]) },
                     remove: { model.library.removeVideo(video.id) }
                 )

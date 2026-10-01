@@ -139,21 +139,14 @@ struct RootView: View {
         .task { await model.syncShelf() }
         // A few seconds after launch, once the window has settled: read the saved
         // channels ahead of the first click on one.
+        // Then every half hour, which reads only those gone stale since.
         .task {
             try? await Task.sleep(for: .seconds(4))
             model.warmSavedChannels()
-        }
-        // Over everything, panels included: previewing something from a drawer has to
-        // land on top of the panel it was started from.
-        .overlay {
-            PreviewModal(
-                session: model.preview,
-                download: { model.downloadPreviewed($0) },
-                popOut: { model.popOutToIsland(tuckingWindowAway: true) },
-                isSaved: { model.isSaved($0) },
-                toggleSaved: { model.toggleSaved($0) },
-                dismiss: model.dismissPreview
-            )
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30 * 60))
+                model.warmSavedChannels()
+            }
         }
     }
 
@@ -166,7 +159,7 @@ struct RootView: View {
             let headerHeight = collapsed ? Layout.headerHeight : geo.size.height
 
             ZStack(alignment: .top) {
-                resultsArea
+                resultsArea(height: max(geo.size.height - Layout.headerHeight, 0))
                     .frame(
                         width: geo.size.width,
                         height: max(geo.size.height - Layout.headerHeight, 0)
@@ -290,19 +283,37 @@ struct RootView: View {
 
     /// Always mounted, so its offset can animate. Off-screen below the hero until the
     /// header collapses and lifts it into view.
-    private var resultsArea: some View {
+    ///
+    /// The player sits at the top of it, across its full width, with the list below: a
+    /// video opened from the list plays above the list it came from, and the next one
+    /// clicked replaces it there. See `PreviewPanel`.
+    private func resultsArea(height: CGFloat) -> some View {
         VStack(spacing: 0) {
             Divider()
+            PreviewPanel(
+                session: model.preview,
+                available: height,
+                download: { model.downloadPreviewed($0) },
+                popOut: { model.popOutToIsland(tuckingWindowAway: true) },
+                isSaved: { model.isSaved($0) },
+                toggleSaved: { model.toggleSaved($0) },
+                dismiss: model.dismissPreview
+            )
             if let error = model.statusError, model.showsResults {
                 ErrorBanner(message: error) { model.goHome() }
                 Divider()
             }
-            switch model.mode {
-            // The saved list is a video list; everything about it is the same view.
-            case .videos, .saved: ResultsList(model: model)
-            case .channels:       ChannelResults(model: model)
+            if model.showsList {
+                switch model.mode {
+                // The saved list is a video list; everything about it is the same view.
+                case .videos, .saved: ResultsList(model: model)
+                case .channels:       ChannelResults(model: model)
+                }
+            } else {
+                Palette.page
             }
         }
+        .animation(.easeOut(duration: 0.25), value: model.preview.video == nil)
     }
 
     // MARK: - Header
@@ -622,6 +633,10 @@ private struct ResultsList: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            if model.mode == .videos, model.scraper.rawURL != nil {
+                ChannelTabBar(model: model)
+                Divider()
+            }
             controls
             Divider()
             ScrollViewReader { proxy in
@@ -883,6 +898,89 @@ private struct ResultsList: View {
         if !model.keptVisible.isEmpty { parts.append("\(model.keptVisible.count) kept") }
         if !model.picked.isEmpty { parts.append("\(model.picked.count) selected") }
         return parts.joined(separator: "  ·  ")
+    }
+}
+
+
+// MARK: - Channel tabs
+
+/// Videos / Shorts / Live / Music across the top of an open channel, and the Refresh that
+/// goes with them.
+///
+/// The type used to be chosen only in the search pill, before scraping — switching meant
+/// changing the menu and scraping again. Here it is a tab on the channel itself, and since
+/// each tab is kept (`ListingCache`), going back to one already read is instant. Refresh
+/// reads only the newest videos onto the kept list; the line beside it says how old the
+/// list is, because it no longer re-reads itself on every open.
+private struct ChannelTabBar: View {
+    @Bindable var model: AppModel
+
+    var body: some View {
+        HStack(spacing: 6) {
+            ForEach(ChannelTab.allCases) { option in
+                let isOn = option == model.scraper.tab
+                Button { model.showTab(option) } label: {
+                    Text(option.label)
+                        .font(.system(size: 12.5, weight: isOn ? .semibold : .regular))
+                        .foregroundStyle(isOn ? Palette.onFill : Palette.ink(0.75))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 5)
+                        .background(isOn ? Palette.accent : Palette.ink(0.08), in: ThemedCapsule())
+                        .contentShape(ThemedCapsule())
+                }
+                .buttonStyle(.plain)
+                .help("This channel's \(option.label.lowercased())")
+                .pointingHand()
+            }
+
+            Spacer(minLength: 12)
+
+            Group {
+                if model.scraper.isRefreshing {
+                    HStack(spacing: 6) {
+                        ProgressView().controlSize(.mini)
+                        Text("Checking for new videos…")
+                    }
+                } else if let refreshed = model.scraper.refreshed {
+                    // Re-drawn each minute so "just now" moves on.
+                    TimelineView(.everyMinute) { _ in
+                        Text(Self.updated(refreshed) + Self.added(model.scraper.added))
+                    }
+                }
+            }
+            .font(.system(size: 11.5))
+            .foregroundStyle(.secondary)
+            .lineLimit(1)
+
+            Button {
+                model.refreshListing()
+            } label: {
+                Label("Refresh", systemImage: "arrow.clockwise")
+                    .font(.system(size: 12))
+                    .chip()
+            }
+            .buttonStyle(.plain)
+            .disabled(!model.scraper.canRefresh)
+            .keyboardShortcut("r", modifiers: .command)
+            .help("Look for new videos on this tab  (⌘R)")
+            .pointingHand()
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 8)
+    }
+
+    private static func updated(_ date: Date) -> String {
+        if Date.now.timeIntervalSince(date) < 60 { return "Updated just now" }
+        return "Updated " + date.formatted(.relative(presentation: .named))
+    }
+
+    private static func added(_ count: Int?) -> String {
+        switch count {
+        case nil: ""
+        case 0?: "  ·  nothing new"
+        case 1?: "  ·  1 new video"
+        case let n?: "  ·  \(n) new videos"
+        }
     }
 }
 

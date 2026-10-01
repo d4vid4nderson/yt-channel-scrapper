@@ -17,7 +17,7 @@ struct VideoRow: View {
     let downloadOne: () -> Void
     /// The thumbnail's play: straight into Now Playing.
     let preview: () -> Void
-    /// The title's link: the full preview card.
+    /// The title's link: the player at the top of the page.
     var openCard: (() -> Void)? = nil
     let toggleSaved: () -> Void
 
@@ -208,7 +208,7 @@ private struct RowDownloadButton: View {
     }
 }
 
-/// A video's title, which opens the full preview card — underlined under the pointer,
+/// A video's title, which opens it in the player at the top — underlined under the pointer,
 /// so it reads as the link it is. Without `open`, plain text.
 private struct TitleLink: View {
     let title: String

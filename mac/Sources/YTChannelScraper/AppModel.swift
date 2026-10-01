@@ -49,7 +49,7 @@ final class AppModel {
     /// What the island is playing, so it can be put back where it came from.
     var islandVideo: Video?
 
-    /// A video still playing after its preview card was closed, shown in the window's
+    /// A video still playing after the player at the top was closed, shown in the window's
     /// Now Playing bar. The island is only for when the window itself is put away.
     struct NowPlaying {
         let video: Video
@@ -297,7 +297,20 @@ final class AppModel {
     /// panel — you asked for a channel and got the landing screen back. So once you are in
     /// the results you stay in them, and the wait is drawn there instead, as the shape of
     /// the list that is coming.
-    var showsResults: Bool { hasResults || (isBusy && startedFromResults) }
+    ///
+    /// Two more reasons to stay: a channel whose tab was switched from the bar over its
+    /// list keeps that bar up even when the new tab is empty, so the next tab is one click
+    /// away; and a video open in the player, which lives at the top of the results.
+    var showsResults: Bool { showsList || preview.isOpen }
+
+    /// Whether there is a list under the player — not when a video was opened from the
+    /// landing view or a panel with nothing listed, where the player is the whole page.
+    var showsList: Bool {
+        hasResults || (isBusy && startedFromResults) || (mode == .videos && browsingTabs)
+    }
+
+    /// Set by switching tabs on an open channel, cleared by anything that leaves it.
+    private(set) var browsingTabs = false
 
     /// A list on its way with nothing of it on screen yet — what the skeleton rows stand
     /// in for. Loading *more* of a list is not this: that has rows above it already, and
@@ -353,6 +366,7 @@ final class AppModel {
 
     func scrape(opening channel: Channel? = nil) {
         guard canScrape else { return }
+        browsingTabs = false
         // Both read the state the last run left behind, so they are taken before it goes.
         startedFromResults = hasResults
         openingChannel = channel
@@ -369,7 +383,26 @@ final class AppModel {
         scraper.start(rawURL: urlText, tab: tab)
     }
 
+    /// Show another tab of the channel that is open — Videos, Shorts, Live, Music — from
+    /// the bar over its list. Opens from what is kept when it can, so flicking between tabs
+    /// already read costs nothing.
+    func showTab(_ new: ChannelTab) {
+        guard mode == .videos, let url = scraper.rawURL, new != scraper.tab else { return }
+        tab = new
+        browsingTabs = true
+        startedFromResults = true
+        picked = []
+        filterText = ""
+        scraper.start(rawURL: url, tab: new)
+    }
+
+    /// The Refresh button: read the open tab's newest videos onto the kept list.
+    func refreshListing() {
+        scraper.refresh()
+    }
+
     func searchChannels() {
+        browsingTabs = false
         // These hits become the ones on screen, so there is nothing behind them.
         lastSearch = nil
         startedFromResults = hasResults
@@ -384,6 +417,7 @@ final class AppModel {
     /// Show the saved videos in place of a channel's, so they can be ticked, previewed
     /// and downloaded with exactly the machinery a scrape's list uses.
     func showSavedVideos() {
+        browsingTabs = false
         startedFromResults = false
         openingChannel = nil
         mode = .saved
@@ -415,6 +449,7 @@ final class AppModel {
     /// Back to the hits, with the search box saying what it searched for.
     func returnToSearch() {
         guard let last = lastSearch else { return }
+        browsingTabs = false
         scraper.reset()
         search.restore(query: last.query, results: last.results)
         lastSearch = nil
@@ -428,6 +463,7 @@ final class AppModel {
 
     /// Back to the landing view, keeping what was typed so it can be edited and re-run.
     func goHome() {
+        browsingTabs = false
         scraper.reset()
         search.reset()
         lastSearch = nil
@@ -470,14 +506,13 @@ final class AppModel {
         openDownloads()
     }
 
-    /// Put the preview card away without stopping what it was playing.
+    /// Close the player at the top without stopping what it was playing.
     ///
-    /// Every way out of the card comes through here — the X, Escape, a click on the
-    /// backdrop, and queueing a download. Closing a card is not the same as saying stop:
-    /// a three-hour mix cut off mid-bar because you wanted the list back is the app
-    /// taking something away for no reason. So it carries on in the Now Playing bar at
-    /// the foot of the window. The island is for when the window goes away, not the
-    /// card — see `popOutToIsland`.
+    /// Every way out of the player comes through here — the X and Escape. Closing it is
+    /// not the same as saying stop: a three-hour mix cut off mid-bar because you wanted
+    /// the room back is the app taking something away for no reason. So it carries on in
+    /// the Now Playing bar at the foot of the window. The island is for when the window
+    /// goes away, not the player — see `popOutToIsland`.
     ///
     /// Nothing to hand over if the stream never started — there this is just a close.
     func dismissPreview() {
@@ -500,7 +535,7 @@ final class AppModel {
     }
 
     /// A video asked to play straight into the module, while its stream is found. Its own
-    /// session, so the preview card never opens for it.
+    /// session, so the player at the top never opens for it.
     private(set) var nowLoading: Video? {
         didSet { if (nowLoading == nil) != (oldValue == nil) { presentNowPlaying() } }
     }
@@ -512,6 +547,12 @@ final class AppModel {
     /// The thumbnail's play: start it in the Now Playing module, no card. The card is for
     /// clicking the title.
     func playNow(_ video: Video) {
+        // With the player open at the top, that is where a video goes — two players
+        // going at once, one up there and one in the bar, is nobody's intent.
+        if preview.isOpen {
+            openCard(video)
+            return
+        }
         if let now = nowPlaying, now.video.id == video.id {
             now.player.play()
             return
@@ -606,11 +647,11 @@ final class AppModel {
         now.player.replaceCurrentItem(with: nil)
     }
 
-    /// Queue what the preview is playing, and leave it playing. The downloads panel the
-    /// queueing opens is then something to watch the fetch in, not an interruption.
+    /// Queue what the player is playing, and leave it playing where it is. The player
+    /// is part of the page now rather than a card over it, so the downloads panel opens
+    /// beside it instead of having to send it away first.
     func downloadPreviewed(_ video: Video) {
         download([video])
-        dismissPreview()
     }
 }
 
@@ -709,7 +750,7 @@ extension AppModel {
 
     /// The window is back — deminiaturised, or the app unhidden — so the island folds
     /// back into it, as the Now Playing bar. A no-op when the island's own restore
-    /// button brought it back, which has already put the video into the card.
+    /// button brought it back, which has already put the video into the player.
     func windowCameBack() {
         guard let video = islandVideo, miniPlayer.isShowing else { return }
         let ratio = miniPlayer.aspectRatio

@@ -40,6 +40,19 @@ final class Scraper {
     private var incoming: [Video] = []
     private var cacheKey: String?
 
+    /// The kept list a refresh is reading the head of, so the head can be spliced onto it.
+    private var kept: ListingCache.Entry?
+
+    /// What is open, so a tab switch or a Refresh can read it again without the field.
+    private(set) var rawURL: String?
+    private(set) var tab: ChannelTab = .videos
+    /// When the list on screen last heard from YouTube.
+    private(set) var refreshed: Date?
+    /// What the last refresh brought; nil when none has run since the list opened.
+    private(set) var added: Int?
+
+    var canRefresh: Bool { rawURL != nil && status != .running }
+
     /// What the walk is collecting into — the list on screen, or the one behind it.
     private var collected: [Video] { isRefreshing ? incoming : videos }
 
@@ -53,6 +66,10 @@ final class Scraper {
         isRefreshing = false
         incoming = []
         cacheKey = nil
+        kept = nil
+        rawURL = nil
+        refreshed = nil
+        added = nil
         videos = []
         seen = []
         channel = ""
@@ -73,31 +90,53 @@ final class Scraper {
         if isRefreshing {
             isRefreshing = false
             incoming = []
-            if status == .running { status = .done }
+            if status == .running { restoreKept() }
             return
         }
         if status == .running { status = .stopped }
     }
 
-    func start(rawURL: String, tab: ChannelTab) {
+    /// Open a channel tab: from what is kept when it is fresh, from what is kept with its
+    /// newest page read behind it when it is not, and from yt-dlp alone when nothing is.
+    /// `force` is the Refresh button — read the head however fresh the list is.
+    func start(rawURL: String, tab: ChannelTab, force: Bool = false) {
         stop()
         let key = ListingCache.key(url: rawURL, tab: tab)
+        self.rawURL = rawURL
+        self.tab = tab
         cacheKey = key
         seen = []
         error = nil
         outerCursor = 0
         exhausted = false
         incoming = []
-        // Seen before: the last list goes up at once and the read happens behind it.
-        if let cached = ListingCache.shared.entry(for: key) {
+        added = nil
+        kept = nil
+        let cache = ListingCache.shared
+        // Seen before: the last list goes up at once.
+        if let cached = cache.entry(for: key) {
             videos = cached.videos
             channel = cached.channel
             channelRef = cached.channelRef
+            refreshed = cached.stored
+            // Recent enough that nothing needs asking at all.
+            if !force, cache.isFresh(key), let cursor = cached.cursor {
+                resolvedURL = cached.resolvedURL
+                outerCursor = cursor
+                exhausted = cached.exhausted ?? false
+                seen = Set(videos.map(\.id))
+                isRefreshing = false
+                status = exhausted || resolvedURL == nil ? .done : .paused
+                return
+            }
+            // Otherwise its head is read behind it.
+            kept = cached
             isRefreshing = true
         } else {
             videos = []
             channel = ""
             channelRef = nil
+            refreshed = nil
             isRefreshing = false
         }
         status = .running
@@ -114,6 +153,15 @@ final class Scraper {
                     if !self.collected.isEmpty { break }
                 }
                 guard !self.collected.isEmpty else { throw YtDlp.Failure.noTab(tab.label) }
+                // A refresh reads on until the head reaches a video already kept — forty
+                // new since last time is two pages, not one — and gives up at a few,
+                // starting the list over rather than leaving a hole in it.
+                if self.isRefreshing, let kept = self.kept {
+                    while ListingMerge.splice(self.incoming, onto: kept.videos) == nil,
+                          !self.exhausted, self.incoming.count < 8 * Self.pageSize {
+                        try await self.fill(upTo: self.incoming.count + Self.pageSize)
+                    }
+                }
                 self.settle()
             } catch is CancellationError {
                 // stop() already recorded the state
@@ -124,12 +172,29 @@ final class Scraper {
                     Log.library.error("refresh failed: \(error.localizedDescription, privacy: .public)")
                     self.isRefreshing = false
                     self.incoming = []
-                    self.status = .done
+                    self.restoreKept()
                 } else {
                     self.fail(error)
                 }
             }
         }
+    }
+
+    /// Read the newest videos of whatever is open, however recently it was read.
+    func refresh() {
+        guard let rawURL, status != .running else { return }
+        start(rawURL: rawURL, tab: tab, force: true)
+    }
+
+    /// Back to paging the kept list as it was, after a refresh that did not finish.
+    private func restoreKept() {
+        guard let kept else { status = .done; return }
+        resolvedURL = kept.resolvedURL
+        outerCursor = kept.cursor ?? 0
+        exhausted = kept.exhausted ?? false
+        seen = Set(videos.map(\.id))
+        self.kept = nil
+        status = exhausted || kept.cursor == nil || resolvedURL == nil ? .done : .paused
     }
 
     func loadMore() {
@@ -152,13 +217,40 @@ final class Scraper {
     private func settle() {
         guard status == .running else { return }
         if isRefreshing {
-            videos = incoming
+            let before = Set(videos.map(\.id))
+            if let kept, let spliced = ListingMerge.splice(incoming, onto: kept.videos) {
+                videos = spliced.videos
+                // Paging carries on where the kept list stopped, moved down by what
+                // arrived on top and up by what was taken down. Music's cursor counts
+                // albums rather than tracks, so it is left where it was: too early only
+                // costs a few repeats, which `seen` drops.
+                if let cursor = kept.cursor {
+                    let removed = kept.videos.count + spliced.added - spliced.videos.count
+                    outerCursor = tab == .music ? cursor : max(0, cursor + spliced.added - removed)
+                    exhausted = kept.exhausted ?? false
+                    if let url = kept.resolvedURL { resolvedURL = url }
+                } else {
+                    exhausted = false
+                }
+            } else {
+                videos = incoming
+            }
+            added = videos.filter { !before.contains($0.id) }.count
             incoming = []
             isRefreshing = false
+            kept = nil
+            refreshed = .now
+        } else if refreshed == nil {
+            refreshed = .now
         }
+        seen = Set(videos.map(\.id))
         status = exhausted ? .done : .paused
         if let cacheKey {
-            ListingCache.shared.store(videos, channel: channel, channelRef: channelRef, for: cacheKey)
+            ListingCache.shared.store(
+                .init(videos: videos, channel: channel, channelRef: channelRef,
+                      stored: refreshed ?? .now, resolvedURL: resolvedURL,
+                      cursor: outerCursor, exhausted: exhausted),
+                for: cacheKey)
         }
     }
 

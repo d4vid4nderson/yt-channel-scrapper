@@ -77,6 +77,17 @@ struct RootView: View {
                 }
             }
         }
+        // The saved channels, refreshed every few hours while the app is open — each one
+        // only once it is older than `ChannelCache.staleAfter`, so most checks ask
+        // YouTube nothing. A minor's phone never reads a channel at all.
+        .task(id: scenePhase) {
+            guard scenePhase == .active, !model.isMinor else { return }
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(30 * 60))
+                guard !Task.isCancelled else { return }
+                WidgetFeed.shared.update(from: model)
+            }
+        }
         // The widgets. Written on the way out as well as in, so they show the phone as it
         // was left — and whenever what they show changes while the app is open.
         .onChange(of: scenePhase) { _, phase in
