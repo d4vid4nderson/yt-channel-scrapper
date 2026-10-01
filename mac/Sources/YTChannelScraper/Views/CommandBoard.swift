@@ -111,7 +111,8 @@ struct CommandBoard: View {
         .overlay {
             ThemedRect(cornerRadius: 14).strokeBorder(Palette.ink(0.08))
         }
-        .themeEdge(radius: 14)
+        // Lit in the highlight where the theme has one, like the search pill.
+        .themeEdge(radius: 14, lit: Theme.active.highlight != nil)
     }
 
     /// Everybody in the family, and what each of their devices is holding.

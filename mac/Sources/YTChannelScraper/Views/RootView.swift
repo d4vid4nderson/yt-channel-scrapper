@@ -501,12 +501,21 @@ private struct PanelSwitches: View {
         }
         .padding(Chrome.trackInset)
         .frame(height: Chrome.large)
-        .background(Palette.ink(0.05), in: track)
-        .overlay { track.strokeBorder(Palette.ink(0.09), lineWidth: 1) }
+        // In a theme, built like the search pill above it — the field's fill, its rim and
+        // the theme's edge, lit in the highlight where the theme has one — with what is
+        // chosen in it lit in that highlight too.
+        .background(themed ? Palette.field : Palette.ink(0.05), in: track)
+        .overlay { track.strokeBorder(Palette.ink(themed ? 0.10 : 0.09), lineWidth: 1) }
+        .themeEdge(track, lit: Theme.active.highlight != nil)
         .fixedSize()
     }
 
+    private var themed: Bool { Theme.active.id != .classic }
+
     private struct Switch: View {
+        /// What is chosen is lit in the theme's highlight, where it has one.
+        static var chosen: Color { Theme.active.id == .classic ? Palette.accent : Theme.active.litTint }
+
         let icon: String
         let title: String
         let isOn: Bool
@@ -524,12 +533,13 @@ private struct PanelSwitches: View {
                     Text(title)
                         .font(.system(size: 12, weight: isOn ? .semibold : .medium))
                 }
-                .foregroundStyle(isOn ? Palette.accent : Palette.ink(hovering ? 0.9 : 0.62))
+                .foregroundStyle(isOn ? Self.chosen : Palette.ink(hovering ? 0.9 : 0.62))
                 .padding(.horizontal, 11)
                 .frame(maxHeight: .infinity)
                 .background {
                     if isOn || hovering {
-                        shape.fill(Palette.ink(isOn ? 0.12 : 0.06))
+                        shape.fill(isOn && Theme.active.id != .classic
+                                   ? Self.chosen.opacity(0.16) : Palette.ink(isOn ? 0.12 : 0.06))
                     }
                 }
                 .contentShape(shape)

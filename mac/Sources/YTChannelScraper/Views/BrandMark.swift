@@ -16,10 +16,14 @@ struct BrandMark: View {
     var body: some View {
         let corner = width * 0.17
         let plate = ThemedRect(cornerRadius: corner, style: .continuous)
-        let ink = solid ? Palette.onFill : Palette.brand
+        let theme = Theme.active
+        let ink = solid ? Palette.onFill : theme.markOnHighlight ? theme.litTint : Palette.brand
         ZStack {
             if solid {
                 plate.fill(Palette.brand)
+            } else if theme.markOnHighlight {
+                plate.fill(theme.glowDeep)
+                plate.strokeBorder(theme.litTint, lineWidth: max(1, width * 0.024))
             } else {
                 plate.fill(Palette.brand.opacity(0.08))
                 plate.strokeBorder(Palette.brand, lineWidth: max(1, width * 0.024))

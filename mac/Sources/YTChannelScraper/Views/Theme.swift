@@ -165,6 +165,9 @@ struct Theme: Identifiable, @unchecked Sendable {
     var litTint: Color { highlight ?? edgeTint }
     /// Now and then a glint of light on the hero's title and mark (`Glint`).
     var glints = false
+    /// The mark filled dark (`glowDeep`) with its outline and arrow in the highlight —
+    /// Ring World's armour green with the visor's orange.
+    var markOnHighlight = false
 
     var colorScheme: ColorScheme? {
         switch appearance {
@@ -485,14 +488,14 @@ extension Theme {
         glints: true
     )
 
-    /// Halo: Blood Gulch on the ring. Master Chief's armour green for everything that
+    /// Halo: the ring's surface under its Forerunner towers. Master Chief's armour green for everything that
     /// matters, panels faintly green like the armour's plating, the HUD's blue in the
     /// readouts, and the visor's gold where something is lit or chosen. Panels cut on the
     /// diagonal like the armour's plates.
     static let ringWorld = Theme(
         id: .ringWorld,
         name: "Ring World",
-        tagline: "Blood Gulch, under the ring",
+        tagline: "Forerunner towers over the ring",
         appearance: .dark,
         ink: hex(0xDDE6DA),
         accent: hex(0x7FAE3A),
@@ -521,8 +524,9 @@ extension Theme {
         backdrop: .ringWorld,
         aurora: [hex(0x7FAE3A), hex(0x57C7F2), hex(0x2E4A1A), hex(0xDDE6DA)],
         lcd: LCD(background: hex(0x050A0D), ink: hex(0x7FD6FA), glow: hex(0x57C7F2)),
-        // The visor's gold.
-        highlight: hex(0xE8A93A)
+        // The visor's orange-gold.
+        highlight: hex(0xF2952E),
+        markOnHighlight: true
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
@@ -2069,33 +2073,23 @@ struct ThemeBackdrop: View {
     /// Ring World's picture: `Backdrop-ringWorld.jpg`, family build only.
     nonisolated(unsafe) private static let ringPicture = picture("ringWorld")
 
-    /// Blood Gulch: cloud drifting across the sky, a slow glimmer of light running up the
-    /// ring's arc, the base's doorway light breathing, and dust in the sun. Without the
-    /// picture, the clouds and dust over the dark.
+    /// The ring's weather: cloud drifting through the towers in slow banks, the light
+    /// beneath the central structure breathing — the Forerunner machine at work — and
+    /// dust turning in the air. Without the picture, the clouds and dust over the dark.
     private static func ringWorld(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
         if let picture = ringPicture {
             let frame = drawPicture(&c, s, picture, k, t)
             c.fill(all, with: .color(th.ground.opacity(0.32)))
-            func at(_ x: Double, _ y: Double) -> CGPoint {
-                CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
-            }
+            // The beam under the central tower, and the ring of structure it lights.
             var light = c
             light.blendMode = .plusLighter
-            // The base's doorway.
-            let door = at(0.60, 0.70)
-            let pulse = 0.6 + 0.4 * sin(t * 0.8)
+            let beam = CGPoint(x: frame.minX + frame.width * 0.522, y: frame.minY + frame.height * 0.69)
+            let pulse = 0.6 + 0.4 * sin(t * 0.9)
             light.fill(all, with: .radialGradient(
-                Gradient(colors: [th.accentHot.opacity(0.30 * pulse * k), th.accent.opacity(0.08 * k), .clear]),
-                center: door, startRadius: 0, endRadius: frame.width * 0.06))
-            // A glimmer running up the ring's arc, from the horizon into the sky.
-            let lap = 9.0
-            let u = (t / lap).truncatingRemainder(dividingBy: 1)
-            let glimmer = at(0.205 + (0.30 - 0.205) * u, 0.38 - 0.38 * u)
-            light.fill(all, with: .radialGradient(
-                Gradient(colors: [Color.white.opacity(0.22 * sin(.pi * u) * k), .clear]),
-                center: glimmer, startRadius: 0, endRadius: frame.width * 0.05))
+                Gradient(colors: [th.accent2.opacity(0.35 * pulse * k), th.accent2.opacity(0.10 * k), .clear]),
+                center: beam, startRadius: 0, endRadius: frame.width * 0.08))
         } else {
             horizonGlow(&c, s, th.glowDeep, k, height: 0.5)
         }
@@ -2106,7 +2100,7 @@ struct ThemeBackdrop: View {
             let reach = max(s.width, s.height) * CGFloat(0.28 + 0.06 * (n.truncatingRemainder(dividingBy: 3)))
             let span = Double(s.width + reach * 2)
             let x = (n * 0.29 * span + t * (6 + n * 2.5)).truncatingRemainder(dividingBy: span) - Double(reach)
-            let y = Double(s.height) * (0.08 + 0.06 * n) + 14 * sin(t * 0.07 + n)
+            let y = Double(s.height) * (0.18 + 0.1 * n) + 18 * sin(t * 0.07 + n)
             c.fill(all, with: .radialGradient(
                 Gradient(stops: [.init(color: cloud.opacity(0.10 * k), location: 0),
                                  .init(color: cloud.opacity(0.04 * k), location: 0.5),
