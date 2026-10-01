@@ -250,6 +250,7 @@ final class WidgetFeed {
         case .chamfered(let scale): ("chamfered", Double(scale))
         // The widget's "chamfered" cuts all four corners, which is this one exactly.
         case .facetted(let scale):  ("chamfered", Double(scale))
+        case .glitched:             ("square", 0)
         case .square:               ("square", 0)
         }
         let design = switch theme.type.design {

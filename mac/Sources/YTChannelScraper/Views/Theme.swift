@@ -38,6 +38,10 @@ struct Theme: Identifiable, @unchecked Sendable {
         /// and the ornithopters' instruments — related to Blade Runner's two-corner cut,
         /// not the same.
         case facetted(scale: CGFloat)
+        /// Torn: square, but with a stepped notch out of two corners and a segment of an
+        /// edge slipped out of line, placed differently for each size of container —
+        /// Retro's broken signal, in the panels' own outline.
+        case glitched(scale: CGFloat)
         case square
     }
 
@@ -397,7 +401,7 @@ extension Theme {
     /// Retro: a signal coming apart. The palette is the glitch picture's — coral, teal
     /// and a cold pale grey on black — the panels' rules printed twice out of register,
     /// headings in Rubik Glitch (its letters already broken) with the same red and cyan
-    /// split, and a terminal's VT323 in the LCD. Square corners, as pixels are.
+    /// split, a terminal's VT323 in the LCD, and every outline torn (`Torn`).
     /// The `synthwave` id is kept so a saved choice and its icon carry over.
     static let synthwave = Theme(
         id: .synthwave,
@@ -425,7 +429,7 @@ extension Theme {
         pickedFar: hex(0x2A1416),
         pickedEdge: hex(0x5A2A24),
         pickedEdgeHot: hex(0x7A3A30),
-        corners: .square,
+        corners: .glitched(scale: 0.9),
         edge: .glitch,
         type: Typeface(display: ["RubikGlitch-Regular"], displayCaps: true,
                        displayTracking: 0.5, displaySplit: true),
@@ -735,6 +739,8 @@ struct ThemedRect: InsettableShape {
             return Chamfer(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
         case .facetted(let scale):
             return Facet(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
+        case .glitched(let scale):
+            return Torn(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
         case .square:
             return Rectangle().path(in: r)
         }
@@ -766,6 +772,8 @@ struct ThemedCapsule: InsettableShape {
             return Chamfer(cut: half * 0.7 * scale).path(in: r)
         case .facetted(let scale):
             return Facet(cut: half * 0.5 * scale).path(in: r)
+        case .glitched(let scale):
+            return Torn(cut: half * 0.5 * scale).path(in: r)
         case .square:
             return Rectangle().path(in: r)
         }
@@ -812,6 +820,54 @@ struct Facet: Shape {
         p.addLine(to: CGPoint(x: rect.minX + c, y: rect.maxY))
         p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - c))
         p.addLine(to: CGPoint(x: rect.minX, y: rect.minY + c))
+        p.closeSubpath()
+        return p
+    }
+}
+
+/// A rectangle torn the way a bad signal tears a picture: a stepped notch out of the
+/// top-trailing and bottom-leading corners, a shallow bite out of the top edge and a
+/// segment of the trailing edge slipped inward. Where the steps fall comes from the
+/// rectangle's own size, so neighbouring panels of different sizes break differently
+/// but one panel never changes shape as it is redrawn.
+struct Torn: Shape {
+    var cut: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let c = min(max(cut, 1.5), rect.width / 4, rect.height / 4)
+        // A stable 0…1 from the size, salted per use.
+        func f(_ salt: Double) -> CGFloat {
+            let v = sin(Double(rect.width) * 12.9898 + Double(rect.height) * 78.233 + salt * 37.719) * 43758.5453
+            return CGFloat(v - floor(v))
+        }
+        let w = rect.width, h = rect.height
+        let biteX = rect.minX + w * (0.25 + f(1) * 0.35), biteW = w * (0.06 + f(2) * 0.12)
+        let slipY = rect.minY + h * (0.35 + f(3) * 0.3), slipH = h * (0.12 + f(4) * 0.18)
+        let bite = c * 0.45, slip = c * 0.5
+        var p = Path()
+        p.move(to: CGPoint(x: rect.minX, y: rect.minY))
+        p.addLine(to: CGPoint(x: biteX, y: rect.minY))
+        p.addLine(to: CGPoint(x: biteX, y: rect.minY + bite))
+        p.addLine(to: CGPoint(x: biteX + biteW, y: rect.minY + bite))
+        p.addLine(to: CGPoint(x: biteX + biteW, y: rect.minY))
+        // The top-trailing notch, in two steps.
+        p.addLine(to: CGPoint(x: rect.maxX - c, y: rect.minY))
+        p.addLine(to: CGPoint(x: rect.maxX - c, y: rect.minY + c * 0.5))
+        p.addLine(to: CGPoint(x: rect.maxX - c * 0.5, y: rect.minY + c * 0.5))
+        p.addLine(to: CGPoint(x: rect.maxX - c * 0.5, y: rect.minY + c))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + c))
+        // The trailing edge, with a segment slipped in.
+        p.addLine(to: CGPoint(x: rect.maxX, y: slipY))
+        p.addLine(to: CGPoint(x: rect.maxX - slip, y: slipY))
+        p.addLine(to: CGPoint(x: rect.maxX - slip, y: slipY + slipH))
+        p.addLine(to: CGPoint(x: rect.maxX, y: slipY + slipH))
+        p.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY))
+        // The bottom-leading notch.
+        p.addLine(to: CGPoint(x: rect.minX + c, y: rect.maxY))
+        p.addLine(to: CGPoint(x: rect.minX + c, y: rect.maxY - c * 0.5))
+        p.addLine(to: CGPoint(x: rect.minX + c * 0.5, y: rect.maxY - c * 0.5))
+        p.addLine(to: CGPoint(x: rect.minX + c * 0.5, y: rect.maxY - c))
+        p.addLine(to: CGPoint(x: rect.minX, y: rect.maxY - c))
         p.closeSubpath()
         return p
     }
@@ -939,9 +995,12 @@ private struct GlitchEdge<S: InsettableShape>: View {
             }
             let split = 1.5 + abs(j(1)) * 3
             ZStack {
+                // Each misprinted rule glows in its own colour, as a lit tube would.
                 shape.strokeBorder(theme.accent.opacity(0.9), lineWidth: 1)
+                    .shadow(color: theme.accent.opacity(0.85), radius: 4)
                     .offset(x: -split, y: j(2) * 1.2)
                 shape.strokeBorder(theme.accent2.opacity(0.9), lineWidth: 1)
+                    .shadow(color: theme.accent2.opacity(0.85), radius: 4)
                     .offset(x: split, y: j(3) * 1.2)
                 shape.strokeBorder(theme.ink.opacity(0.5), lineWidth: 1)
                 GeometryReader { geo in
@@ -955,6 +1014,8 @@ private struct GlitchEdge<S: InsettableShape>: View {
                             Rectangle()
                                 .fill((i % 2 == 0 ? theme.accent : theme.accent2).opacity(show ? 0.55 : 0))
                                 .frame(width: w, height: 1 + abs(j(50 + Double(i))) * 2)
+                                .shadow(color: (i % 2 == 0 ? theme.accent : theme.accent2).opacity(show ? 0.8 : 0),
+                                        radius: 3)
                                 .offset(x: x + j(60 + Double(i)) * 6, y: y)
                         }
                     }

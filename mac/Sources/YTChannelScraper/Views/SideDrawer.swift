@@ -91,18 +91,31 @@ struct RemoveButton: View {
     let action: () -> Void
     @State private var hovering = false
 
+    /// Retro's is a bare cross: a disc beside a torn, glitching outline was two shapes
+    /// arguing.
+    private var bare: Bool { Theme.active.edge == .glitch }
+
     var body: some View {
         Button(action: action) {
-            Image(systemName: "xmark")
-                .font(.system(size: 7.5, weight: .bold))
-                .foregroundStyle(Palette.ink(hovering ? 1 : 0.7))
-                .frame(width: 18, height: 18)
-                .background(
-                    Circle().fill(hovering ? Palette.accent : Palette.ink(0.22))
-                )
-                .overlay {
-                    Circle().strokeBorder(Palette.ink(0.12), lineWidth: 1)
-                }
+            if bare {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(hovering ? Palette.accent : Palette.ink(0.7))
+                    .shadow(color: hovering ? Palette.accent.opacity(0.8) : .clear, radius: 4)
+                    .frame(width: 18, height: 18)
+                    .contentShape(Rectangle())
+            } else {
+                Image(systemName: "xmark")
+                    .font(.system(size: 7.5, weight: .bold))
+                    .foregroundStyle(Palette.ink(hovering ? 1 : 0.7))
+                    .frame(width: 18, height: 18)
+                    .background(
+                        Circle().fill(hovering ? Palette.accent : Palette.ink(0.22))
+                    )
+                    .overlay {
+                        Circle().strokeBorder(Palette.ink(0.12), lineWidth: 1)
+                    }
+            }
         }
         .buttonStyle(.plain)
         .pointingHand()
