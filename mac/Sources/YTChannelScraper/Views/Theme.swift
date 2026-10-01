@@ -2316,7 +2316,7 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let trancePicture = picture("trance")
 
     /// The show: the photo with its fire alive — each flame column's glow swelling and
-    /// sinking as flame does, a few embers lifting off its top — the rig's blue lights
+    /// sinking as flame does — the rig's blue lights
     /// breathing, and stage haze drifting through. Only what the photo has in it.
     private static func mead(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
@@ -2353,19 +2353,6 @@ struct ThemeBackdrop: View {
                                  .init(color: th.accent.opacity(0.18 * breath * k), location: 0.4),
                                  .init(color: .clear, location: 1)]),
                 center: p, startRadius: 0, endRadius: frame.width * CGFloat(r * 1.6)))
-            // Embers lifting off the top of the column, few and short-lived.
-            let crest = at(x, y - r * 1.6)
-            for i in 0..<6 {
-                var rng = Seeded(state: 0xE3B &+ UInt64(i) &* 7919 &+ UInt64(n) &* 104729)
-                let life = 1.5 + rng.next() * 1.5
-                let u = (t / life + rng.next()).truncatingRemainder(dividingBy: 1)
-                let drift = CGFloat(rng.next() - 0.5) * frame.width * 0.03
-                let q = CGPoint(x: crest.x + drift * CGFloat(u) + CGFloat(sin(t * 2 + Double(i))) * 3,
-                                y: crest.y - frame.height * 0.12 * CGFloat(u))
-                let size = CGFloat(0.8 + rng.next() * 1.6)
-                light.fill(Path(ellipseIn: CGRect(x: q.x - size, y: q.y - size, width: size * 2, height: size * 2)),
-                           with: .color(th.accentHot.opacity((1 - u) * 0.8 * k)))
-            }
         }
         // Stage haze drifting through, warm near the fire and cool under the rig.
         for i in 0..<5 {
