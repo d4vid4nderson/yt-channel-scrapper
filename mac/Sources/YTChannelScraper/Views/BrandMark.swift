@@ -22,7 +22,7 @@ struct BrandMark: View {
             if solid {
                 plate.fill(Palette.brand)
             } else if theme.markOnHighlight {
-                plate.fill(theme.glowDeep)
+                plate.fill(theme.markFill ?? theme.glowDeep)
                 plate.strokeBorder(theme.litTint, lineWidth: max(1, width * 0.024))
             } else {
                 plate.fill(Palette.brand.opacity(0.08))

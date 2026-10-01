@@ -481,6 +481,9 @@ struct RootView: View {
 private struct PanelSwitches: View {
     @Bindable var model: AppModel
     let showsHome: Bool
+    /// The chosen switch's plate is one plate, moved: opening Users with Saved open
+    /// slides it across rather than lighting one and putting the other out.
+    @Namespace private var thumb
 
     var body: some View {
         let track = ThemedRect(cornerRadius: Chrome.radius(Chrome.large), style: .continuous)
@@ -488,25 +491,26 @@ private struct PanelSwitches: View {
             if showsHome {
                 Switch(icon: "house", title: "Home", isOn: false,
                        help: "Back to the start — the URL is kept  (⇧⌘H)",
-                       action: model.goHome)
+                       thumb: thumb, action: model.goHome)
             }
             Switch(icon: "bookmark", title: "Saved", isOn: model.showChannelsDrawer,
                    help: "\(model.showChannelsDrawer ? "Close" : "Open") Saved  (⌘1)",
-                   action: model.toggleChannelsDrawer)
+                   thumb: thumb, action: model.toggleChannelsDrawer)
             if Edition.isFamily {
                 Switch(icon: "person.2", title: "Users", isOn: model.showFamilyDrawer,
                        help: "\(model.showFamilyDrawer ? "Close" : "Open") Users  (⌘3)",
-                       action: model.toggleFamilyDrawer)
+                       thumb: thumb, action: model.toggleFamilyDrawer)
             }
         }
         .padding(Chrome.trackInset)
         .frame(height: Chrome.large)
-        // In a theme, built like the search pill above it — the field's fill, its rim and
-        // the theme's edge, lit in the highlight where the theme has one — with what is
-        // chosen in it lit in that highlight too.
+        // In a theme, built like the search pill above it at rest — the field's fill, its
+        // rim and the theme's edge — with the chosen switch's plate in the highlight.
         .background(themed ? Palette.field : Palette.ink(0.05), in: track)
         .overlay { track.strokeBorder(Palette.ink(themed ? 0.10 : 0.09), lineWidth: 1) }
-        .themeEdge(track, lit: Theme.active.highlight != nil)
+        .themeEdge(track)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: model.showChannelsDrawer)
+        .animation(.spring(response: 0.32, dampingFraction: 0.82), value: model.showFamilyDrawer)
         .fixedSize()
     }
 
@@ -520,6 +524,7 @@ private struct PanelSwitches: View {
         let title: String
         let isOn: Bool
         let help: String
+        let thumb: Namespace.ID
         let action: () -> Void
         @State private var hovering = false
 
@@ -537,9 +542,15 @@ private struct PanelSwitches: View {
                 .padding(.horizontal, 11)
                 .frame(maxHeight: .infinity)
                 .background {
-                    if isOn || hovering {
-                        shape.fill(isOn && Theme.active.id != .classic
-                                   ? Self.chosen.opacity(0.16) : Palette.ink(isOn ? 0.12 : 0.06))
+                    if isOn {
+                        let themed = Theme.active.id != .classic
+                        shape.fill(themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
+                            .overlay {
+                                if themed { shape.strokeBorder(Self.chosen.opacity(0.7), lineWidth: 1) }
+                            }
+                            .matchedGeometryEffect(id: "thumb", in: thumb)
+                    } else if hovering {
+                        shape.fill(Palette.ink(0.06))
                     }
                 }
                 .contentShape(shape)

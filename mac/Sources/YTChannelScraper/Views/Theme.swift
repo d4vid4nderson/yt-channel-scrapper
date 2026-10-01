@@ -168,6 +168,8 @@ struct Theme: Identifiable, @unchecked Sendable {
     /// The mark filled dark (`glowDeep`) with its outline and arrow in the highlight —
     /// Ring World's armour green with the visor's orange.
     var markOnHighlight = false
+    /// The mark's fill when `markOnHighlight`; `glowDeep` otherwise.
+    var markFill: Color? = nil
 
     var colorScheme: ColorScheme? {
         switch appearance {
@@ -526,7 +528,9 @@ extension Theme {
         lcd: LCD(background: hex(0x050A0D), ink: hex(0x7FD6FA), glow: hex(0x57C7F2)),
         // The visor's orange-gold.
         highlight: hex(0xF2952E),
-        markOnHighlight: true
+        markOnHighlight: true,
+        // Armour green in shadow, darker than the accent.
+        markFill: hex(0x18240E)
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
