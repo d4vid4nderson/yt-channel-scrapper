@@ -375,7 +375,8 @@ extension Theme {
         pickedFar: hex(0xE7D2A4),
         pickedEdge: hex(0xD6BC86),
         pickedEdgeHot: hex(0xC4A260),
-        corners: .rounded(scale: 0.4),
+        // Rounder than the other skins: a hobbit-hole door, not a machined panel.
+        corners: .rounded(scale: 0.8),
         // The skin's bevel with its gilt rule, not a knot in every corner: on every row,
         // card and button at once that was a page of swirls.
         edge: .bevel,
@@ -1243,6 +1244,8 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let cityPicture = picture("bladeRunner")
     /// Arrakis, likewise: `Backdrop-dune.jpg`, family build only.
     nonisolated(unsafe) private static let dunePicture = picture("dune")
+    /// The Shire: `Backdrop-middleEarth.jpg`, family build only.
+    nonisolated(unsafe) private static let shirePicture = picture("middleEarth")
 
     nonisolated private static func picture(_ name: String) -> Image? {
         guard let url = Bundle.main.url(forResource: "Backdrop-\(name)", withExtension: "jpg")
@@ -1543,6 +1546,10 @@ struct ThemeBackdrop: View {
     /// or on the panels: it was one ornament too many wherever it went.
     private static func parchment(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ k: Double, _ t: Double) {
+        if let picture = shirePicture {
+            shire(&c, s, th, picture, k, t)
+            return
+        }
         var rng = Seeded(state: 1954)
         for _ in 0..<Int(s.width * s.height / 900) {
             let r = 0.4 + rng.next() * 1.1
@@ -1567,6 +1574,64 @@ struct ThemeBackdrop: View {
                 .init(color: Color(red: 0.45, green: 0.30, blue: 0.12).opacity(0.28 * k), location: 1),
             ]),
             center: CGPoint(x: s.width / 2, y: s.height / 2), startRadius: 0, endRadius: radius))
+    }
+
+    /// Bag End on a summer afternoon: the picture under a wash of the page's own parchment
+    /// (lighter at the top, where the title and search sit, so sepia stays readable on
+    /// it), sunbeams slanting down from the bright sky at the top right and breathing
+    /// slowly, and pollen and thistledown drifting across on the breeze — each seed
+    /// fluttering as it goes. Warm, slow and quiet; nothing here hurries.
+    private static func shire(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+                              _ picture: Image, _ k: Double, _ t: Double) {
+        let all = Path(CGRect(origin: .zero, size: s))
+        drawPicture(&c, s, picture, k, t)
+        c.fill(all, with: .linearGradient(
+            Gradient(stops: [.init(color: th.ground.opacity(0.62), location: 0),
+                             .init(color: th.ground.opacity(0.30), location: 0.5),
+                             .init(color: th.ground.opacity(0.40), location: 1)]),
+            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+        var light = c
+        light.blendMode = .plusLighter
+        // Sunbeams: long soft wedges from above the top-right corner, each on its own slow
+        // breath, never quite gone.
+        let sun = CGPoint(x: s.width * 0.92, y: -s.height * 0.15)
+        for (i, (angle, spread)) in [(2.05, 0.05), (2.20, 0.035), (2.35, 0.06), (2.55, 0.04)].enumerated() {
+            let breath = 0.6 + 0.4 * sin(t * (0.12 + Double(i) * 0.03) + Double(i) * 1.7)
+            let length = max(s.width, s.height) * 1.6
+            var beam = Path()
+            beam.move(to: sun)
+            beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(angle - spread)),
+                                     y: sun.y + length * CGFloat(sin(angle - spread))))
+            beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(angle + spread)),
+                                     y: sun.y + length * CGFloat(sin(angle + spread))))
+            beam.closeSubpath()
+            light.fill(beam, with: .radialGradient(
+                Gradient(colors: [Color(red: 1, green: 0.93, blue: 0.72).opacity(0.22 * breath * k), .clear]),
+                center: sun, startRadius: 0, endRadius: length * 0.8))
+        }
+        // Pollen and thistledown, drifting left on the breeze and slowly sinking, each seed
+        // fluttering; the near ones larger and soft.
+        var seeds = Seeded(state: 2941)
+        for _ in 0..<Int(s.width * s.height / 9000) + 12 {
+            let near = seeds.next() < 0.25
+            let speed = near ? 22 + seeds.next() * 20 : 6 + seeds.next() * 10
+            let span = Double(s.width + 40), tall = Double(s.height + 40)
+            let x = span - (seeds.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 20
+            let y = (seeds.next() * tall + t * (2 + seeds.next() * 4)).truncatingRemainder(dividingBy: tall) - 20
+                + 10 * sin(t * (0.6 + seeds.next()) + seeds.next() * 6)
+            let r = CGFloat(near ? 2.2 + seeds.next() * 2.5 : 0.7 + seeds.next() * 1.1)
+            let point = CGPoint(x: x, y: y)
+            light.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
+                       with: .radialGradient(
+                        Gradient(colors: [Color(red: 1, green: 0.97, blue: 0.86).opacity((near ? 0.55 : 0.4) * k), .clear]),
+                        center: point, startRadius: 0, endRadius: r))
+        }
+        // The page's own edge: a little burnt umber at the corners.
+        c.fill(all, with: .radialGradient(
+            Gradient(stops: [.init(color: .clear, location: 0.6),
+                             .init(color: Color(red: 0.45, green: 0.30, blue: 0.12).opacity(0.22 * k), location: 1)]),
+            center: CGPoint(x: s.width / 2, y: s.height / 2), startRadius: 0,
+            endRadius: max(s.width, s.height) * 0.75))
     }
 
     // MARK: The Prancing Pony
