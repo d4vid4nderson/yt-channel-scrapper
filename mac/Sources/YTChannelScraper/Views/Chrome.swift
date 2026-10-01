@@ -244,9 +244,7 @@ struct ChromeSegmented<Option: Hashable>: View {
             Button(action: action) {
                 Text(title)
                     .font(.system(size: 12, weight: isOn ? .semibold : .medium))
-                    .foregroundStyle(isOn && Theme.active.markOnHighlight
-                                     ? Theme.active.litTint
-                                     : Palette.ink(isOn ? 1 : hovering ? 0.85 : 0.58))
+                    .foregroundStyle(Palette.ink(isOn ? 1 : hovering ? 0.85 : 0.58))
                     .lineLimit(1)
                     .fixedSize()
                     .padding(.horizontal, 12)
@@ -271,12 +269,7 @@ struct ChromeSegmented<Option: Hashable>: View {
         @ViewBuilder
         private func thumbFill(_ shape: ThemedRect) -> some View {
             if Theme.active.markOnHighlight {
-                // The mark's treatment, lit from above: lighter armour plate at the top
-                // running down to the dark, rimmed in the highlight.
-                shape.fill(LinearGradient(
-                    colors: [Theme.active.glowDeep, Theme.active.markFill ?? Theme.active.glowDeep],
-                    startPoint: .top, endPoint: .bottom))
-                    .overlay { shape.strokeBorder(Theme.active.litTint.opacity(0.75), lineWidth: 1) }
+                MarkedPlate(shape: shape)
             } else if Theme.active.id != .classic {
                 shape.fill(Theme.active.litTint.opacity(0.16))
                     .overlay { shape.strokeBorder(Theme.active.litTint.opacity(0.6), lineWidth: 1) }

@@ -1047,6 +1047,32 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 
 // MARK: - Skin chrome
 
+/// The chosen plate in a marked theme (Ring World) — a switch, a segment: the dark armour
+/// plate with real depth, a brighter green glowing at the top and falling away, a sheen
+/// along the top edge, and only the rim in the highlight. Its lettering stays the
+/// theme's ink.
+struct MarkedPlate<S: InsettableShape>: View {
+    let shape: S
+
+    var body: some View {
+        let theme = Theme.active
+        ZStack {
+            shape.fill(LinearGradient(colors: [theme.glowDeep, theme.markFill ?? theme.glowDeep],
+                                      startPoint: .top, endPoint: .bottom))
+            shape.fill(LinearGradient(
+                stops: [.init(color: theme.accent.opacity(0.45), location: 0),
+                        .init(color: theme.accent.opacity(0.12), location: 0.45),
+                        .init(color: .clear, location: 0.8)],
+                startPoint: .top, endPoint: .bottom))
+            shape.inset(by: 1).stroke(LinearGradient(
+                stops: [.init(color: Color.white.opacity(0.22), location: 0),
+                        .init(color: .clear, location: 0.35)],
+                startPoint: .top, endPoint: .bottom), lineWidth: 1)
+            shape.strokeBorder(theme.litTint.opacity(0.85), lineWidth: 1)
+        }
+    }
+}
+
 /// A lens glint on a point of the hero — the end of the title's last letter, the corner
 /// of the mark: every so often, at an uneven moment, a small four-pointed star of light
 /// swells there over a fraction of a second and fades. Nothing in themes without

@@ -538,7 +538,8 @@ private struct PanelSwitches: View {
                     Text(title)
                         .font(.system(size: 12, weight: isOn ? .semibold : .medium))
                 }
-                .foregroundStyle(isOn ? Self.chosen : Palette.ink(hovering ? 0.9 : 0.62))
+                .foregroundStyle(isOn ? (Theme.active.markOnHighlight ? Palette.ink(1) : Self.chosen)
+                                      : Palette.ink(hovering ? 0.9 : 0.62))
                 .padding(.horizontal, 11)
                 .frame(maxHeight: .infinity)
                 .background {
@@ -548,18 +549,14 @@ private struct PanelSwitches: View {
                         // in the visor's orange.
                         Group {
                             if Theme.active.markOnHighlight {
-                                // Lit from above: the lighter plate at the top running down
-                                // to the dark one, so it reads as moulded, not printed.
-                                shape.fill(LinearGradient(
-                                    colors: [Theme.active.glowDeep, Theme.active.markFill ?? Theme.active.glowDeep],
-                                    startPoint: .top, endPoint: .bottom))
+                                MarkedPlate(shape: shape)
                             } else {
                                 shape.fill(themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
+                                    .overlay {
+                                        if themed { shape.strokeBorder(Self.chosen.opacity(0.7), lineWidth: 1) }
+                                    }
                             }
                         }
-                            .overlay {
-                                if themed { shape.strokeBorder(Self.chosen.opacity(0.7), lineWidth: 1) }
-                            }
                             .matchedGeometryEffect(id: "thumb", in: thumb)
                     } else if hovering {
                         shape.fill(Palette.ink(0.06))
