@@ -29,44 +29,51 @@ struct RootView: View {
         VStack(spacing: 0) {
             if themedFullScreen { fullScreenBar }
             HStack(spacing: 0) {
+                // Each panel carries its handle on its inner edge (see `EdgeTab`), so the
+                // handle is where the panel is in every view, and the panel is above the
+                // page so the handle can lie over it.
                 SavedChannelsDrawer(model: model)
                     .drawerSlot(open: model.showChannelsDrawer, side: .leading)
+                    .overlay(alignment: .trailing) {
+                        EdgeTab(edge: .leading, icon: "bookmark.fill",
+                                title: "Saved", shortcut: "⌘1",
+                                isOpen: model.showChannelsDrawer,
+                                toggle: model.toggleChannelsDrawer)
+                            .alignmentGuide(.trailing) { $0[.leading] }
+                    }
+                    .zIndex(1)
 
                 VStack(spacing: 0) {
                     page
-                        // The panels' handles, each on the edge its panel comes out of,
-                        // the same in every view. See `EdgeTab`.
-                        .overlay(alignment: .leading) {
-                            EdgeTab(edge: .leading, icon: "bookmark.fill",
-                                    title: "Saved", shortcut: "⌘1",
-                                    isOpen: model.showChannelsDrawer,
-                                    toggle: model.toggleChannelsDrawer)
-                        }
-                        .overlay(alignment: .trailing) {
-                            EdgeTab(edge: .trailing, icon: "person.2.fill",
-                                    title: "Family", shortcut: "⌘3",
-                                    isOpen: model.showFamilyDrawer,
-                                    toggle: model.toggleFamilyDrawer)
-                        }
-                        .overlay(alignment: .bottom) {
-                            // A dot, not a tally: that something is running is the part
-                            // worth a mark, and the panel one click away has the numbers.
-                            EdgeTab(edge: .bottom, icon: "arrow.down.circle.fill",
-                                    title: "Downloads", shortcut: "⌘2",
-                                    busy: model.downloader.activeCount > 0,
-                                    isOpen: model.showDownloads,
-                                    toggle: model.toggleDownloads)
-                        }
                     DownloadsDrawer(
                         downloader: model.downloader,
                         updater: model.updater,
                         isPresented: $model.showDownloads
                     )
                     .bottomDrawerSlot(open: model.showDownloads)
+                    .overlay(alignment: .top) {
+                        // A dot, not a tally: that something is running is the part
+                        // worth a mark, and the panel one click away has the numbers.
+                        EdgeTab(edge: .bottom, icon: "arrow.down.circle.fill",
+                                title: "Downloads", shortcut: "⌘2",
+                                busy: model.downloader.activeCount > 0,
+                                isOpen: model.showDownloads,
+                                toggle: model.toggleDownloads)
+                            .alignmentGuide(.top) { $0[.bottom] }
+                    }
+                    .zIndex(1)
                 }
 
                 FamilyDrawer(model: model)
                     .drawerSlot(open: model.showFamilyDrawer, side: .trailing)
+                    .overlay(alignment: .leading) {
+                        EdgeTab(edge: .trailing, icon: "person.2.fill",
+                                title: "Family", shortcut: "⌘3",
+                                isOpen: model.showFamilyDrawer,
+                                toggle: model.toggleFamilyDrawer)
+                            .alignmentGuide(.leading) { $0[.trailing] }
+                    }
+                    .zIndex(1)
             }
 
             // Its own module, full width, between the page and the footer: the window
