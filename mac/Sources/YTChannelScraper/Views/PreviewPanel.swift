@@ -172,6 +172,22 @@ struct PreviewPanel: View {
 
             Spacer(minLength: 8)
 
+            // Only once the stream has said which heights it has; a stitched stream has
+            // one, and nothing to choose.
+            if !session.heights.isEmpty {
+                ResolutionMenu(session: session)
+            }
+
+            let repeating = PlaybackRepeat.shared.isOn
+            Button { PlaybackRepeat.shared.isOn.toggle() } label: {
+                Image(systemName: "repeat.1")
+                    .font(.system(size: 12, weight: .semibold))
+            }
+            .buttonStyle(.chrome(.secondary, square: true, isOn: repeating))
+            .help(repeating ? "Repeat is on: this video starts again when it ends  (⌥⌘R)"
+                            : "Repeat: start this video again when it ends  (⌥⌘R)")
+            .accessibilityLabel(repeating ? "Turn repeat off" : "Turn repeat on")
+
             Button { fills.toggle() } label: {
                 Image(systemName: fills ? "arrow.down.right.and.arrow.up.left"
                                         : "arrow.up.left.and.arrow.down.right")
@@ -274,5 +290,55 @@ private struct PreviewStage: View {
             .frame(maxWidth: .infinity, maxHeight: .infinity)
             .padding(24)
         }
+    }
+}
+
+/// Auto, or a resolution to hold to. Auto is the default and lets the player choose; the
+/// others force that height for as long as it is picked, on every video that has it.
+/// An AppKit menu hung from the button's right edge, like the download quality's, since
+/// this sits towards the right of the bar too.
+private struct ResolutionMenu: View {
+    let session: PreviewSession
+    @State private var anchor: NSView?
+
+    var body: some View {
+        let heights = session.heights
+        let held = session.playing(heights)
+        Button { present(heights, held: held) } label: {
+            HStack(spacing: 6) {
+                Text(held.map { "\($0)p" } ?? "Auto").monospacedDigit()
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .bold))
+                    .foregroundStyle(Palette.ink(0.5))
+            }
+        }
+        .buttonStyle(.chrome())
+        .fixedSize()
+        .background(MenuAnchor { anchor = $0 })
+        .help(held == nil
+              ? "Resolution: Auto lets the player choose. Pick one to hold to it."
+              : "Playing at \(held!)p. Pick Auto to let the player choose.")
+    }
+
+    private func present(_ heights: [Int], held: Int?) {
+        guard let anchor else { return }
+        let menu = NSMenu()
+        menu.autoenablesItems = false
+        add(to: menu, title: "Auto", on: held == nil) { session.setResolution(0) }
+        menu.addItem(.separator())
+        for height in heights {
+            add(to: menu, title: "\(height)p", on: held == height) { session.setResolution(height) }
+        }
+        let origin = NSPoint(x: anchor.bounds.maxX - menu.size.width, y: anchor.bounds.minY - 5)
+        menu.popUp(positioning: nil, at: origin, in: anchor)
+    }
+
+    private func add(to menu: NSMenu, title: String, on: Bool, run: @escaping () -> Void) {
+        let item = NSMenuItem(title: title, action: #selector(MenuAction.fire), keyEquivalent: "")
+        let action = MenuAction(run)
+        item.target = action
+        item.representedObject = action
+        item.state = on ? .on : .off
+        menu.addItem(item)
     }
 }

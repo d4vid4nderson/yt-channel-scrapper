@@ -43,6 +43,8 @@ struct YTChannelScraperApp: App {
                     withAnimation(PreviewPanel.fold) { playerTheatre.toggle() }
                 }
                 .keyboardShortcut("p", modifiers: [.command, .option])
+                Toggle("Repeat", isOn: Bindable(PlaybackRepeat.shared).isOn)
+                    .keyboardShortcut("r", modifiers: [.command, .option])
                 Divider()
                 // Here rather than on the Home button, which is only there while the
                 // header row is showing.

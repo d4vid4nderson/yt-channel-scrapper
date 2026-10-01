@@ -29,6 +29,29 @@ final class PreviewSession {
     private var task: Task<Void, Never>?
     private var statusWatch: Task<Void, Never>?
 
+    /// The resolution asked for: 0 is Auto, which lets AVPlayer choose and is the
+    /// default; anything else is a height to hold to. Remembered between launches, so it
+    /// is a preference, not a per-video choice — see `playing(_:)` for a video without it.
+    var resolution: Int = UserDefaults.standard.integer(forKey: "player.resolution") {
+        didSet { UserDefaults.standard.set(resolution, forKey: "player.resolution") }
+    }
+
+    /// Each video's HLS master playlist and the heights in it that can be played, by video
+    /// id. Kept past `close()`, because a player coming back from the notch is adopted
+    /// through it and should still offer the same choices.
+    private var streams: [String: (master: URL, heights: [Int])] = [:]
+
+    /// The heights the open video can be forced to, highest first. Empty for a stream
+    /// that is not HLS — the stitched fallback has one resolution and nothing to choose.
+    var heights: [Int] { video.flatMap { streams[$0.id]?.heights } ?? [] }
+
+    /// The height actually being held to: the one asked for, or the nearest below it the
+    /// video has, or its lowest. Nil on Auto.
+    func playing(_ heights: [Int]) -> Int? {
+        guard resolution > 0, !heights.isEmpty else { return nil }
+        return heights.first { $0 <= resolution } ?? heights.last
+    }
+
     var isOpen: Bool { video != nil }
 
     func open(_ video: Video) {
@@ -47,11 +70,16 @@ final class PreviewSession {
                 Log.preview.info("resolved, stitching: \(urls.audio != nil, privacy: .public)")
 
                 self.state = .working("Starting playback…")
-                let built = try await Self.makePlayer(from: urls)
+                if urls.audio == nil, let heights = await Self.heights(at: urls.primary) {
+                    self.streams[video.id] = (urls.primary, heights)
+                }
+                let built = try await Self.makePlayer(
+                    from: urls, height: self.playing(self.streams[video.id]?.heights ?? []))
                 try Task.checkCancellation()
 
                 self.aspectRatio = built.ratio
                 self.state = .ready(built.player)
+                PlaybackRepeat.shared.attach(to: built.player)
                 built.player.play()
                 self.watch(built.player)
                 Log.preview.info("playing \(video.id, privacy: .public)")
@@ -118,6 +146,38 @@ final class PreviewSession {
                 try? await Task.sleep(for: .milliseconds(500))
             }
         }
+    }
+
+    /// Hold the open video to `height` (0 for Auto), from where it is now. The item is
+    /// swapped under the same `AVPlayer`, so the player view, the repeat watch's player
+    /// and anything holding the player stay as they are.
+    func setResolution(_ height: Int) {
+        resolution = height
+        guard case .ready(let player) = state, let video,
+              let stream = streams[video.id] else { return }
+        let time = player.currentTime()
+        let wasPlaying = player.rate > 0
+        let item = playing(stream.heights).map { HLSVariants.item(master: stream.master, height: $0) }
+            ?? AVPlayerItem(asset: AVURLAsset(url: stream.master))
+        player.replaceCurrentItem(with: item)
+        PlaybackRepeat.shared.attach(to: player)
+        statusWatch?.cancel()
+        watch(player)
+        Log.preview.info("resolution \(height, privacy: .public) for \(video.id, privacy: .public)")
+        player.seek(to: time, toleranceBefore: .zero, toleranceAfter: .zero) { _ in
+            Task { @MainActor in if wasPlaying { player.play() } }
+        }
+    }
+
+    /// The playable heights in an HLS master, read once when the video opens. Nil if it
+    /// cannot be read; then there is simply no choice to offer, and Auto plays as before.
+    private static func heights(at master: URL) async -> [Int]? {
+        var request = URLRequest(url: master)
+        request.timeoutInterval = 10
+        guard let (data, _) = try? await URLSession.shared.data(for: request),
+              let text = String(data: data, encoding: .utf8) else { return nil }
+        let heights = HLSVariants.heights(in: text)
+        return heights.isEmpty ? nil : heights
     }
 
     // MARK: - Resolving
@@ -209,13 +269,14 @@ final class PreviewSession {
         let ratio: CGFloat
     }
 
-    private static func makePlayer(from resolved: Resolved) async throws -> Built {
+    private static func makePlayer(from resolved: Resolved, height: Int?) async throws -> Built {
         // HLS: hand the URL straight over. Deliberately no track pre-loading — that is
         // what hung on long videos, and AVPlayerView shows its own buffering spinner.
         guard let audio = resolved.audio else {
-            let asset = AVURLAsset(url: resolved.primary)
-            Log.preview.debug("hls player")
-            return Built(player: AVPlayer(playerItem: AVPlayerItem(asset: asset)),
+            Log.preview.debug("hls player at \(height ?? 0, privacy: .public)")
+            let item = height.map { HLSVariants.item(master: resolved.primary, height: $0) }
+                ?? AVPlayerItem(asset: AVURLAsset(url: resolved.primary))
+            return Built(player: AVPlayer(playerItem: item),
                          ratio: resolved.ratio ?? 16.0 / 9.0)
         }
 

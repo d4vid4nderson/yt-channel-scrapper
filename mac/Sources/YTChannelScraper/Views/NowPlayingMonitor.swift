@@ -103,6 +103,12 @@ struct NowPlayingMonitor: View {
                     isPlaying ? player.pause() : player.play()
                 }
                 control("goforward.15", help: "Forward 15 seconds") { skip(15) }
+                // The same switch as the player's: one setting, whichever screen it is on.
+                control("repeat.1",
+                        help: PlaybackRepeat.shared.isOn ? "Repeat is on  (⌥⌘R)" : "Repeat  (⌥⌘R)",
+                        isOn: PlaybackRepeat.shared.isOn) {
+                    PlaybackRepeat.shared.isOn.toggle()
+                }
                 Spacer()
                 control("arrow.up.left.and.arrow.down.right", help: "Back to the player",
                         action: expand)
@@ -120,9 +126,9 @@ struct NowPlayingMonitor: View {
         player.seek(to: CMTime(seconds: max(0, now + seconds), preferredTimescale: 600))
     }
 
-    private func control(_ icon: String, help: String, size: CGFloat = 13,
+    private func control(_ icon: String, help: String, size: CGFloat = 13, isOn: Bool = false,
                          action: @escaping () -> Void) -> some View {
-        ControlButton(icon: icon, size: size, action: action)
+        ControlButton(icon: icon, size: size, isOn: isOn, action: action)
             .help(help)
             .accessibilityLabel(help)
     }
@@ -130,6 +136,7 @@ struct NowPlayingMonitor: View {
     private struct ControlButton: View {
         let icon: String
         let size: CGFloat
+        var isOn = false
         let action: () -> Void
         @State private var hovering = false
 
@@ -137,9 +144,9 @@ struct NowPlayingMonitor: View {
             Button(action: action) {
                 Image(systemName: icon)
                     .font(.system(size: size, weight: .semibold))
-                    .foregroundStyle(hovering ? Palette.accent : Palette.ink(0.85))
+                    .foregroundStyle(hovering || isOn ? Palette.accent : Palette.ink(0.85))
                     .frame(width: 30, height: 28)
-                    .background(hovering ? Palette.ink(0.08) : .clear,
+                    .background(hovering || isOn ? Palette.ink(0.08) : .clear,
                                 in: ThemedRect(cornerRadius: 6, style: .continuous))
                     .contentShape(Rectangle())
             }

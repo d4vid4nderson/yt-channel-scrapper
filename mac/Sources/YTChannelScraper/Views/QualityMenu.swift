@@ -80,7 +80,7 @@ struct QualityMenu: View {
     }
 }
 
-private final class MenuAction: NSObject {
+final class MenuAction: NSObject {
     private let run: () -> Void
 
     init(_ run: @escaping () -> Void) { self.run = run }
@@ -89,7 +89,7 @@ private final class MenuAction: NSObject {
 }
 
 /// Hands back the `NSView` sitting behind a SwiftUI view, to hang the menu from.
-private struct MenuAnchor: NSViewRepresentable {
+struct MenuAnchor: NSViewRepresentable {
     let store: (NSView) -> Void
 
     func makeNSView(context: Context) -> NSView {
