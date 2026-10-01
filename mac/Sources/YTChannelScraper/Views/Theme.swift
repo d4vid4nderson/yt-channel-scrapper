@@ -2128,17 +2128,24 @@ struct ThemeBackdrop: View {
             // The Warthog's gun, firing now and then: short bursts of muzzle flash at the
             // barrel's tip (measured off the picture), the flame thrown out along the barrel.
             // Small and dim — gunfire across the valley, not a strobe in your face.
-            let burstSlot = 5.5
+            // Bursts at uneven gaps — about half the 7-second slots have one, anywhere in
+            // the slot — of a couple of shots to half a dozen; inside one, each 1/14s tick
+            // fires by its own throw, never two ticks running, so there is no beat.
+            let burstSlot = 7.0
             let burstIndex = UInt64(max(0, floor(t / burstSlot)))
             var burst = Seeded(state: 0x4A27 &+ burstIndex &* 7919)
-            let firing = burst.next() < 0.7
-            let burstStart = burst.next() * (burstSlot - 1.4)
-            let burstLength = 0.5 + burst.next() * 0.8
+            let firing = burst.next() < 0.5
+            let burstLength = 0.25 + burst.next() * 0.6
+            let burstStart = burst.next() * (burstSlot - burstLength)
             let into = t.truncatingRemainder(dividingBy: burstSlot) - burstStart
             if firing, into > 0, into < burstLength {
-                let shot = UInt64(floor(t * 12))
-                var flicker = Seeded(state: 0xF1A5 &+ shot &* 104729)
-                if shot % 2 == 0, flicker.next() > 0.2 {
+                let shot = UInt64(floor(t * 14))
+                func fires(_ tick: UInt64) -> Bool {
+                    var roll = Seeded(state: 0xF1A5 &+ tick &* 104729)
+                    return roll.next() < 0.5
+                }
+                var flicker = Seeded(state: 0xF1A6 &+ shot &* 7919)
+                if fires(shot), !fires(shot &- 1) {
                     let level = 0.6 + flicker.next() * 0.4
                     // In a window narrower than the picture its sides are cropped and the
                     // barrel's tip can fall past the left edge; the flash is held just
