@@ -32,7 +32,7 @@ THEMES = {
     "synthwave":    ("#1e2a2e", "#090a0c", "#ff7a6e", "#ffffff"),
     "ringWorld":    ("#26381c", "#0b0f0b", "#7fae3a", "#0a1205"),
     "grid":         ("#04303e", "#000407", "#18e4ff", "#00141a"),
-    "nostromoTeal": ("#123438", "#06090b", "#f0508c", "#ffffff"),
+    "nostromoTeal": ("#0b3448", "#030a10", "#2fd8f0", "#021018"),
 }
 
 

@@ -536,48 +536,45 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// Retrofuture: the ship and base screens of Moon and Alien — dark glass, monochrome
-    /// pale-cyan interface lettering, square panels marked with solid blocks and little
-    /// checkerboards, wide square capitals (Syncopate Bold, close to the films' Eurostile),
-    /// an OCR-like terminal face in the readouts (Share Tech Mono), and a signal magenta
-    /// as the one accent. The station (or stars) outside.
+    /// Hologram: the Prometheus bridge — deep blue-black, glowing cyan wireframe, holo
+    /// green where something is chosen, small red markers. Thin glowing rules with small
+    /// cut corners, Electrolize capitals (bundled, OFL), a terminal face in the readouts.
     /// (The id is the old teal Nostromo's, so a saved choice carries over.)
     static let nostromoTeal = Theme(
         id: .nostromoTeal,
-        name: "Retrofuture",
-        tagline: "Base and ship screens, after Moon and Alien",
+        name: "Hologram",
+        tagline: "The bridge's holographic map",
         appearance: .dark,
-        ink: hex(0xD6F2F0),
-        accent: hex(0xF0508C),
-        accentHot: hex(0xFF7AAA),
-        accent2: hex(0x7FE6E6),
-        edgeTint: hex(0x7FE6E6),
-        brand: hex(0xF0508C),
-        ground: hex(0x06090B),
-        surface: hex(0x0C1215),
-        card: hex(0x0F161A).opacity(0.92),
-        field: hex(0x0E1518),
-        fieldInk: hex(0xD6F2F0),
-        fieldRaised: hex(0x1A2529),
-        onFill: .white,
-        good: hex(0x7FE6E6),
-        warn: hex(0xF7C23A),
-        glow: hex(0x7FE6E6),
-        glowDeep: hex(0x123438),
-        pickedMid: hex(0x0E1A1D),
-        pickedFar: hex(0x15272B),
-        pickedEdge: hex(0x24474D),
-        pickedEdgeHot: hex(0x36656C),
-        corners: .square,
-        edge: .instrument,
-        type: Typeface(display: ["Syncopate-Bold"], displayCaps: true, displayTracking: 0.5),
+        ink: hex(0xD2F6FA),
+        accent: hex(0x2FD8F0),
+        accentHot: hex(0x7CEBFA),
+        accent2: hex(0x5CF08A),
+        edgeTint: hex(0x2FD8F0),
+        brand: hex(0x2FD8F0),
+        ground: hex(0x030A10),
+        surface: hex(0x07131B),
+        card: hex(0x0A1822).opacity(0.9),
+        field: hex(0x081620),
+        fieldInk: hex(0xD2F6FA),
+        fieldRaised: hex(0x123040),
+        onFill: hex(0x021018),
+        good: hex(0x5CF08A),
+        warn: hex(0xFF5A6A),
+        glow: hex(0x2FD8F0),
+        glowDeep: hex(0x0B3448),
+        pickedMid: hex(0x08202A),
+        pickedFar: hex(0x0E3040),
+        pickedEdge: hex(0x1A5468),
+        pickedEdgeHot: hex(0x2A7890),
+        corners: .chamfered(scale: 0.6),
+        edge: .neon,
+        type: Typeface(display: ["Electrolize-Regular"], displayCaps: true, displayTracking: 1.6),
         backdrop: .space,
-        aurora: [hex(0x123438), hex(0x0C2226), hex(0x081619), hex(0x123438)],
-        lcd: LCD(background: hex(0x030607), ink: hex(0x9FF0EE), glow: hex(0x7FE6E6),
+        aurora: [hex(0x0B3448), hex(0x08202A), hex(0x061620), hex(0x0B3448)],
+        lcd: LCD(background: hex(0x02070B), ink: hex(0x7CEBFA), glow: hex(0x2FD8F0),
                  font: "ShareTechMono-Regular"),
-        // A signal magenta beside the teal, where something is lit or chosen — not orange,
-        // which is Ring World's.
-        highlight: hex(0xF0508C)
+        // Holo green, where something is lit or chosen.
+        highlight: hex(0x5CF08A)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -2330,85 +2327,66 @@ struct ThemeBackdrop: View {
 
     /// Outside the window: stars at three depths drifting past, and the room's screens
     /// lighting the glass a little — soft cyan pooling in from two edges, breathing.
-    /// Retrofuture's picture: `Backdrop-retrofuture.jpg`, family build only.
+    /// Hologram's picture: `Backdrop-retrofuture.jpg`, family build only.
     nonisolated(unsafe) private static let stationPicture = picture("retrofuture")
 
     private static func space(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                               _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
         if let picture = stationPicture {
-            // The station: the picture, a little darkened; the sun's flare breathing and
-            // its streak swinging slightly; lights along the ring twinkling one by one.
-            // The view drifts, as from a ship holding station: a slow sideways sway and
-            // turn over a minute or so, on top of the picture's usual breathing.
-            var view = c
-            view.translateBy(x: CGFloat(12 * sin(t * 0.09)), y: CGFloat(6 * sin(t * 0.07 + 1)))
-            let frame = drawPicture(&view, s, picture, k, t)
-                .offsetBy(dx: CGFloat(12 * sin(t * 0.09)), dy: CGFloat(6 * sin(t * 0.07 + 1)))
-            c.fill(all, with: .color(th.ground.opacity(0.28)))
+            // The bridge: the picture under its own hologram working — the green rings
+            // turning about their column, a scan line sweeping across the map, the red
+            // markers pulsing, and the whole projection breathing a little.
+            let frame = drawPicture(&c, s, picture, k, t)
+            c.fill(all, with: .color(th.ground.opacity(0.22)))
             func at(_ x: Double, _ y: Double) -> CGPoint {
                 CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
             }
             var light = c
             light.blendMode = .plusLighter
-            let sun = at(0.078, 0.055)
-            let breathe = 0.6 + 0.4 * sin(t * 0.5)
+            // Rings: bright arcs travelling round the column's rings, each ring its own pace.
+            let column = at(0.265, 0.55)
+            for (i, (y, rx, ry)) in [(0.42, 0.17, 0.025), (0.48, 0.18, 0.028), (0.61, 0.20, 0.032),
+                                     (0.66, 0.21, 0.034), (0.71, 0.20, 0.03)].enumerated() {
+                let centre = CGPoint(x: column.x, y: frame.minY + frame.height * y)
+                let a = frame.width * rx, b = frame.height * ry
+                let speed = 0.5 + Double(i) * 0.13
+                let head = (t * speed + Double(i) * 1.3).truncatingRemainder(dividingBy: 2 * .pi)
+                var arc = Path()
+                for step in 0...24 {
+                    let th0 = head - Double(step) * 0.05
+                    let p = CGPoint(x: centre.x + a * CGFloat(cos(th0)), y: centre.y + b * CGFloat(sin(th0)))
+                    step == 0 ? arc.move(to: p) : arc.addLine(to: p)
+                }
+                light.stroke(arc, with: .color(th.accent2.opacity(0.55 * k)),
+                             style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                light.drawLayer { glow in
+                    glow.addFilter(.blur(radius: 4))
+                    glow.stroke(arc, with: .color(th.accent2.opacity(0.4 * k)), lineWidth: 5)
+                }
+            }
+            // The scan: a soft band of cyan sweeping left to right over the map, then again.
+            let sweep = (t / 7).truncatingRemainder(dividingBy: 1)
+            let x = frame.minX + frame.width * CGFloat(-0.1 + sweep * 1.2)
+            let band = CGRect(x: x - frame.width * 0.03, y: frame.minY + frame.height * 0.3,
+                              width: frame.width * 0.06, height: frame.height * 0.7)
+            light.fill(Path(band), with: .linearGradient(
+                Gradient(colors: [.clear, th.accent.opacity(0.16 * k), .clear]),
+                startPoint: CGPoint(x: band.minX, y: 0), endPoint: CGPoint(x: band.maxX, y: 0)))
+            // The red markers, pulsing out of step.
+            for (i, (mx, my)) in [(0.158, 0.40), (0.41, 0.605), (0.555, 0.865), (0.018, 0.84), (0.675, 0.655)].enumerated() {
+                let pulse = 0.5 + 0.5 * sin(t * 2.2 + Double(i) * 1.7)
+                let p = at(mx, my)
+                let r = frame.width * 0.018
+                light.fill(Path(ellipseIn: CGRect(x: p.x - r, y: p.y - r, width: r * 2, height: r * 2)),
+                           with: .radialGradient(Gradient(colors: [th.warn.opacity(0.5 * pulse * k), .clear]),
+                                                 center: p, startRadius: 0, endRadius: r))
+            }
+            // The projection breathing.
+            let breathe = 0.5 + 0.5 * sin(t * 0.6)
             light.fill(all, with: .radialGradient(
-                Gradient(colors: [Color.white.opacity(0.30 * breathe * k), th.accent2.opacity(0.10 * k), .clear]),
-                center: sun, startRadius: 0, endRadius: frame.width * 0.12))
-            let swing = CGFloat(0.06 * sin(t * 0.12))
-            let streak = frame.width * 0.9
-            var beam = light
-            beam.translateBy(x: sun.x, y: sun.y)
-            beam.rotate(by: .radians(Double(swing)))
-            beam.fill(Path(ellipseIn: CGRect(x: -streak / 2, y: -1.5, width: streak, height: 3)),
-                      with: .linearGradient(Gradient(colors: [.clear, Color(red: 0.5, green: 0.75, blue: 1).opacity(0.45 * breathe * k), .clear]),
-                                            startPoint: CGPoint(x: -streak / 2, y: 0), endPoint: CGPoint(x: streak / 2, y: 0)))
-            // Shuttles crossing in the distance: a pin of light with a short trail, each on
-            // its own line and pace, now and then.
-            for i in 0..<3 {
-                let n = Double(i)
-                var pace = Seeded(state: 0x5401 &+ UInt64(i) &* 7919)
-                let lap = 9 + pace.next() * 8
-                let shifted = t + n * 4.1
-                let run = UInt64(max(0, floor(shifted / lap)))
-                var rng = Seeded(state: 0x5402 &+ run &* 104729 &+ UInt64(i) &* 977)
-                let u = shifted.truncatingRemainder(dividingBy: lap) / lap
-                guard rng.next() < 0.75 else { continue }
-                let y0 = s.height * CGFloat(0.1 + rng.next() * 0.7)
-                let rise = s.height * CGFloat(rng.next() * 0.3 - 0.15)
-                let leftward = rng.next() < 0.5
-                let x = leftward ? s.width * CGFloat(1.1 - 1.2 * u) : s.width * CGFloat(-0.1 + 1.2 * u)
-                let p = CGPoint(x: x, y: y0 + rise * CGFloat(u))
-                let back = CGPoint(x: p.x + (leftward ? 40 : -40), y: p.y - rise / CGFloat(lap) * 0.6)
-                var trail = Path(); trail.move(to: back); trail.addLine(to: p)
-                light.stroke(trail, with: .linearGradient(Gradient(colors: [.clear, Color.white.opacity(0.5 * k)]),
-                                                          startPoint: back, endPoint: p), lineWidth: 1)
-                light.fill(Path(ellipseIn: CGRect(x: p.x - 2, y: p.y - 2, width: 4, height: 4)),
-                           with: .color(Color.white.opacity(0.85 * k)))
-            }
-            // Navigation lights on the station's hull, blinking in turn — short, soft
-            // pulses, red and white.
-            for (i, (x, y)) in [(0.62, 0.43), (0.83, 0.30), (0.95, 0.55), (0.70, 0.78), (0.88, 0.85)].enumerated() {
-                let phase = (t * 0.7 + Double(i) * 0.37).truncatingRemainder(dividingBy: 1.6)
-                let on = phase < 0.25 ? sin(.pi * phase / 0.25) : 0
-                guard on > 0 else { continue }
-                let p = at(x, y)
-                let tint = i % 2 == 0 ? Color(red: 1, green: 0.3, blue: 0.3) : Color.white
-                light.fill(Path(ellipseIn: CGRect(x: p.x - 6, y: p.y - 6, width: 12, height: 12)),
-                           with: .radialGradient(Gradient(colors: [tint.opacity(0.9 * on * k), .clear]),
-                                                 center: p, startRadius: 0, endRadius: 6))
-            }
-            var lights = Seeded(state: 0xE1F5)
-            for i in 0..<40 {
-                let u = lights.next()
-                let p = at(0.40 - 0.08 * u + lights.next() * 0.04, 0.05 + u * 0.9)
-                let tw = max(0, sin(t * (0.8 + lights.next() * 1.5) + Double(i) * 1.7))
-                let r = frame.width * 0.003
-                light.fill(Path(ellipseIn: CGRect(x: p.x - r * 2, y: p.y - r * 2, width: r * 4, height: r * 4)),
-                           with: .radialGradient(Gradient(colors: [th.accent2.opacity(0.7 * tw * k), .clear]),
-                                                 center: p, startRadius: 0, endRadius: r * 2))
-            }
+                Gradient(colors: [th.accent.opacity(0.07 * breathe * k), .clear]),
+                center: at(0.35, 0.65), startRadius: 0, endRadius: frame.width * 0.4))
             return
         }
         for (layer, count, speed, size, weight) in [(0, 220, 2.0, 0.8, 0.35), (1, 90, 6.0, 1.2, 0.5),
