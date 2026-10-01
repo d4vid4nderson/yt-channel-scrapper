@@ -1191,6 +1191,7 @@ struct ThemeBackdrop: View {
     private static func city(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
+        var flares: [Flare] = []
         if let picture = cityPicture {
             let image = c.resolve(picture)
             let fit = max(s.width / image.size.width, s.height / image.size.height)
@@ -1201,7 +1202,7 @@ struct ThemeBackdrop: View {
             var layer = c
             layer.opacity = min(1, 0.95 * k)
             layer.draw(image, in: frame)
-            signs(&c, frame, k, t)
+            flares = signs(&c, frame, k, t)
             // Darker at the top, where the page's title and search sit, and at the edges.
             c.fill(all, with: .linearGradient(
                 Gradient(stops: [.init(color: th.ground.opacity(0.55), location: 0),
@@ -1232,7 +1233,6 @@ struct ThemeBackdrop: View {
         // which is what makes it read as falling through wind rather than as scratches.
         let slant = 0.16
         let area = s.width * s.height
-        let flares = cityFlares(s, th, t)
         for (layer, count, speed, length, weight, width) in [
             (0, area / 2600, 560.0, 14.0, 0.10, 0.6),
             (1, area / 8000, 1050.0, 30.0, 0.18, 0.9),
@@ -1268,8 +1268,8 @@ struct ThemeBackdrop: View {
         for flare in flares { drawFlare(&c, s, flare, k) }
     }
 
-    /// A passing light's flare: where it is now, its colour, how far its light reaches,
-    /// and how bright it is right now (0…1).
+    /// A flare off a sign: where it is, its colour, how far its light reaches, and how
+    /// bright it is right now (0…1).
     private struct Flare {
         let at: CGPoint
         let color: Color
@@ -1277,71 +1277,39 @@ struct ThemeBackdrop: View {
         let level: Double
     }
 
-    /// The flares alive at `t`: lights on passing vehicles — spinners crossing the street
-    /// high up, traffic lower down. Each enters past one edge, crosses the frame on its
-    /// lane (climbing or sinking a little as it goes) and leaves past the other, brightest
-    /// mid-crossing where it faces the lens most squarely. Three independent streams, each
-    /// with a vehicle in most of its slots: lane, direction, speed and colour drawn from
-    /// that slot's own seed, so random to look at and the same on every frame.
-    private static func cityFlares(_ s: CGSize, _ th: Theme, _ t: Double) -> [Flare] {
-        var flares: [Flare] = []
-        for (stream, slot) in [(0, 7.0), (1, 11.0), (2, 17.0)] {
-            let shifted = t + Double(stream) * 3.1
-            let index = UInt64(max(0, floor(shifted / slot)))
-            let age = shifted.truncatingRemainder(dividingBy: slot)
-            var rng = Seeded(state: 0x2049 &+ index &* 7919 &+ UInt64(stream) &* 104729)
-            guard rng.next() < 0.8 else { continue }
-            let crossing = 3 + rng.next() * 3.5          // seconds to cross the frame
-            guard age < crossing else { continue }
-            let progress = age / crossing
-            let leftward = rng.next() < 0.5
-            let margin = s.width * 0.2
-            let startX = leftward ? s.width + margin : -margin
-            let endX = leftward ? -margin : s.width + margin
-            let lane = s.height * (0.12 + rng.next() * 0.55)
-            let climb = s.height * (rng.next() * 0.16 - 0.08)
-            let at = CGPoint(x: startX + (endX - startX) * progress,
-                             y: lane + climb * progress)
-            let facing = sin(.pi * progress)
-            let colors = [th.accent2, th.ink, Theme.hex(0xFFB23A), th.accent]
-            let color = colors[Int(rng.next() * Double(colors.count)) % colors.count]
-            flares.append(Flare(at: at,
-                                color: color,
-                                reach: min(s.width, s.height) * (0.16 + rng.next() * 0.14),
-                                level: pow(facing, 1.6)))
-        }
-        return flares
-    }
-
-    /// A film lens's flare: a hot core, the long horizontal streak an anamorphic lens
-    /// throws, and a few faint ghosts strung out along the line through the frame's centre.
-    /// All of it added as light.
+    /// A film lens's flare off a sign's corner, as the tube peaks: a pin-point of light,
+    /// a four-pointed glint, the long horizontal streak an anamorphic lens throws, and a
+    /// light leak washing in from the nearer side of the frame. No ghost discs — loose
+    /// circles of light read as orbs, not as a lens.
     private static func drawFlare(_ c: inout GraphicsContext, _ s: CGSize, _ flare: Flare, _ k: Double) {
         var light = c
         light.blendMode = .plusLighter
         let p = flare.at, a = flare.level * k
-        let core = flare.reach * 0.35
-        light.fill(Path(ellipseIn: CGRect(x: p.x - core, y: p.y - core, width: core * 2, height: core * 2)),
-                   with: .radialGradient(Gradient(colors: [Color.white.opacity(0.35 * a),
-                                                           flare.color.opacity(0.28 * a), .clear]),
-                                         center: p, startRadius: 0, endRadius: core))
-        let streak = s.width * 0.9
-        for (height, weight) in [(2.0, 0.55), (10.0, 0.14)] {
+        // The leak: from whichever side edge is nearer, at the sign's height.
+        let edge = CGPoint(x: p.x < s.width / 2 ? 0 : s.width, y: p.y)
+        light.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
+            Gradient(colors: [flare.color.opacity(0.05 * a), .clear]),
+            center: edge, startRadius: 0, endRadius: s.width * 0.4))
+        // The streak, centred on the corner.
+        let streak = min(s.width * 0.55, flare.reach * 7)
+        for (height, weight) in [(1.5, 0.38), (9.0, 0.06)] {
             let rect = CGRect(x: p.x - streak / 2, y: p.y - height / 2, width: streak, height: height)
             light.fill(Path(ellipseIn: rect), with: .linearGradient(
                 Gradient(colors: [.clear, flare.color.opacity(weight * a), .clear]),
                 startPoint: CGPoint(x: rect.minX, y: p.y), endPoint: CGPoint(x: rect.maxX, y: p.y)))
         }
-        let centre = CGPoint(x: s.width / 2, y: s.height / 2)
-        for (f, r, w) in [(0.45, 0.10, 0.10), (0.9, 0.05, 0.14), (1.35, 0.16, 0.06)] {
-            let g = CGPoint(x: p.x + (centre.x - p.x) * f * 2, y: p.y + (centre.y - p.y) * f * 2)
-            let radius = flare.reach * r
-            light.fill(Path(ellipseIn: CGRect(x: g.x - radius, y: g.y - radius,
-                                              width: radius * 2, height: radius * 2)),
-                       with: .radialGradient(Gradient(colors: [flare.color.opacity(w * a),
-                                                               flare.color.opacity(w * 0.4 * a), .clear]),
-                                             center: g, startRadius: 0, endRadius: radius))
+        // The glint: four thin rays, the vertical pair shorter, as a lens's star is.
+        let ray = flare.reach * 0.9
+        for rect in [CGRect(x: p.x - ray, y: p.y - 0.6, width: ray * 2, height: 1.2),
+                     CGRect(x: p.x - 0.6, y: p.y - ray * 0.55, width: 1.2, height: ray * 1.1)] {
+            light.fill(Path(ellipseIn: rect), with: .radialGradient(
+                Gradient(colors: [Color.white.opacity(0.4 * a), flare.color.opacity(0.18 * a), .clear]),
+                center: p, startRadius: 0, endRadius: ray))
         }
+        let pin: CGFloat = 3
+        light.fill(Path(ellipseIn: CGRect(x: p.x - pin, y: p.y - pin, width: pin * 2, height: pin * 2)),
+                   with: .radialGradient(Gradient(colors: [Color.white.opacity(0.8 * a), .clear]),
+                                         center: p, startRadius: 0, endRadius: pin))
     }
 
     /// The picture's signs, by where each sits in it (0…1 across and down) and its colour.
@@ -1364,9 +1332,15 @@ struct ThemeBackdrop: View {
     /// purpose: a neon buzz would be a flicker, and nothing on this screen flickers.
     /// Light added over the picture (`plusLighter`), not paint, so it reads as the tube
     /// glowing harder.
-    private static func signs(_ c: inout GraphicsContext, _ picture: CGRect, _ k: Double, _ t: Double) {
+    ///
+    /// Returns a flare for each sign at the top of its cycle, off one of its corners, so
+    /// the lens flares belong to something in the picture and come and go with it.
+    private static func signs(_ c: inout GraphicsContext, _ picture: CGRect,
+                              _ k: Double, _ t: Double) -> [Flare] {
         var glow = c
         glow.blendMode = .plusLighter
+        var flares: [Flare] = []
+        let corners: [(Double, Double)] = [(0.7, -0.6), (-0.7, -0.55), (0.65, 0.5), (-0.6, 0.6)]
         for (i, sign) in citySigns.enumerated() {
             let period = 3.5 + Double((i * 7) % 5) * 1.3
             let phase = Double(i) * 1.9
@@ -1381,8 +1355,25 @@ struct ThemeBackdrop: View {
                       with: .radialGradient(
                         Gradient(colors: [sign.color.opacity((0.10 + 0.32 * level) * k), .clear]),
                         center: center, startRadius: 0, endRadius: radius))
+            // Only a few signs flare — the tall red one, the hologram, LEVEL UP — and each
+            // over the upper half of its own cycle, so the flare swells and fades with the
+            // sign over seconds. A narrow window, or picking one sign's flare at a time,
+            // made them blink.
+            guard Self.flaringSigns.contains(i) else { continue }
+            let peak = max(0, (level - 0.5) / 0.5)
+            guard peak > 0 else { continue }
+            let corner = corners[i % corners.count]
+            flares.append(Flare(
+                at: CGPoint(x: center.x + radius * 0.8 * corner.0, y: center.y + radius * 0.8 * corner.1),
+                color: sign.color,
+                reach: radius * 1.6,
+                level: peak * peak * (3 - 2 * peak)))
         }
+        return flares
     }
+
+    /// The signs that throw a flare, by index into `citySigns`.
+    private static let flaringSigns: Set<Int> = [4, 8, 9]
 
     // MARK: Dune
 
