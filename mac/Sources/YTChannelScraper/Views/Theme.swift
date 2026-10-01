@@ -1903,16 +1903,19 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let gridPicture = picture("grid")
 
     /// Lines in the Grid picture that light runs along, as (near end, far end) in
-    /// fractions of the picture — measured off it: the road's solid lane lines running to
-    /// the gate (not the dashed ones: a cycle over painted dashes lit them up as beads),
-    /// and the beams rising from the gate into the sky.
+    /// fractions of the picture — fitted to the brightest pixels along each line in the
+    /// picture itself: the road's solid lane lines running to the gate (not the dashed
+    /// ones: a cycle over painted dashes lit them up as beads), and the beams.
     private static let gridRoads: [((Double, Double), (Double, Double))] = [
-        ((0.260, 1.0), (0.500, 0.521)), ((0.512, 1.0), (0.514, 0.521)),
-        ((0.624, 1.0), (0.528, 0.521)),
+        ((0.2716, 0.980), (0.4719, 0.560)),   // the bright line left of centre
+        ((0.5143, 0.980), (0.5093, 0.550)),   // the centre line
+        ((0.6419, 0.960), (0.5338, 0.600)),   // the road's right edge
     ]
+    /// Fitted to the picture's brightest pixels along each beam, near end (the gate)
+    /// first.
     private static let gridBeams: [((Double, Double), (Double, Double))] = [
-        ((0.475, 0.36), (0.31, 0.0)), ((0.49, 0.36), (0.40, 0.0)),
-        ((0.54, 0.36), (0.66, 0.0)), ((0.555, 0.36), (0.70, 0.0)),
+        ((0.4776, 0.330), (0.3606, 0.030)), ((0.4639, 0.330), (0.3286, 0.030)),
+        ((0.5565, 0.330), (0.6386, 0.030)), ((0.5773, 0.330), (0.6789, 0.030)),
     ]
 
     private static func grid(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
@@ -1966,61 +1969,71 @@ struct ThemeBackdrop: View {
             center: gate, startRadius: 0, endRadius: frame.width * 0.12))
         // Pulses along a line, from its near end to its far end.
         let orange = th.accent2
-        func run(_ line: ((Double, Double), (Double, Double)), count: Int, lap: Double, size: CGFloat,
-                 offset: Double, tint: Color, trail: Double = 0.5) {
+        // One light cycle on a line, `e` of the way from its near end to its far end,
+        // its wall of light trailing `trail` of the line behind it — towards the near end
+        // when it is heading away, towards the far end when it is coming at you.
+        func cycle(_ line: ((Double, Double), (Double, Double)), e: Double, away: Bool,
+                   trail: Double, size: CGFloat, tint: Color, fade: Double) {
             let near = at(line.0), far = at(line.1)
             func point(_ e: Double) -> CGPoint {
                 CGPoint(x: near.x + (far.x - near.x) * e, y: near.y + (far.y - near.y) * e)
             }
-            for n in 0..<count {
-                let u = ((t + offset) / lap + Double(n) / Double(count)).truncatingRemainder(dividingBy: 1)
-                // Fast near, slowing into the distance.
-                let e = 1 - pow(1 - u, 2.2)
-                let head = point(e)
-                let r = size * CGFloat(1 - e * 0.85)
-                let fade = min(1, u * 8) * min(1, (1 - u) * 5)
-                // The light cycle's wall: one solid ribbon behind it, wide at the cycle and
-                // tapering away down the trail, filled with a single gradient — so it is a
-                // line of light, not beads (segments added up at every join).
-                let start = max(0, e - trail)
-                let back = point(start)
-                let dx = head.x - back.x, dy = head.y - back.y
-                let length = max(hypot(dx, dy), 0.001)
-                let nx = -dy / length, ny = dx / length
-                let wHead = max(1, size * CGFloat(1 - e * 0.85) * 0.45)
-                let wBack = max(0.4, size * CGFloat(1 - start * 0.85) * 0.12)
-                func ribbon(_ scale: CGFloat) -> Path {
-                    var p = Path()
-                    p.move(to: CGPoint(x: back.x + nx * wBack * scale / 2, y: back.y + ny * wBack * scale / 2))
-                    p.addLine(to: CGPoint(x: head.x + nx * wHead * scale / 2, y: head.y + ny * wHead * scale / 2))
-                    p.addLine(to: CGPoint(x: head.x - nx * wHead * scale / 2, y: head.y - ny * wHead * scale / 2))
-                    p.addLine(to: CGPoint(x: back.x - nx * wBack * scale / 2, y: back.y - ny * wBack * scale / 2))
-                    p.closeSubpath()
-                    return p
-                }
-                let along = { (a: Double) in GraphicsContext.Shading.linearGradient(
-                    Gradient(colors: [tint.opacity(0), tint.opacity(a * fade * k)]),
-                    startPoint: back, endPoint: head) }
-                light.drawLayer { glow in
-                    glow.addFilter(.blur(radius: max(2, wHead * 1.5)))
-                    glow.fill(ribbon(3), with: along(0.45))
-                }
-                light.fill(ribbon(1), with: along(0.9))
-                light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
-                           with: .radialGradient(Gradient(colors: [white.opacity(0.9 * fade * k),
-                                                                   tint.opacity(0.5 * fade * k), .clear]),
-                                                 center: head, startRadius: 0, endRadius: r))
+            func width(_ e: Double, _ scale: CGFloat) -> CGFloat { size * CGFloat(1 - e * 0.85) * scale }
+            let head = point(e)
+            let tailE = min(1, max(0, away ? e - trail : e + trail))
+            let back = point(tailE)
+            let dx = head.x - back.x, dy = head.y - back.y
+            let length = max(hypot(dx, dy), 0.001)
+            let nx = -dy / length, ny = dx / length
+            let wHead = max(1, width(e, 0.45)), wBack = max(0.4, width(tailE, 0.12))
+            func ribbon(_ scale: CGFloat) -> Path {
+                var p = Path()
+                p.move(to: CGPoint(x: back.x + nx * wBack * scale / 2, y: back.y + ny * wBack * scale / 2))
+                p.addLine(to: CGPoint(x: head.x + nx * wHead * scale / 2, y: head.y + ny * wHead * scale / 2))
+                p.addLine(to: CGPoint(x: head.x - nx * wHead * scale / 2, y: head.y - ny * wHead * scale / 2))
+                p.addLine(to: CGPoint(x: back.x - nx * wBack * scale / 2, y: back.y - ny * wBack * scale / 2))
+                p.closeSubpath()
+                return p
             }
+            let along = { (a: Double) in GraphicsContext.Shading.linearGradient(
+                Gradient(colors: [tint.opacity(0), tint.opacity(a * fade * k)]),
+                startPoint: back, endPoint: head) }
+            light.drawLayer { glow in
+                glow.addFilter(.blur(radius: max(2, wHead * 1.5)))
+                glow.fill(ribbon(3), with: along(0.45))
+            }
+            light.fill(ribbon(1), with: along(0.9))
+            let r = width(e, 1)
+            light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
+                       with: .radialGradient(Gradient(colors: [white.opacity(0.9 * fade * k),
+                                                               tint.opacity(0.5 * fade * k), .clear]),
+                                             center: head, startRadius: 0, endRadius: r))
         }
-        // Blue for the users, orange for the other side: the road's right edge and the
-        // right pair of beams run orange.
-        for (i, road) in gridRoads.enumerated() {
-            run(road, count: 1, lap: 4.2 + Double(i) * 0.7, size: 9, offset: Double(i) * 1.1,
-                tint: i == 2 ? orange : th.accentHot, trail: 0.55)
-        }
-        for (i, beam) in gridBeams.enumerated() {
-            run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3,
-                tint: i >= 2 ? orange : th.accentHot, trail: 0.35)
+        // Riders: each, run after run, picks a line at random — mostly the road, now and
+        // then a beam — a speed, a trail, a colour (blue for the users, orange for the
+        // other side) and which way it rides, after an uneven pause. Seeded per run, so
+        // it is random to watch and steady frame to frame.
+        let lines = gridRoads.map { ($0, true) } + gridBeams.map { ($0, false) }
+        for rider in 0..<4 {
+            var pace = Seeded(state: 0xC1C1E &+ UInt64(rider) &* 7919)
+            let slot = 3.2 + pace.next() * 3.5
+            let shifted = t + Double(rider) * 1.73
+            let run = UInt64(max(0, floor(shifted / slot)))
+            var rng = Seeded(state: 0xB1CE &+ run &* 104729 &+ UInt64(rider) &* 7919)
+            let pause = rng.next() * 0.45 * slot
+            let u = (shifted.truncatingRemainder(dividingBy: slot) - pause) / (slot - pause)
+            guard u >= 0, u < 1 else { continue }
+            let onRoad = rng.next() < 0.72
+            let choices = lines.filter { $0.1 == onRoad }
+            let line = choices[Int(rng.next() * Double(choices.count)) % choices.count].0
+            let away = rng.next() < 0.7
+            // Away: fast near, slowing into the distance; towards you: the reverse.
+            let e = away ? 1 - pow(1 - u, 2.2) : 1 - pow(u, 2.2)
+            let fade = min(1, u * 8) * min(1, (1 - u) * 5)
+            cycle(line, e: e, away: away,
+                  trail: onRoad ? 0.35 + rng.next() * 0.35 : 0.2 + rng.next() * 0.25,
+                  size: onRoad ? 9 : 5,
+                  tint: rng.next() < 0.38 ? orange : th.accentHot, fade: fade)
         }
         // Haze across the horizon, drifting.
         for i in 0..<5 {
