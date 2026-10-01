@@ -366,7 +366,7 @@ struct RootView: View {
 
 // MARK: - Chrome
 
-/// Saved, Downloads and Family, inside the search pill beside Search.
+/// Saved, Downloads and Family, at the end of the search pill, right of Search.
 ///
 /// They have been toolbar buttons, a header cluster, and handles on the window's edges;
 /// the handles lay over the page and covered the list. The pill is the one control that
@@ -620,8 +620,6 @@ private struct SearchPill: View {
                     .frame(height: compact ? inner : 34)
             }
 
-            PanelButtons(model: model, height: compact ? inner : 34)
-
             Button {
                 model.isBusy ? model.stop() : model.submit()
             } label: {
@@ -647,6 +645,8 @@ private struct SearchPill: View {
             .keyboardShortcut(.return, modifiers: [])
             .help(helpText)
             .pointingHand()
+
+            PanelButtons(model: model, height: compact ? inner : 34)
         }
         .padding(compact ? 3 : 7)
         .frame(height: compact ? Chrome.large : nil)
