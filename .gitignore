@@ -27,3 +27,7 @@ ios/DerivedData/
 # Mac signing: personal certificate choice and provisioning profile
 mac/Local.signing.env
 mac/signing/
+
+# Theme backdrop pictures: third-party art, for the family build only — never committed,
+# never in the shared edition. See build-mac-app.sh.
+assets/backdrops/

@@ -59,7 +59,7 @@ struct Theme: Identifiable, @unchecked Sendable {
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, haze, dunes, parchment, tavern, sunset, grid, scanlines }
+    enum Backdrop: Sendable { case aurora, city, dunes, parchment, tavern, sunset, grid, scanlines }
 
     /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
     /// into the panel, its own lettering colour, and a little of that colour's light.
@@ -244,41 +244,45 @@ extension Theme {
         )
     }()
 
-    /// Los Angeles and the dead Las Vegas, 2049. Not the first film's neon: smog lit
-    /// amber from inside, concrete, cold teal in the shadows, and dust hanging in the air.
-    /// Thin, light capitals; a bevelled panel rather than a glowing tube.
+    /// The city at night, 2049: a street of signage seen through mist and rain. The
+    /// colours are the picture's — pink and red neon, cold teal in the haze, near-black
+    /// everywhere the light does not reach — and the backdrop is the picture itself, when
+    /// the build carries it (see `ThemeBackdrop.city`). Thin, light capitals; bevelled
+    /// panels rather than glowing tubes, so the neon stays in the scene.
     static let bladeRunner = Theme(
         id: .bladeRunner,
         name: "Blade Runner 2049",
-        tagline: "Amber haze over a dead city",
+        tagline: "Neon through mist and rain",
         appearance: .dark,
-        ink: hex(0xE6DED2),
-        accent: hex(0xD9792E),
-        accentHot: hex(0xEC8E45),
-        accent2: hex(0x7FA6A8),
-        edgeTint: hex(0xB8692C),
-        brand: hex(0xD9792E),
-        ground: hex(0x0C0B0A),
-        surface: hex(0x141210),
-        card: hex(0x1A1714).opacity(0.92),
-        field: hex(0x1C1916),
-        fieldInk: hex(0xE6DED2),
-        fieldRaised: hex(0x2A2520),
-        onFill: hex(0x160C05),
-        good: hex(0x9DB88A),
-        warn: hex(0xE8A64A),
-        glow: hex(0xC8692A),
-        glowDeep: hex(0x4A2A16),
-        pickedMid: hex(0x1A130E),
-        pickedFar: hex(0x2A1A10),
-        pickedEdge: hex(0x4A3020),
-        pickedEdgeHot: hex(0x6A4228),
-        corners: .rounded(scale: 0.3),
+        ink: hex(0xD9E6EA),
+        accent: hex(0xF0438C),
+        accentHot: hex(0xFF6AA6),
+        accent2: hex(0x3CCFD6),
+        edgeTint: hex(0x3CCFD6),
+        brand: hex(0xF0438C),
+        ground: hex(0x06090C),
+        surface: hex(0x0B1015),
+        card: hex(0x0F151B).opacity(0.88),
+        field: hex(0x0F161D),
+        fieldInk: hex(0xD9E6EA),
+        fieldRaised: hex(0x1B2630),
+        onFill: .white,
+        good: hex(0x4FE0B0),
+        warn: hex(0xFFB04A),
+        glow: hex(0xE0407F),
+        glowDeep: hex(0x1F5E70),
+        pickedMid: hex(0x0E1220),
+        pickedFar: hex(0x1E1022),
+        pickedEdge: hex(0x1F4A5C),
+        pickedEdgeHot: hex(0x2E7A90),
+        // Cut on the diagonal, top-leading and bottom-trailing, like the film's displays:
+        // machined rather than moulded.
+        corners: .chamfered(scale: 1),
         edge: .bevel,
         type: Typeface(displayWeight: .light, displayCaps: true, displayTracking: 1.6),
-        backdrop: .haze,
-        aurora: [hex(0xD9792E), hex(0xA9542A), hex(0x4A2A16), hex(0x7FA6A8)],
-        lcd: LCD(background: hex(0x0A0806), ink: hex(0xF0A05A), glow: hex(0xD9792E))
+        backdrop: .city,
+        aurora: [hex(0xF0438C), hex(0xFF8A3D), hex(0x1F5E70), hex(0x3CCFD6)],
+        lcd: LCD(background: hex(0x04080B), ink: hex(0x5FE3EA), glow: hex(0x3CCFD6))
     )
 
     /// Arrakis at dusk. Umber and sand, spice orange for anything that matters, and the
@@ -545,7 +549,7 @@ extension Theme {
         lcd: LCD(background: hex(0x00090A), ink: hex(0x2EE8E0), glow: hex(0x2EE8E0))
     )
 
-    private static func hex(_ value: UInt32) -> Color {
+    fileprivate static func hex(_ value: UInt32) -> Color {
         Color(red: Double((value >> 16) & 0xFF) / 255,
               green: Double((value >> 8) & 0xFF) / 255,
               blue: Double(value & 0xFF) / 255)
@@ -1133,7 +1137,7 @@ struct ThemeBackdrop: View {
         return Canvas { context, size in
             switch theme.backdrop {
             case .aurora: break
-            case .haze: Self.haze(&context, size, theme, k, t)
+            case .city: Self.city(&context, size, theme, k, t)
             case .dunes: Self.dunes(&context, size, theme, k, t)
             case .parchment: Self.parchment(&context, size, theme, k, t)
             case .tavern: Self.tavern(&context, size, theme, k, t)
@@ -1167,33 +1171,125 @@ struct ThemeBackdrop: View {
 
     // MARK: Blade Runner 2049
 
-    /// The dead city's air: an amber wash bleeding down from the top, two banks of haze
-    /// drifting so slowly they read as still, and dust hanging in it. No rain, no neon —
-    /// that was the first film.
-    private static func haze(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+    /// The street, if this build has its picture: `Backdrop-bladeRunner.jpg` in the app's
+    /// resources, which only the family build carries (the art is not ours to hand out).
+    /// Read once; nil means draw the scene without it.
+    nonisolated(unsafe) private static let cityPicture: Image? = {
+        guard let url = Bundle.main.url(forResource: "Backdrop-bladeRunner", withExtension: "jpg")
+        else { return nil }
+        #if canImport(AppKit)
+        return NSImage(contentsOf: url).map(Image.init(nsImage:))
+        #else
+        return UIImage(contentsOfFile: url.path).map(Image.init(uiImage:))
+        #endif
+    }()
+
+    /// The picture, breathing very slowly in and out so it never sits dead still; mist
+    /// rolling across it in banks, low and heavy like ground fog, tinted by the signs; and
+    /// rain over everything on one slant, in two depths. Darkened under the page so what
+    /// is on it stays readable. With no picture it is the mist and rain on near-black.
+    private static func city(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
-        c.fill(all, with: .linearGradient(
-            Gradient(stops: [.init(color: th.glow.opacity(0.20 * k), location: 0),
-                             .init(color: th.glowDeep.opacity(0.10 * k), location: 0.45),
-                             .init(color: .clear, location: 0.8)]),
-            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
-        for (i, (x, y, r, a)) in [(0.25, 0.30, 0.65, 0.16), (0.78, 0.55, 0.55, 0.12)].enumerated() {
-            let drift = CGFloat(sin(t * 0.03 + Double(i) * 2.1)) * s.width * 0.06
-            let center = CGPoint(x: s.width * x + drift, y: s.height * y)
-            c.fill(all, with: .radialGradient(
-                Gradient(colors: [th.glow.opacity(a * k), .clear]),
-                center: center, startRadius: 0, endRadius: max(s.width, s.height) * r))
+        if let picture = cityPicture {
+            let image = c.resolve(picture)
+            let fit = max(s.width / image.size.width, s.height / image.size.height)
+            let zoom = fit * (1.04 + 0.02 * sin(t * 0.025))
+            let size = CGSize(width: image.size.width * zoom, height: image.size.height * zoom)
+            let frame = CGRect(x: (s.width - size.width) / 2, y: (s.height - size.height) / 2,
+                               width: size.width, height: size.height)
+            var layer = c
+            layer.opacity = min(1, 0.95 * k)
+            layer.draw(image, in: frame)
+            signs(&c, frame, k, t)
+            // Darker at the top, where the page's title and search sit, and at the edges.
+            c.fill(all, with: .linearGradient(
+                Gradient(stops: [.init(color: th.ground.opacity(0.55), location: 0),
+                                 .init(color: th.ground.opacity(0.30), location: 0.55),
+                                 .init(color: th.ground.opacity(0.45), location: 1)]),
+                startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
         }
-        var rng = Seeded(state: 2049)
-        for _ in 0..<Int(s.width * s.height / 5200) {
-            let speed = 3 + rng.next() * 6
-            let span = s.width + 20
-            let x = (rng.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 10
-            let y = rng.next() * s.height + 6 * sin(t * (0.1 + rng.next() * 0.2) + rng.next() * 6)
-            let r = 0.5 + rng.next() * 1.1
-            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
-                   with: .color(th.accentHot.opacity((0.05 + rng.next() * 0.10) * k)))
+        // Mist: soft banks drifting sideways at their own pace, wrapping round, and
+        // rising and sinking a little as they go. Enough of them, fast enough, that the
+        // air is visibly moving.
+        for (i, (y, r, speed, tint)) in [(0.84, 0.42, 26.0, th.accent2), (0.70, 0.36, -18.0, th.glow),
+                                         (0.93, 0.50, 14.0, th.ink), (0.58, 0.32, 22.0, th.accent2),
+                                         (0.88, 0.40, -30.0, th.ink), (0.76, 0.30, 34.0, th.glow),
+                                         (0.97, 0.45, -12.0, th.accent2)].enumerated() {
+            let reach = max(s.width, s.height) * r
+            let span = s.width + reach * 2
+            let offset = Double(i) * 0.37 * Double(span)
+            let x = (offset + t * speed).truncatingRemainder(dividingBy: Double(span))
+            let cx = CGFloat(x < 0 ? x + Double(span) : x) - reach
+            let center = CGPoint(x: cx, y: s.height * y + 24 * CGFloat(sin(t * 0.12 + Double(i) * 1.7)))
+            c.fill(all, with: .radialGradient(
+                Gradient(stops: [.init(color: tint.opacity(0.16 * k), location: 0),
+                                 .init(color: tint.opacity(0.06 * k), location: 0.5),
+                                 .init(color: .clear, location: 1)]),
+                center: center, startRadius: 0, endRadius: reach))
+        }
+        // Rain: far drops short, dim and slow; near ones longer and faster. One slant,
+        // which is what makes it read as falling through wind rather than as scratches.
+        let slant = 0.16
+        let area = s.width * s.height
+        for (layer, count, speed, length, weight, width) in [
+            (0, area / 2600, 560.0, 14.0, 0.10, 0.6),
+            (1, area / 8000, 1050.0, 30.0, 0.18, 0.9),
+        ] {
+            var rng = Seeded(state: 2049 + UInt64(layer))
+            var streaks = Path()
+            for _ in 0..<Int(count) {
+                let x0 = rng.next() * (s.width + s.height * slant)
+                let phase = rng.next()
+                let len = length * (0.7 + rng.next() * 0.6)
+                let v = speed * (0.85 + rng.next() * 0.3)
+                let span = s.height + len
+                let y = (phase * span + t * v).truncatingRemainder(dividingBy: span) - len
+                let x = x0 - y * slant
+                streaks.move(to: CGPoint(x: x, y: y))
+                streaks.addLine(to: CGPoint(x: x - len * slant, y: y + len))
+            }
+            c.stroke(streaks, with: .color(th.ink.opacity(weight * k)), lineWidth: width)
+        }
+    }
+
+    /// The picture's signs, by where each sits in it (0…1 across and down) and its colour.
+    private static let citySigns: [(x: Double, y: Double, r: Double, color: Color)] = [
+        (0.05, 0.34, 0.07, Theme.hex(0xFF3EB0)),   // pink arrow
+        (0.07, 0.46, 0.06, Theme.hex(0xFFD23A)),   // yellow arrow
+        (0.13, 0.41, 0.04, Theme.hex(0xFFD23A)),   // small yellow arrow
+        (0.115, 0.49, 0.035, Theme.hex(0x2EE6E6)), // cyan arrow
+        (0.37, 0.14, 0.06, Theme.hex(0xFF3A2E)),   // the tall red sign
+        (0.32, 0.30, 0.04, Theme.hex(0xFF3A2E)),   // red ovals
+        (0.35, 0.41, 0.035, Theme.hex(0xFF4A3A)),  // red lettering
+        (0.43, 0.40, 0.05, Theme.hex(0xFF3E9A)),   // pink sign
+        (0.475, 0.33, 0.045, Theme.hex(0x5FD8FF)), // the hologram
+        (0.645, 0.38, 0.07, Theme.hex(0xFF3E9A)),  // LEVEL UP
+        (0.75, 0.33, 0.06, Theme.hex(0xFFB23A)),   // the burger
+    ]
+
+    /// Each sign breathing on its own slow cycle — brightening over a few seconds and
+    /// easing back, sometimes all but out — so the street looks lit and alive. Slow on
+    /// purpose: a neon buzz would be a flicker, and nothing on this screen flickers.
+    /// Light added over the picture (`plusLighter`), not paint, so it reads as the tube
+    /// glowing harder.
+    private static func signs(_ c: inout GraphicsContext, _ picture: CGRect, _ k: Double, _ t: Double) {
+        var glow = c
+        glow.blendMode = .plusLighter
+        for (i, sign) in citySigns.enumerated() {
+            let period = 3.5 + Double((i * 7) % 5) * 1.3
+            let phase = Double(i) * 1.9
+            // 0…1, lingering near the ends: smoothstep of a sine.
+            let wave = (sin(t * 2 * .pi / period + phase) + 1) / 2
+            let level = wave * wave * (3 - 2 * wave)
+            let center = CGPoint(x: picture.minX + picture.width * sign.x,
+                                 y: picture.minY + picture.height * sign.y)
+            let radius = picture.width * sign.r
+            glow.fill(Path(ellipseIn: CGRect(x: center.x - radius, y: center.y - radius,
+                                             width: radius * 2, height: radius * 2)),
+                      with: .radialGradient(
+                        Gradient(colors: [sign.color.opacity((0.10 + 0.32 * level) * k), .clear]),
+                        center: center, startRadius: 0, endRadius: radius))
         }
     }
 

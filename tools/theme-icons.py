@@ -26,7 +26,7 @@ BADGE = ("M172.32,19.36c-2-7.6-8-13.6-15.6-15.6C143.12,0,88,0,88,0S32.88,0,19.28
 # id: gradient top, gradient bottom, badge, glyph. Just the badge on a gradient: scenery
 # drawn into the plate was cut off by iOS's corner mask and was noise at icon sizes.
 THEMES = {
-    "bladeRunner":  ("#3a2414", "#0c0b0a", "#d9792e", "#160c05"),
+    "bladeRunner":  ("#123038", "#06090c", "#f0438c", "#ffffff"),
     "dune":         ("#6a3a14", "#130c06", "#e0822f", "#1b1007"),
     "middleEarth":  ("#f6ecd6", "#d8c291", "#8e2a1c", "#fbf4e2"),
     "prancingPony": ("#6a3c16", "#160d07", "#d9a441", "#1e1208"),

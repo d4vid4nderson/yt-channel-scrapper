@@ -65,6 +65,21 @@ struct CommandBoard: View {
 
     // MARK: - The board
 
+    /// A breath of ink over the aurora — and over a picture (Blade Runner's street), frosted
+    /// glass with the surface through it, since a sign behind the text made it unreadable.
+    @ViewBuilder
+    private var boardFill: some View {
+        let shape = ThemedRect(cornerRadius: 14)
+        if Theme.active.backdrop == .city {
+            ZStack {
+                shape.fill(.ultraThinMaterial)
+                shape.fill(Palette.surface.opacity(0.62))
+            }
+        } else {
+            shape.fill(Palette.ink(0.035))
+        }
+    }
+
     private var board: some View {
         HStack(alignment: .top, spacing: 0) {
             dispatch
@@ -90,7 +105,7 @@ struct CommandBoard: View {
                 .padding(.bottom, 16)
         }
         .fixedSize(horizontal: false, vertical: true)
-        .background(Palette.ink(0.035), in: ThemedRect(cornerRadius: 14))
+        .background { boardFill }
         .overlay {
             ThemedRect(cornerRadius: 14).strokeBorder(Palette.ink(0.08))
         }

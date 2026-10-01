@@ -142,6 +142,16 @@ else
 fi
 
 cp icon.icns "$APP/Contents/Resources/AppIcon.icns"
+
+# Theme backdrop pictures. Third-party art kept out of git (assets/backdrops is ignored)
+# and out of the shared edition, which goes to other people: the family build only.
+# Without them a theme falls back to its drawn scenery.
+if [ -z "$SHARED" ] && [ -d assets/backdrops ]; then
+  for PIC in assets/backdrops/*.jpg; do
+    [ -f "$PIC" ] && cp "$PIC" "$APP/Contents/Resources/Backdrop-$(basename "$PIC")"
+  done
+  echo "    backdrop pictures: $(ls assets/backdrops/*.jpg 2>/dev/null | wc -l | tr -d ' ')"
+fi
 printf 'APPL????' > "$APP/Contents/PkgInfo"
 
 cat > "$APP/Contents/Info.plist" <<PLIST
