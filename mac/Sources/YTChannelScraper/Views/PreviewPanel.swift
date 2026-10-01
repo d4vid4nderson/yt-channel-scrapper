@@ -18,6 +18,10 @@ struct PreviewPanel: View {
     /// The height the results area has; the stage takes at most part of it, so the list
     /// below always keeps a few rows.
     let available: CGFloat
+    /// The page's width, so the stage can be given an exact height. Asked for only as a
+    /// maximum, the height was whatever the list below left over — the list is a scroll
+    /// view and takes all it can — so dragging the grip never made the picture larger.
+    let width: CGFloat
     let download: (Video) -> Void
     let popOut: () -> Void
     /// Keeping what you are watching. Closures rather than the model, to match the rest
@@ -45,10 +49,13 @@ struct PreviewPanel: View {
                 // The stage takes the shape of the stream, so a Short is not letterboxed
                 // into a widescreen box and a talk is not cropped into a tall one; the
                 // black band behind it is what runs the full width.
+                // Exactly the grip's height, unless the stream's shape at the page's width
+                // is shorter — then that, so a widescreen picture is never pillarboxed for
+                // height it cannot use.
                 PreviewStage(state: state)
                     .aspectRatio(ratio, contentMode: .fit)
-                    .frame(maxWidth: .infinity, maxHeight: stageHeight)
                     .frame(maxWidth: .infinity)
+                    .frame(height: min(stageHeight, width / max(ratio, 0.1)))
                     .background(.black)
 
                 bar(video)

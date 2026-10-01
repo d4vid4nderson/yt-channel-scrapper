@@ -197,7 +197,7 @@ struct RootView: View {
             let resultsHeight = max(geo.size.height - bar, 0)
 
             ZStack(alignment: .top) {
-                resultsArea(height: resultsHeight)
+                resultsArea(width: geo.size.width, height: resultsHeight)
                     .frame(width: geo.size.width, height: resultsHeight)
                     .offset(y: headerHeight)
 
@@ -308,7 +308,7 @@ struct RootView: View {
     /// The player sits at the top of it, across its full width, with the list below: a
     /// video opened from the list plays above the list it came from, and the next one
     /// clicked replaces it there. See `PreviewPanel`.
-    private func resultsArea(height: CGFloat) -> some View {
+    private func resultsArea(width: CGFloat, height: CGFloat) -> some View {
         VStack(spacing: 0) {
             // The seam under the header, in the palette's hairline rather than AppKit's
             // divider grey, which belongs to no theme.
@@ -316,6 +316,7 @@ struct RootView: View {
             PreviewPanel(
                 session: model.preview,
                 available: height,
+                width: width,
                 download: { model.downloadPreviewed($0) },
                 popOut: { model.popOutToIsland(tuckingWindowAway: true) },
                 isSaved: { model.isSaved($0) },
