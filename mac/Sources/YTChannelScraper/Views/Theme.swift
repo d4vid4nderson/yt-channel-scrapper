@@ -474,7 +474,9 @@ extension Theme {
         type: Typeface(displayWeight: .semibold, displayCaps: true, displayTracking: 1.6),
         backdrop: .grid,
         aurora: [hex(0x18E4FF), hex(0x0A6FA8), hex(0x0B3D66), hex(0x7FF3FF)],
-        lcd: LCD(background: hex(0x00070A), ink: hex(0x7FF3FF), glow: hex(0x18E4FF))
+        lcd: LCD(background: hex(0x00070A), ink: hex(0x7FF3FF), glow: hex(0x18E4FF)),
+        // The other side's orange, where something is lit or chosen.
+        highlight: hex(0xFF9B26)
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
@@ -1961,8 +1963,9 @@ struct ThemeBackdrop: View {
             Gradient(colors: [white.opacity(0.22 * breathe * k), th.accent.opacity(0.08 * k), .clear]),
             center: gate, startRadius: 0, endRadius: frame.width * 0.12))
         // Pulses along a line, from its near end to its far end.
+        let orange = th.accent2
         func run(_ line: ((Double, Double), (Double, Double)), count: Int, lap: Double, size: CGFloat,
-                 offset: Double) {
+                 offset: Double, tint: Color) {
             let near = at(line.0), far = at(line.1)
             for n in 0..<count {
                 let u = ((t + offset) / lap + Double(n) / Double(count)).truncatingRemainder(dividingBy: 1)
@@ -1977,19 +1980,23 @@ struct ThemeBackdrop: View {
                 streak.move(to: tail)
                 streak.addLine(to: head)
                 light.stroke(streak, with: .linearGradient(
-                    Gradient(colors: [.clear, white.opacity(0.9 * fade * k)]),
+                    Gradient(colors: [.clear, tint.opacity(0.9 * fade * k)]),
                     startPoint: tail, endPoint: head), lineWidth: max(0.8, r * 0.5))
                 light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
                            with: .radialGradient(Gradient(colors: [white.opacity(0.85 * fade * k),
-                                                                   th.accent.opacity(0.35 * fade * k), .clear]),
+                                                                   tint.opacity(0.45 * fade * k), .clear]),
                                                  center: head, startRadius: 0, endRadius: r))
             }
         }
+        // Blue for the users, orange for the other side: two of the lanes and the right
+        // pair of beams run orange.
         for (i, road) in gridRoads.enumerated() {
-            run(road, count: 2, lap: 2.6 + Double(i) * 0.55, size: 9, offset: Double(i) * 0.7)
+            run(road, count: 2, lap: 2.6 + Double(i) * 0.55, size: 9, offset: Double(i) * 0.7,
+                tint: [1, 3].contains(i) ? orange : white)
         }
         for (i, beam) in gridBeams.enumerated() {
-            run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3)
+            run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3,
+                tint: i >= 2 ? orange : white)
         }
         // Haze across the horizon, drifting.
         for i in 0..<5 {
@@ -1998,7 +2005,7 @@ struct ThemeBackdrop: View {
             let x = (n * 0.37 * span + t * (10 + n * 4)).truncatingRemainder(dividingBy: span) - Double(s.width) * 0.3
             let center = CGPoint(x: x, y: Double(at((0.5, 0.44 + 0.04 * n)).y))
             c.fill(all, with: .radialGradient(
-                Gradient(colors: [th.accent.opacity(0.07 * k), .clear]),
+                Gradient(colors: [(i == 2 ? orange : th.accent).opacity(0.07 * k), .clear]),
                 center: center, startRadius: 0, endRadius: frame.width * 0.22))
         }
     }
