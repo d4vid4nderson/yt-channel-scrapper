@@ -106,7 +106,11 @@ enum Palette {
             case .dark:
                 return t.ink.opacity(weight)
             case .light:
-                return t.ink.opacity(lightWeight)
+                // A light theme sits over a picture (Middle-earth's Shire) as well as
+                // flat paper, so the text end of the ramp is pushed darker — captions and
+                // secondary lines were too faint to read there. Hairlines and resting
+                // fills, at the low end, are left as they were.
+                return t.ink.opacity(min(1, lightWeight + max(0, weight - 0.25) * 0.5))
             }
         }
     }

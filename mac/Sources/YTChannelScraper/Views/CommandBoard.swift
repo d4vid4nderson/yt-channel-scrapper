@@ -74,7 +74,8 @@ struct CommandBoard: View {
         if [.city, .dunes, .parchment].contains(Theme.active.backdrop) {
             ZStack {
                 shape.fill(.ultraThinMaterial)
-                shape.fill(Palette.surface.opacity(0.62))
+                // Paper needs more of itself under sepia than glass does under neon.
+                shape.fill(Palette.surface.opacity(Theme.active.isLight ? 0.84 : 0.62))
             }
         } else {
             shape.fill(Palette.ink(0.035))

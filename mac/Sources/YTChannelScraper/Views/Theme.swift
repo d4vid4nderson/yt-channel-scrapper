@@ -345,48 +345,48 @@ extension Theme {
         highlight: hex(0x3FE6D2)
     )
 
-    /// A page from the Red Book, bound in Rivendell. Sepia ink on parchment, gilt rules,
-    /// oxblood for the things you press, and
-    /// Luminari's uncial-flavoured capitals on the Mac — the phone has no such face and
-    /// sets its headings in Baskerville.
+    /// The map in Bag End's study, by candlelight: dark aged paper, sepia ink gone pale
+    /// with age, gilt rules, oxblood for what you press, and the light pooled in the
+    /// middle of the page with the edges falling into shadow. Luminari's uncial-flavoured
+    /// capitals on the Mac — the phone has no such face and sets its headings in
+    /// Baskerville.
     static let middleEarth = Theme(
         id: .middleEarth,
         name: "Middle-earth",
-        tagline: "Sepia ink, parchment and gilt",
-        appearance: .light,
-        ink: hex(0x3A2814),
-        accent: hex(0x8E2A1C),
-        accentHot: hex(0xA8321F),
-        accent2: hex(0xA9822F),
-        edgeTint: hex(0xA9822F),
-        brand: hex(0x8E2A1C),
-        ground: hex(0xEADDBE),
-        surface: hex(0xF4EAD2),
-        card: hex(0xF4E9CE).opacity(0.92),
-        field: hex(0xFBF4E2),
-        fieldInk: hex(0x3A2814),
-        fieldRaised: hex(0xEFE2C2),
-        onFill: hex(0xFBF4E2),
-        good: hex(0x4E6B2A),
-        warn: hex(0xA0621A),
-        glow: hex(0xC9A04A).opacity(0.7),
-        glowDeep: hex(0x8E5A2A).opacity(0.6),
-        pickedMid: hex(0xF0E2C0),
-        pickedFar: hex(0xE7D2A4),
-        pickedEdge: hex(0xD6BC86),
-        pickedEdgeHot: hex(0xC4A260),
+        tagline: "An old map by candlelight",
+        appearance: .dark,
+        ink: hex(0xEAD8B4),
+        accent: hex(0xC0503A),
+        accentHot: hex(0xD8644A),
+        accent2: hex(0xC9A04A),
+        edgeTint: hex(0xB08A3E),
+        brand: hex(0xB8452E),
+        ground: hex(0x120C07),
+        surface: hex(0x1B130B),
+        card: hex(0x21170D).opacity(0.92),
+        field: hex(0x22180E),
+        fieldInk: hex(0xEAD8B4),
+        fieldRaised: hex(0x33241A),
+        onFill: hex(0xFBF0DA),
+        good: hex(0x9DB86A),
+        warn: hex(0xE0A040),
+        glow: hex(0xC9883A),
+        glowDeep: hex(0x5A3416),
+        pickedMid: hex(0x231709),
+        pickedFar: hex(0x34200C),
+        pickedEdge: hex(0x5A3E1C),
+        pickedEdgeHot: hex(0x7A5626),
         // Rounder than the other skins: a hobbit-hole door, not a machined panel.
         corners: .rounded(scale: 0.8),
         // The skin's bevel with its gilt rule, not a knot in every corner: on every row,
         // card and button at once that was a page of swirls.
         edge: .bevel,
         type: Typeface(design: .serif, display: ["Luminari-Regular", "Baskerville-SemiBold"],
-                       displayCaps: true, displayTracking: 0.8),
+                       displayCaps: true, displayTracking: 0.8, displayGlow: true),
         backdrop: .parchment,
-        aurora: [hex(0xD8B86A), hex(0xE2C98E), hex(0xC49A58), hex(0xEAD7A8)],
-        // A page, so the display is a darker panel of the same paper with sepia on it
-        // rather than a lit screen — there is nothing electric in Rivendell.
-        lcd: LCD(background: hex(0xE2D1A8), ink: hex(0x3A2814), glow: .clear)
+        aurora: [hex(0xC9883A), hex(0xE0B060), hex(0x5A3416), hex(0xEAD7A8)],
+        // Ink on darker paper rather than a lit screen — nothing electric in Rivendell.
+        lcd: LCD(background: hex(0x0C0804), ink: hex(0xE8C77A), glow: hex(0xC9883A))
     )
 
     /// The Prancing Pony, Bree. Dark oak and firelight, brass on everything that is held,
@@ -1542,96 +1542,43 @@ struct ThemeBackdrop: View {
 
     // MARK: Middle-earth
 
-    /// Paper, its burnt edges, and dust turning slowly in lamplight. No knotwork, here
-    /// or on the panels: it was one ornament too many wherever it went.
+    /// The map's look, whatever is on it: dark paper lit by one candle. The Shire picture
+    /// where the build has it (family build only), turned to sepia and darkened, or the
+    /// paper alone; then the candlelight — a warm pool a little above the middle, breathing
+    /// very slowly — and the edges falling away into shadow. Nothing drifting through it.
     private static func parchment(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ k: Double, _ t: Double) {
-        if let picture = shirePicture {
-            shire(&c, s, th, picture, k, t)
-            return
-        }
-        var rng = Seeded(state: 1954)
-        for _ in 0..<Int(s.width * s.height / 900) {
-            let r = 0.4 + rng.next() * 1.1
-            let dot = CGRect(x: rng.next() * s.width, y: rng.next() * s.height, width: r, height: r)
-            c.fill(Path(ellipseIn: dot), with: .color(th.ink.opacity((0.04 + rng.next() * 0.05) * k)))
-        }
-        var motes = Seeded(state: 3019)
-        for _ in 0..<36 {
-            let span = s.height + 40
-            let rise = 4 + motes.next() * 9
-            let y = s.height + 20 - (motes.next() * span + t * rise).truncatingRemainder(dividingBy: span)
-            let x = motes.next() * s.width + 18 * sin(t * (0.15 + motes.next() * 0.2) + motes.next() * 6)
-            let r = 1.2 + motes.next() * 2.2
-            let glint = 0.10 + 0.08 * sin(t * 0.5 + motes.next() * 6)
-            c.fill(Path(ellipseIn: CGRect(x: x - r, y: y - r, width: r * 2, height: r * 2)),
-                   with: .color(th.accent2.opacity(glint * k)))
-        }
-        let radius = max(s.width, s.height) * 0.75
-        c.fill(Path(CGRect(origin: .zero, size: s)), with: .radialGradient(
-            Gradient(stops: [
-                .init(color: .clear, location: 0.55),
-                .init(color: Color(red: 0.45, green: 0.30, blue: 0.12).opacity(0.28 * k), location: 1),
-            ]),
-            center: CGPoint(x: s.width / 2, y: s.height / 2), startRadius: 0, endRadius: radius))
-    }
-
-    /// Bag End on a summer afternoon: the picture under a wash of the page's own parchment
-    /// (lighter at the top, where the title and search sit, so sepia stays readable on
-    /// it), sunbeams slanting down from the bright sky at the top right and breathing
-    /// slowly, and pollen and thistledown drifting across on the breeze — each seed
-    /// fluttering as it goes. Warm, slow and quiet; nothing here hurries.
-    private static func shire(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
-                              _ picture: Image, _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
-        drawPicture(&c, s, picture, k, t)
-        c.fill(all, with: .linearGradient(
-            Gradient(stops: [.init(color: th.ground.opacity(0.62), location: 0),
-                             .init(color: th.ground.opacity(0.30), location: 0.5),
-                             .init(color: th.ground.opacity(0.40), location: 1)]),
-            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+        if let picture = shirePicture {
+            drawPicture(&c, s, picture, k, t)
+            // Sepia: the picture's colour replaced by the paper's, then darkened.
+            var tone = c
+            tone.blendMode = .color
+            tone.fill(all, with: .color(Color(red: 0.55, green: 0.38, blue: 0.20).opacity(0.85)))
+            c.fill(all, with: .color(th.ground.opacity(0.45)))
+        } else {
+            // Paper grain: fine flecks of darker ink.
+            var rng = Seeded(state: 1954)
+            for _ in 0..<Int(s.width * s.height / 900) {
+                let r = 0.4 + rng.next() * 1.1
+                let dot = CGRect(x: rng.next() * s.width, y: rng.next() * s.height, width: r, height: r)
+                c.fill(Path(ellipseIn: dot), with: .color(Color.black.opacity((0.10 + rng.next() * 0.12) * k)))
+            }
+        }
+        let candle = CGPoint(x: s.width * 0.5, y: s.height * 0.42)
+        let breathe = 1 + 0.04 * sin(t * 0.5) + 0.02 * sin(t * 1.1 + 1)
+        let reach = max(s.width, s.height) * 0.62 * breathe
         var light = c
         light.blendMode = .plusLighter
-        // Sunbeams: long soft wedges from above the top-right corner, each on its own slow
-        // breath, never quite gone.
-        let sun = CGPoint(x: s.width * 0.92, y: -s.height * 0.15)
-        for (i, (angle, spread)) in [(2.05, 0.05), (2.20, 0.035), (2.35, 0.06), (2.55, 0.04)].enumerated() {
-            let breath = 0.6 + 0.4 * sin(t * (0.12 + Double(i) * 0.03) + Double(i) * 1.7)
-            let length = max(s.width, s.height) * 1.6
-            var beam = Path()
-            beam.move(to: sun)
-            beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(angle - spread)),
-                                     y: sun.y + length * CGFloat(sin(angle - spread))))
-            beam.addLine(to: CGPoint(x: sun.x + length * CGFloat(cos(angle + spread)),
-                                     y: sun.y + length * CGFloat(sin(angle + spread))))
-            beam.closeSubpath()
-            light.fill(beam, with: .radialGradient(
-                Gradient(colors: [Color(red: 1, green: 0.93, blue: 0.72).opacity(0.22 * breath * k), .clear]),
-                center: sun, startRadius: 0, endRadius: length * 0.8))
-        }
-        // Pollen and thistledown, drifting left on the breeze and slowly sinking, each seed
-        // fluttering; the near ones larger and soft.
-        var seeds = Seeded(state: 2941)
-        for _ in 0..<Int(s.width * s.height / 9000) + 12 {
-            let near = seeds.next() < 0.25
-            let speed = near ? 22 + seeds.next() * 20 : 6 + seeds.next() * 10
-            let span = Double(s.width + 40), tall = Double(s.height + 40)
-            let x = span - (seeds.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 20
-            let y = (seeds.next() * tall + t * (2 + seeds.next() * 4)).truncatingRemainder(dividingBy: tall) - 20
-                + 10 * sin(t * (0.6 + seeds.next()) + seeds.next() * 6)
-            let r = CGFloat(near ? 2.2 + seeds.next() * 2.5 : 0.7 + seeds.next() * 1.1)
-            let point = CGPoint(x: x, y: y)
-            light.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
-                       with: .radialGradient(
-                        Gradient(colors: [Color(red: 1, green: 0.97, blue: 0.86).opacity((near ? 0.55 : 0.4) * k), .clear]),
-                        center: point, startRadius: 0, endRadius: r))
-        }
-        // The page's own edge: a little burnt umber at the corners.
+        light.fill(all, with: .radialGradient(
+            Gradient(stops: [.init(color: th.glow.opacity(0.22 * k), location: 0),
+                             .init(color: th.glowDeep.opacity(0.10 * k), location: 0.5),
+                             .init(color: .clear, location: 1)]),
+            center: candle, startRadius: 0, endRadius: reach))
         c.fill(all, with: .radialGradient(
-            Gradient(stops: [.init(color: .clear, location: 0.6),
-                             .init(color: Color(red: 0.45, green: 0.30, blue: 0.12).opacity(0.22 * k), location: 1)]),
-            center: CGPoint(x: s.width / 2, y: s.height / 2), startRadius: 0,
-            endRadius: max(s.width, s.height) * 0.75))
+            Gradient(stops: [.init(color: .clear, location: 0.35),
+                             .init(color: Color.black.opacity(0.65 * k), location: 1)]),
+            center: candle, startRadius: 0, endRadius: max(s.width, s.height) * 0.78))
     }
 
     // MARK: The Prancing Pony
