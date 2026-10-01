@@ -23,7 +23,7 @@ import UIKit
 struct Theme: Identifiable, @unchecked Sendable {
 
     enum ID: String, CaseIterable, Identifiable, Sendable {
-        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, nostromo, nostromoTeal
+        case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, nostromoTeal
         var id: String { rawValue }
     }
 
@@ -197,7 +197,6 @@ extension Theme {
         case .synthwave: synthwave
         case .grid: grid
         case .ringWorld: ringWorld
-        case .nostromo: nostromo
         case .nostromoTeal: nostromoTeal
         }
     }
@@ -533,49 +532,13 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
-    /// type, scanlines, and bracketed corners instead of boxes. Amber for warnings.
-    static let nostromo = Theme(
-        id: .nostromo,
-        name: "Nostromo",
-        tagline: "Green phosphor on the ship's terminal",
-        appearance: .dark,
-        ink: hex(0x9CFFB4),
-        accent: hex(0x3DFF7A),
-        accentHot: hex(0x8CFFAE),
-        accent2: hex(0xFFB000),
-        edgeTint: hex(0x3DFF7A),
-        brand: hex(0x3DFF7A),
-        ground: hex(0x010602),
-        surface: hex(0x020E07),
-        card: hex(0x03140A).opacity(0.9),
-        field: hex(0x03180C),
-        fieldInk: hex(0x9CFFB4),
-        fieldRaised: hex(0x0A2E16),
-        onFill: hex(0x011006),
-        good: hex(0x3DFF7A),
-        warn: hex(0xFFB000),
-        glow: hex(0x3DFF7A),
-        glowDeep: hex(0x0B5A26),
-        pickedMid: hex(0x03170B),
-        pickedFar: hex(0x062812),
-        pickedEdge: hex(0x0E3F1C),
-        pickedEdgeHot: hex(0x146A2E),
-        corners: .square,
-        edge: .brackets,
-        type: Typeface(design: .monospaced, displayWeight: .bold,
-                       displayCaps: true, displayTracking: 1.2),
-        backdrop: .scanlines,
-        aurora: [hex(0x3DFF7A), hex(0x1A8A3C), hex(0x0B5A26), hex(0x9CFFB4)],
-        lcd: LCD(background: hex(0x000A03), ink: hex(0x3DFF7A), glow: hex(0x3DFF7A))
-    )
-
-    /// The same terminal, a different tube: teal and cyan phosphor, amber still for
-    /// warnings.
+    /// MU-TH-UR 6000, the ship's computer: teal phosphor on black glass, monospaced type,
+    /// scanlines, and bracketed corners instead of boxes; amber for warnings. (It was the
+    /// second of two tubes; the green one is gone, and a saved choice of it lands here.)
     static let nostromoTeal = Theme(
         id: .nostromoTeal,
-        name: "Nostromo Teal",
-        tagline: "The ship's terminal, on a cyan tube",
+        name: "Nostromo",
+        tagline: "The ship's terminal, in teal phosphor",
         appearance: .dark,
         ink: hex(0x9CF6FF),
         accent: hex(0x2EE8E0),
@@ -631,7 +594,9 @@ extension Theme {
     private final class Box: @unchecked Sendable {
         private let lock = NSLock()
         private var theme: Theme = {
+            // The green Nostromo is gone; its choice carries over to the teal one.
             let saved = UserDefaults.standard.string(forKey: Theme.defaultsKey)
+                .map { $0 == "nostromo" ? ID.nostromoTeal.rawValue : $0 }
             return Theme.named(saved.flatMap(ID.init(rawValue:)) ?? .classic)
         }()
 
@@ -2128,21 +2093,21 @@ struct ThemeBackdrop: View {
             // The Warthog's gun, firing now and then: short bursts of muzzle flash at the
             // barrel's tip (measured off the picture), the flame thrown out along the barrel.
             // Small and dim — gunfire across the valley, not a strobe in your face.
-            // Bursts at uneven gaps — about half the 7-second slots have one, anywhere in
-            // the slot — of a couple of shots to half a dozen; inside one, each 1/14s tick
-            // fires by its own throw, never two ticks running, so there is no beat.
-            let burstSlot = 7.0
+            // Bursts at uneven moments — most 4½-second slots have one, anywhere in the
+            // slot — of five to ten shots; inside one, each 1/20s tick fires by its own
+            // throw, never two ticks running, so the shots come unevenly, with no beat.
+            let burstSlot = 4.5
             let burstIndex = UInt64(max(0, floor(t / burstSlot)))
             var burst = Seeded(state: 0x4A27 &+ burstIndex &* 7919)
-            let firing = burst.next() < 0.5
-            let burstLength = 0.25 + burst.next() * 0.6
+            let firing = burst.next() < 0.75
+            let burstLength = 0.75 + burst.next() * 0.75
             let burstStart = burst.next() * (burstSlot - burstLength)
             let into = t.truncatingRemainder(dividingBy: burstSlot) - burstStart
             if firing, into > 0, into < burstLength {
-                let shot = UInt64(floor(t * 14))
+                let shot = UInt64(floor(t * 20))
                 func fires(_ tick: UInt64) -> Bool {
                     var roll = Seeded(state: 0xF1A5 &+ tick &* 104729)
-                    return roll.next() < 0.5
+                    return roll.next() < 0.6
                 }
                 var flicker = Seeded(state: 0xF1A6 &+ shot &* 7919)
                 if fires(shot), !fires(shot &- 1) {

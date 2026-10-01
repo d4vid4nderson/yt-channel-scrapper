@@ -80,20 +80,19 @@ struct WidgetThemeIntent: WidgetConfigurationIntent {
 /// through Same as App. The colours still come from the app, by id.
 enum WidgetTheme: String, AppEnum {
     case sameAsApp
-    case classic, bladeRunner, dune, middleEarth, prancingPony, synthwave, grid, nostromo, nostromoTeal
+    case classic, bladeRunner, dune, middleEarth, synthwave, grid, ringWorld, nostromoTeal
 
     static let typeDisplayRepresentation: TypeDisplayRepresentation = "Theme"
     static let caseDisplayRepresentations: [WidgetTheme: DisplayRepresentation] = [
         .sameAsApp: "Same as App",
         .classic: "Classic",
-        .bladeRunner: "Blade Runner",
+        .bladeRunner: "Blade Runner 2049",
         .dune: "Dune",
         .middleEarth: "Middle-earth",
-        .prancingPony: "The Prancing Pony",
-        .synthwave: "Synthwave",
+        .synthwave: "Glitch",
         .grid: "The Grid",
-        .nostromo: "Nostromo",
-        .nostromoTeal: "Nostromo Teal",
+        .ringWorld: "Ring World",
+        .nostromoTeal: "Nostromo",
     ]
 }
 
