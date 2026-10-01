@@ -2187,10 +2187,31 @@ struct ThemeBackdrop: View {
             var light = c
             light.blendMode = .plusLighter
             let beam = CGPoint(x: frame.minX + frame.width * 0.522, y: frame.minY + frame.height * 0.69)
-            let pulse = 0.6 + 0.4 * sin(t * 0.9)
+            // A slow, uneven flicker, the Forerunner machine drawing power: a long fade up
+            // and down, with now and then a soft dip as if the beam faltered.
+            let slow = 0.5 + 0.5 * sin(t * 0.7)
+            let dip = 1 - 0.5 * max(0, sin(t * 2.3) * sin(t * 0.37 + 1))
+            let pulse = (0.25 + 0.75 * slow) * dip
             light.fill(all, with: .radialGradient(
-                Gradient(colors: [th.accent2.opacity(0.35 * pulse * k), th.accent2.opacity(0.10 * k), .clear]),
-                center: beam, startRadius: 0, endRadius: frame.width * 0.08))
+                Gradient(stops: [.init(color: Color.white.opacity(0.35 * pulse * k), location: 0),
+                                 .init(color: th.accent2.opacity(0.55 * pulse * k), location: 0.25),
+                                 .init(color: th.accent2.opacity(0.12 * pulse * k), location: 0.6),
+                                 .init(color: .clear, location: 1)]),
+                center: beam, startRadius: 0, endRadius: frame.width * 0.11))
+            // The beam itself, rising from the ground into the tower.
+            let top = CGPoint(x: beam.x - frame.width * 0.004, y: frame.minY + frame.height * 0.58)
+            var shaft = Path()
+            shaft.move(to: CGPoint(x: beam.x - frame.width * 0.008, y: beam.y))
+            shaft.addLine(to: CGPoint(x: top.x - frame.width * 0.004, y: top.y))
+            shaft.addLine(to: CGPoint(x: top.x + frame.width * 0.004, y: top.y))
+            shaft.addLine(to: CGPoint(x: beam.x + frame.width * 0.008, y: beam.y))
+            shaft.closeSubpath()
+            light.drawLayer { glow in
+                glow.addFilter(.blur(radius: 6))
+                glow.fill(shaft, with: .linearGradient(
+                    Gradient(colors: [th.accent2.opacity(0.7 * pulse * k), th.accent2.opacity(0.1 * pulse * k)]),
+                    startPoint: beam, endPoint: top))
+            }
             // The Warthog's gun, firing now and then: short bursts of muzzle flash at the
             // barrel's tip (measured off the picture), the flame thrown out along the barrel.
             // Small and dim — gunfire across the valley, not a strobe in your face.
