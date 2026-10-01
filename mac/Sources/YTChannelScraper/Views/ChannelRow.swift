@@ -149,13 +149,13 @@ struct ChannelRow: View {
         .padding(.vertical, 8)
         .frame(minHeight: 64)
         .background(Palette.rowPlate)
-        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous, seed: Torn.seed(channel.id)))
         .overlay {
-            ThemedRect(cornerRadius: corner, style: .continuous)
+            ThemedRect(cornerRadius: corner, style: .continuous, seed: Torn.seed(channel.id))
                 .strokeBorder(hovering ? Palette.ink(0.22) : Palette.ink(0.12),
                               lineWidth: 1)
         }
-        .themeEdge(radius: corner, lit: hovering)
+        .themeEdge(radius: corner, lit: hovering, seed: Torn.seed(channel.id))
         .shadow(color: .black.opacity(hovering ? 0.10 : 0.05), radius: hovering ? 9 : 6,
                 y: hovering ? 5 : 3)
         .offset(y: hovering ? -1 : 0)

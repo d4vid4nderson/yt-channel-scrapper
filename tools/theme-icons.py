@@ -29,7 +29,7 @@ THEMES = {
     "bladeRunner":  ("#123038", "#06090c", "#f0438c", "#ffffff"),
     "dune":         ("#6a3a14", "#130c06", "#e0822f", "#1b1007"),
     "middleEarth":  ("#3a2814", "#120c07", "#d9b060", "#120c07"),
-    "synthwave":    ("#1e2a2e", "#090a0c", "#f2553c", "#ffffff"),
+    "synthwave":    ("#1e2a2e", "#090a0c", "#ff7a6e", "#ffffff"),
     "grid":         ("#04303e", "#000407", "#18e4ff", "#00141a"),
     "nostromo":     ("#0a3a1c", "#010602", "#3dff7a", "#011006"),
     "nostromoTeal": ("#063a3e", "#010607", "#2ee8e0", "#011214"),

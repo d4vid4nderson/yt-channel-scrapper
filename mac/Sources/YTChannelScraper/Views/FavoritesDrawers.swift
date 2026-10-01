@@ -258,7 +258,7 @@ private struct DrawerChannelRow: View {
     // Button outranks a parent's tap gesture.
     var body: some View {
         card
-            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous))
+            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(channel.id)))
             .onTapGesture(perform: open)
             .help("List \(channel.title)'s videos")
             .pointingHand()
@@ -305,12 +305,12 @@ private struct DrawerChannelRow: View {
             .padding(.horizontal, 9)
             .frame(height: 46)
             .background(Palette.tileSurface(active: hovering))
-            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
+            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(channel.id)))
             .overlay {
-                ThemedRect(cornerRadius: 12, style: .continuous)
+                ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(channel.id))
                     .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-            .themeEdge(radius: 12, lit: hovering)
+            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(channel.id))
     }
 }
 
@@ -329,7 +329,7 @@ private struct DrawerVideoRow: View {
     // Button outranks a parent's tap gesture.
     var body: some View {
         card
-            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous))
+            .contentShape(ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(video.id)))
             .onTapGesture(perform: preview)
             .help("Preview “\(video.title)”")
             .pointingHand()
@@ -374,12 +374,12 @@ private struct DrawerVideoRow: View {
             .padding(.vertical, 8)
             .frame(minHeight: 56)
             .background(Palette.tileSurface(active: hovering))
-            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous))
+            .clipShape(ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(video.id)))
             .overlay {
-                ThemedRect(cornerRadius: 12, style: .continuous)
+                ThemedRect(cornerRadius: 12, style: .continuous, seed: Torn.seed(video.id))
                     .strokeBorder(Palette.ink(hovering ? 0.16 : 0.075), lineWidth: 1)
             }
-            .themeEdge(radius: 12, lit: hovering)
+            .themeEdge(radius: 12, lit: hovering, seed: Torn.seed(video.id))
         .animation(.easeOut(duration: 0.14), value: hovering)
     }
 

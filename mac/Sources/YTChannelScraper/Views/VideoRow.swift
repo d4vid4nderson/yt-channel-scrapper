@@ -102,12 +102,12 @@ struct VideoRow: View {
                 Palette.rowPlate
             }
         }
-        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous))
+        .clipShape(ThemedRect(cornerRadius: corner, style: .continuous, seed: Torn.seed(video.id)))
         .overlay {
-            ThemedRect(cornerRadius: corner, style: .continuous)
+            ThemedRect(cornerRadius: corner, style: .continuous, seed: Torn.seed(video.id))
                 .strokeBorder(borderColor, lineWidth: 1)
         }
-        .themeEdge(radius: corner, lit: isPicked || hovering)
+        .themeEdge(radius: corner, lit: isPicked || hovering, seed: Torn.seed(video.id))
         .shadow(color: shadowColor, radius: hovering ? 9 : 6, y: hovering ? 5 : 3)
         .offset(y: hovering ? -1 : 0)
         .animation(.easeOut(duration: 0.15), value: hovering)

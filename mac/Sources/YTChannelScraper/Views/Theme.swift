@@ -398,22 +398,22 @@ extension Theme {
         lcd: LCD(background: hex(0x0C0804), ink: hex(0xE8C77A), glow: hex(0xC9883A))
     )
 
-    /// Retro: a signal coming apart. The palette is the glitch picture's — coral, teal
-    /// and a cold pale grey on black — the panels' rules printed twice out of register,
+    /// Glitch: a signal coming apart. The palette is the glitch picture's — a pink-orange,
+    /// teal and a cold pale grey on black — the panels' rules printed twice out of register,
     /// headings in Rubik Glitch (its letters already broken) with the same red and cyan
     /// split, a terminal's VT323 in the LCD, and every outline torn (`Torn`).
     /// The `synthwave` id is kept so a saved choice and its icon carry over.
     static let synthwave = Theme(
         id: .synthwave,
-        name: "Retro",
+        name: "Glitch",
         tagline: "A glitched signal on old tape",
         appearance: .dark,
         ink: hex(0xE4EAEC),
-        accent: hex(0xF2553C),
-        accentHot: hex(0xFF7A5C),
+        accent: hex(0xFF7A6E),
+        accentHot: hex(0xFF9C8C),
         accent2: hex(0x3CC8C0),
-        edgeTint: hex(0xF2553C),
-        brand: hex(0xF2553C),
+        edgeTint: hex(0xFF7A6E),
+        brand: hex(0xFF7A6E),
         ground: hex(0x090A0C),
         surface: hex(0x111316),
         card: hex(0x15181B).opacity(0.9),
@@ -423,7 +423,7 @@ extension Theme {
         onFill: .white,
         good: hex(0x3CC8C0),
         warn: hex(0xFFC44A),
-        glow: hex(0xF2553C),
+        glow: hex(0xFF7A6E),
         glowDeep: hex(0x1E5A5A),
         pickedMid: hex(0x1A1214),
         pickedFar: hex(0x2A1416),
@@ -434,7 +434,7 @@ extension Theme {
         type: Typeface(display: ["RubikGlitch-Regular"], displayCaps: true,
                        displayTracking: 0.5, displaySplit: true),
         backdrop: .glitch,
-        aurora: [hex(0xF2553C), hex(0x3CC8C0), hex(0x1E5A5A), hex(0xE4EAEC)],
+        aurora: [hex(0xFF7A6E), hex(0x3CC8C0), hex(0x1E5A5A), hex(0xE4EAEC)],
         lcd: LCD(background: hex(0x050607), ink: hex(0x3CC8C0), glow: hex(0x3CC8C0),
                  font: "VT323-Regular"),
         highlight: hex(0x3CC8C0)
@@ -722,11 +722,15 @@ extension View {
 struct ThemedRect: InsettableShape {
     var cornerRadius: CGFloat
     var style: RoundedCornerStyle = .circular
+    /// Which tear, for a theme that tears its outlines (`Torn`): a list's rows are all
+    /// one size, so each passes its own seed or they would all break the same way.
+    var seed: Int = 0
     private var inset: CGFloat = 0
 
-    init(cornerRadius: CGFloat, style: RoundedCornerStyle = .circular) {
+    init(cornerRadius: CGFloat, style: RoundedCornerStyle = .circular, seed: Int = 0) {
         self.cornerRadius = cornerRadius
         self.style = style
+        self.seed = seed
     }
 
     func path(in rect: CGRect) -> Path {
@@ -740,7 +744,7 @@ struct ThemedRect: InsettableShape {
         case .facetted(let scale):
             return Facet(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
         case .glitched(let scale):
-            return Torn(cut: max(cornerRadius * scale - inset * 0.4, 0)).path(in: r)
+            return Torn(cut: max(cornerRadius * scale - inset * 0.4, 0), seed: seed).path(in: r)
         case .square:
             return Rectangle().path(in: r)
         }
@@ -832,12 +836,21 @@ struct Facet: Shape {
 /// but one panel never changes shape as it is redrawn.
 struct Torn: Shape {
     var cut: CGFloat
+    var seed: Int = 0
+
+    /// A seed that is the same for the same thing on every launch (unlike `hashValue`).
+    static func seed(_ id: String) -> Int {
+        var h: UInt64 = 1469598103934665603
+        for b in id.utf8 { h = (h ^ UInt64(b)) &* 1099511628211 }
+        return Int(truncatingIfNeeded: h % 100_000)
+    }
 
     func path(in rect: CGRect) -> Path {
         let c = min(max(cut, 1.5), rect.width / 4, rect.height / 4)
-        // A stable 0…1 from the size, salted per use.
+        // A stable 0…1 from the size and the seed, salted per use.
         func f(_ salt: Double) -> CGFloat {
-            let v = sin(Double(rect.width) * 12.9898 + Double(rect.height) * 78.233 + salt * 37.719) * 43758.5453
+            let v = sin(Double(rect.width) * 12.9898 + Double(rect.height) * 78.233
+                        + Double(seed) * 0.6180339 + salt * 37.719) * 43758.5453
             return CGFloat(v - floor(v))
         }
         let w = rect.width, h = rect.height
@@ -900,8 +913,8 @@ extension View {
     /// The theme's border treatment round a container whose shape is
     /// `ThemedRect(cornerRadius: radius)`. `lit` is hover or selection: the edge brightens
     /// rather than the container changing shape. Nothing at all in Classic.
-    func themeEdge(radius: CGFloat, lit: Bool = false) -> some View {
-        themeEdge(ThemedRect(cornerRadius: radius, style: .continuous), lit: lit)
+    func themeEdge(radius: CGFloat, lit: Bool = false, seed: Int = 0) -> some View {
+        themeEdge(ThemedRect(cornerRadius: radius, style: .continuous, seed: seed), lit: lit)
     }
 
     /// The same, round any themed shape — the search pill's `ThemedCapsule`.
@@ -984,39 +997,57 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 private struct GlitchEdge<S: InsettableShape>: View {
     let shape: S
 
+    /// The last tick, at or before this one, that threw a change — so a reading holds
+    /// for an uneven run of ticks.
+    private static func heldTick(_ tick: Double, _ h: (Double) -> Double) -> Double {
+        var key = tick
+        for _ in 0..<10 where h(key * 1.7) < 0.6 { key -= 1 }
+        return key
+    }
+
     var body: some View {
         let theme = Theme.active
-        TimelineView(.animation(minimumInterval: 1.0 / 24)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            // Stepped, not smooth: a new reading every ~80ms, as a glitch has.
-            let step = floor(t * 12)
-            let j = { (salt: Double) -> CGFloat in
-                CGFloat(sin(step * 12.9898 + salt * 78.233) * 43758.5453).truncatingRemainder(dividingBy: 1)
-            }
-            let split = 1.5 + abs(j(1)) * 3
-            ZStack {
-                // Each misprinted rule glows in its own colour, as a lit tube would.
-                shape.strokeBorder(theme.accent.opacity(0.9), lineWidth: 1)
-                    .shadow(color: theme.accent.opacity(0.85), radius: 4)
-                    .offset(x: -split, y: j(2) * 1.2)
-                shape.strokeBorder(theme.accent2.opacity(0.9), lineWidth: 1)
-                    .shadow(color: theme.accent2.opacity(0.85), radius: 4)
-                    .offset(x: split, y: j(3) * 1.2)
-                shape.strokeBorder(theme.ink.opacity(0.5), lineWidth: 1)
-                GeometryReader { geo in
-                    let size = geo.size
+        GeometryReader { geo in
+            let size = geo.size
+            // Each control its own noise, from its size, so no two glitch in step.
+            let salt = Double(size.width * 0.731 + size.height * 1.37)
+            TimelineView(.animation(minimumInterval: 1.0 / 30)) { timeline in
+                let t = timeline.date.timeIntervalSinceReferenceDate
+                let h = { (x: Double) -> Double in
+                    let v = sin(x * 12.9898 + salt * 78.233) * 43758.5453
+                    return v - floor(v)
+                }
+                // Bursts and quiet spells of uneven length: the time is cut into short
+                // windows, and each is lively or calm by its own throw.
+                let window = floor(t / 0.3)
+                let active = h(window * 3.1) < 0.55
+                // Within a burst a reading holds for an uneven number of ticks: walk back
+                // to the last tick that threw a change.
+                let key = Self.heldTick(floor(t * 30), h)
+                let j = { (n: Double) -> CGFloat in CGFloat(h(key * 0.913 + n * 17.1)) * 2 - 1 }
+                let split = active ? 1.2 + abs(j(1)) * 3.5 : 0.8
+                ZStack {
+                    // Each misprinted rule glows in its own colour, as a lit tube would.
+                    shape.strokeBorder(theme.accent.opacity(0.9), lineWidth: 1)
+                        .shadow(color: theme.accent.opacity(0.85), radius: 4)
+                        .offset(x: -split, y: active ? j(2) * 1.4 : 0)
+                    shape.strokeBorder(theme.accent2.opacity(0.9), lineWidth: 1)
+                        .shadow(color: theme.accent2.opacity(0.85), radius: 4)
+                        .offset(x: split, y: active ? j(3) * 1.4 : 0)
+                    shape.strokeBorder(theme.ink.opacity(0.5), lineWidth: 1)
                     ZStack(alignment: .topLeading) {
                         ForEach(0..<3, id: \.self) { i in
-                            let show = j(10 + Double(i)) > 0.1
-                            let y = size.height * abs(j(20 + Double(i)))
-                            let w = size.width * (0.2 + abs(j(30 + Double(i))) * 0.6)
-                            let x = (size.width - w) * abs(j(40 + Double(i)))
+                            let n = Double(i)
+                            let show = active && j(10 + n) > -0.2
+                            let y = size.height * abs(j(20 + n))
+                            let w = size.width * (0.15 + abs(j(30 + n)) * 0.6)
+                            let x = (size.width - w) * abs(j(40 + n))
+                            let tint = j(70 + n) > 0 ? theme.accent : theme.accent2
                             Rectangle()
-                                .fill((i % 2 == 0 ? theme.accent : theme.accent2).opacity(show ? 0.55 : 0))
-                                .frame(width: w, height: 1 + abs(j(50 + Double(i))) * 2)
-                                .shadow(color: (i % 2 == 0 ? theme.accent : theme.accent2).opacity(show ? 0.8 : 0),
-                                        radius: 3)
-                                .offset(x: x + j(60 + Double(i)) * 6, y: y)
+                                .fill(tint.opacity(show ? 0.6 : 0))
+                                .frame(width: w, height: 1 + abs(j(50 + n)) * 2)
+                                .shadow(color: tint.opacity(show ? 0.8 : 0), radius: 3)
+                                .offset(x: x + j(60 + n) * 6, y: y)
                         }
                     }
                     .frame(width: size.width, height: size.height, alignment: .topLeading)
@@ -1766,7 +1797,21 @@ struct ThemeBackdrop: View {
 
     // MARK: Synthwave and the Grid
 
-    /// Retro's picture: `Backdrop-synthwave.jpg`, family build only.
+    /// How strong a burst of fringing is at `t`, 0…1: most of the time nothing, now and
+    /// then a swell lasting a fraction of a second, at uneven moments.
+    private static func glitchBurst(_ t: Double, salt: UInt64) -> Double {
+        let slot = 1.7
+        let cycle = UInt64(max(0, floor(t / slot)))
+        var rng = Seeded(state: 0xB0257 &+ cycle &* 7919 &+ salt &* 104729)
+        guard rng.next() < 0.45 else { return 0 }
+        let start = rng.next() * (slot - 0.5)
+        let span = 0.2 + rng.next() * 0.3
+        let age = t.truncatingRemainder(dividingBy: slot) - start
+        guard age > 0, age < span else { return 0 }
+        return sin(.pi * age / span)
+    }
+
+    /// The Glitch theme's picture: `Backdrop-synthwave.jpg`, family build only.
     nonisolated(unsafe) private static let retroPicture = picture("synthwave")
 
     /// A glitched signal: the picture (when the build has it) darkened, its colour
@@ -1778,27 +1823,54 @@ struct ThemeBackdrop: View {
                                _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
         if let picture = retroPicture {
-            let frame = drawPicture(&c, s, picture, k, t)
             let image = c.resolve(picture)
-            // Fringing: the picture again in red and in cyan, a few pixels either side.
-            let split = 3 + 2 * CGFloat(sin(t * 0.4))
+            // A burst: a stretch of a fraction of a second, at uneven moments, in which
+            // the picture breaks up. Inside it time moves in hard steps — a new broken
+            // frame every ~70ms, held — which is what makes it a glitch and not a slide.
+            let burst = glitchBurst(t, salt: 1)
+            let breaking = burst > 0
+            let step = UInt64(max(0, floor(t * 15)))
+            var frameRNG = Seeded(state: 0xF4A3E &+ step &* 2654435761)
+            // The whole picture jolts a little when it breaks.
+            let jolt = breaking && frameRNG.next() < 0.5
+                ? CGPoint(x: CGFloat(frameRNG.next() * 12 - 6), y: CGFloat(frameRNG.next() * 6 - 3))
+                : .zero
+            var base = c
+            base.translateBy(x: jolt.x, y: jolt.y)
+            let frame = drawPicture(&base, s, picture, k, t)
+            // Colour fringing: slight at rest; in a burst it snaps wide.
+            let split: CGFloat = breaking ? CGFloat(6 + frameRNG.next() * 18) : 3
             for (dx, tint) in [(-split, th.accent), (split, th.accent2)] {
                 var fringe = c
                 fringe.blendMode = .plusLighter
-                fringe.opacity = 0.18 * k
+                fringe.opacity = (breaking ? 0.32 : 0.16) * k
                 fringe.addFilter(.colorMultiply(tint))
-                fringe.draw(image, in: frame.offsetBy(dx: dx, dy: 0))
+                fringe.draw(image, in: frame.offsetBy(dx: dx + jolt.x, dy: jolt.y))
             }
-            // Bands slid out of line, each easing out and back on its own slow cycle.
-            for i in 0..<4 {
-                let n = Double(i)
-                let y = s.height * CGFloat((0.15 + n * 0.22 + 0.04 * sin(t * 0.07 + n)).truncatingRemainder(dividingBy: 1))
-                let h = s.height * CGFloat(0.015 + 0.02 * (0.5 + 0.5 * sin(t * 0.13 + n * 2)))
-                let shift = s.width * CGFloat(0.025 * sin(t * (0.23 + n * 0.05) + n * 1.7))
-                var band = c
-                band.clip(to: Path(CGRect(x: 0, y: y, width: s.width, height: h)))
-                band.opacity = min(1, 0.95 * k)
-                band.draw(image, in: frame.offsetBy(dx: shift, dy: 0))
+            if breaking {
+                // Torn slices: strips of the picture shifted hard sideways, some printed
+                // in one colour only.
+                for _ in 0..<(4 + Int(frameRNG.next() * 7)) {
+                    let y = s.height * CGFloat(frameRNG.next())
+                    let h = s.height * CGFloat(0.004 + frameRNG.next() * 0.06)
+                    let dx = s.width * CGFloat(frameRNG.next() * 0.3 - 0.15)
+                    var slice = c
+                    slice.clip(to: Path(CGRect(x: 0, y: y, width: s.width, height: h)))
+                    if frameRNG.next() < 0.35 {
+                        slice.addFilter(.colorMultiply(frameRNG.next() < 0.5 ? th.accent : th.accent2))
+                    }
+                    slice.draw(image, in: frame.offsetBy(dx: dx, dy: 0))
+                }
+                // Macroblocks: squares of the picture copied from somewhere else.
+                for _ in 0..<(2 + Int(frameRNG.next() * 5)) {
+                    let side = s.width * CGFloat(0.03 + frameRNG.next() * 0.09)
+                    let rect = CGRect(x: s.width * CGFloat(frameRNG.next()), y: s.height * CGFloat(frameRNG.next()),
+                                      width: side * CGFloat(1 + frameRNG.next() * 3), height: side)
+                    var block = c
+                    block.clip(to: Path(rect))
+                    block.draw(image, in: frame.offsetBy(dx: CGFloat(frameRNG.next() * 160 - 80),
+                                                         dy: CGFloat(frameRNG.next() * 120 - 60)))
+                }
             }
             c.fill(all, with: .color(th.ground.opacity(0.5)))
         }
