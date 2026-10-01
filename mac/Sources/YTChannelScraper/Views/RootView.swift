@@ -546,9 +546,17 @@ private struct PanelSwitches: View {
                         let themed = Theme.active.id != .classic
                         // Ring World: the dark armour plate, with only the rim and lettering
                         // in the visor's orange.
-                        shape.fill(Theme.active.markOnHighlight
-                                   ? (Theme.active.markFill ?? Theme.active.glowDeep)
-                                   : themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
+                        Group {
+                            if Theme.active.markOnHighlight {
+                                // Lit from above: the lighter plate at the top running down
+                                // to the dark one, so it reads as moulded, not printed.
+                                shape.fill(LinearGradient(
+                                    colors: [Theme.active.glowDeep, Theme.active.markFill ?? Theme.active.glowDeep],
+                                    startPoint: .top, endPoint: .bottom))
+                            } else {
+                                shape.fill(themed ? Self.chosen.opacity(0.18) : Palette.ink(0.12))
+                            }
+                        }
                             .overlay {
                                 if themed { shape.strokeBorder(Self.chosen.opacity(0.7), lineWidth: 1) }
                             }
@@ -793,6 +801,10 @@ private struct SearchPill: View {
                         if !ready {
                             ThemedCapsule().strokeBorder(Palette.fieldInk.opacity(0.16), lineWidth: 1.5)
                         } else if marked {
+                            ThemedCapsule().fill(LinearGradient(
+                                stops: [.init(color: Color.white.opacity(0.12), location: 0),
+                                        .init(color: .clear, location: 0.6)],
+                                startPoint: .top, endPoint: .bottom))
                             ThemedCapsule().strokeBorder(Theme.active.litTint.opacity(0.9), lineWidth: 1)
                         }
                     }
