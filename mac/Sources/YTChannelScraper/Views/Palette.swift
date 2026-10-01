@@ -279,7 +279,11 @@ enum Palette {
     static func tileSurface(active: Bool) -> some View {
         ZStack {
             ink(active ? 0.075 : 0.04)
-            if active {
+            if active && theme.markOnHighlight {
+                // The mark's plate, lit from above: lighter at the top, dark at the foot.
+                LinearGradient(colors: [theme.glowDeep, theme.markFill ?? theme.glowDeep],
+                               startPoint: .top, endPoint: .bottom)
+            } else if active {
                 RadialGradient(
                     stops: [
                         .init(color: glow(0.30), location: 0),
