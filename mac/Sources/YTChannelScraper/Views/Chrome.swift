@@ -93,6 +93,14 @@ struct ChromeButtonStyle: ButtonStyle {
                 .frame(minWidth: square ? nil : height)
                 .background(fill(lit: lit, pressed: configuration.isPressed), in: shape)
                 .overlay { shape.strokeBorder(hairline(lit: lit), lineWidth: 1) }
+                // A skin's buttons are moulded, not outlined: raised at rest, pushed in
+                // when pressed or on.
+                .overlay {
+                    if themed, Theme.active.edge == .bevel, kind == .secondary {
+                        Bevel(shape: shape, lit: lit, pressed: configuration.isPressed || isOn)
+                            .allowsHitTesting(false)
+                    }
+                }
                 .modifier(PrimaryEdge(on: kind == .primary && enabled, shape: shape, lit: lit))
                 .contentShape(shape)
                 .onHover { hovering = $0 }

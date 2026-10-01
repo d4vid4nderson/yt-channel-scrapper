@@ -36,6 +36,12 @@ struct PlayerView: NSViewRepresentable {
         // Detach only — never pause. This view is torn down when the preview hands the
         // player to the island, and pausing here stopped playback the instant you
         // minimised the window. Lifecycle belongs to PreviewSession / MiniPlayer.
-        view.player = nil
+        //
+        // On the next turn of the run loop, not here. Dismantling happens inside
+        // SwiftUI's layout pass — a theme change rebuilds the whole window — and
+        // detaching the player there makes AVKit re-enable its buttons, which sends
+        // AppKit recomputing the key-view loop, which asks SwiftUI for geometry it is in
+        // the middle of producing: an abort in AttributeGraph.
+        DispatchQueue.main.async { view.player = nil }
     }
 }

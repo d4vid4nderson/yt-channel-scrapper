@@ -91,11 +91,16 @@ struct NowPlayingMonitor: View {
                 Spacer(minLength: 0)
                 Pulse(player: player, analysis: analysis)
             }
-            Text(video.title)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(Palette.ink(1))
-                .lineLimit(1)
-            Track(player: player, analysis: analysis)
+            // The title and the waveform share one LCD in a skin, as a player's display
+            // carried the track name over its visualiser.
+            VStack(alignment: .leading, spacing: 5) {
+                Text(video.title)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.active.lcd?.ink ?? Palette.ink(1))
+                    .lineLimit(1)
+                Track(player: player, analysis: analysis)
+            }
+            .lcdWell()
             HStack(spacing: 4) {
                 control("gobackward.15", help: "Back 15 seconds") { skip(-15) }
                 control(isPlaying ? "pause.fill" : "play.fill", help: isPlaying ? "Pause" : "Play",
@@ -162,6 +167,8 @@ struct NowPlayingMonitor: View {
     private struct Track: View {
         let player: AVPlayer
         let analysis: TrackAnalysis
+        /// Inside a skin's LCD the waveform is drawn in the display's colour.
+        @Environment(\.lcdInk) private var lcdInk
 
         var body: some View {
             TimelineView(.periodic(from: .now, by: 0.25)) { _ in
@@ -173,9 +180,9 @@ struct NowPlayingMonitor: View {
                     Text(Self.clock(now))
                     Canvas { c, size in
                         let playedX = size.width * fraction
-                        let accent = GraphicsContext.Shading.color(Palette.accent)
-                        let rest = GraphicsContext.Shading.color(Palette.ink(0.28))
-                        let pending = GraphicsContext.Shading.color(Palette.ink(0.12))
+                        let accent = GraphicsContext.Shading.color(lcdInk ?? Palette.accent)
+                        let rest = GraphicsContext.Shading.color(lcdInk?.opacity(0.28) ?? Palette.ink(0.28))
+                        let pending = GraphicsContext.Shading.color(lcdInk?.opacity(0.12) ?? Palette.ink(0.12))
                         guard known, analysis.peak > 0 else {
                             c.fill(Path(CGRect(x: 0, y: size.height / 2 - 1.5, width: size.width, height: 3)), with: rest)
                             c.fill(Path(CGRect(x: 0, y: size.height / 2 - 1.5, width: playedX, height: 3)), with: accent)

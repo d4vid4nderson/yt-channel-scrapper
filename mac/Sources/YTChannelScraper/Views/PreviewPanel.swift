@@ -166,6 +166,9 @@ struct PreviewPanel: View {
                     .foregroundStyle(Palette.ink(0.55))
                     .lineLimit(1)
             }
+            // In a skin, the title sits in its LCD, as a player's track name did.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .lcdWell(padding: EdgeInsets(top: 4, leading: 9, bottom: 4, trailing: 9))
             // The title is the part that gives way in a narrow window; the buttons keep
             // their labels.
             .layoutPriority(-1)

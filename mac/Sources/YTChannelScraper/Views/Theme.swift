@@ -52,14 +52,29 @@ struct Theme: Identifiable, @unchecked Sendable {
         case gradient
         /// A short bar of `edgeTint` on the leading end of the top edge — a glyph mark.
         case notch
+        /// A raised panel, the way a Winamp skin built its chrome: lit along the top,
+        /// shadowed along the bottom, a sheen across the upper half, and a hairline of
+        /// `edgeTint` inside. Lit (hover, selection) brightens it rather than glowing.
+        case bevel
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, rain, dunes, parchment, tavern, sunset, grid, scanlines }
+    enum Backdrop: Sendable { case aurora, haze, dunes, parchment, tavern, sunset, grid, scanlines }
+
+    /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
+    /// into the panel, its own lettering colour, and a little of that colour's light.
+    struct LCD: Sendable {
+        let background: Color
+        let ink: Color
+        let glow: Color
+    }
 
     struct Typeface: @unchecked Sendable {
         /// Applied to every system font in the app through the environment.
         var design: Font.Design = .default
+        /// Also app-wide. Standard in every theme now: a condensed or expanded body face
+        /// stretched every label and list in the app, which read as distorted rather than
+        /// as a look. Character belongs in the headings.
         var width: Font.Width = .standard
         /// Headings: the first of these faces the device has, else the system at
         /// `displayWeight`. A list because the Mac ships faces the phone does not.
@@ -125,6 +140,8 @@ struct Theme: Identifiable, @unchecked Sendable {
     /// Four disc colours for the Mac's corner bloom, hottest first. Empty keeps Classic's
     /// own hand-tuned set.
     let aurora: [Color]
+    /// Nil in Classic, which has no skin to set a display into.
+    let lcd: LCD?
 
     var colorScheme: ColorScheme? {
         switch appearance {
@@ -222,48 +239,50 @@ extension Theme {
             edge: .none,
             type: Typeface(),
             backdrop: .aurora,
-            aurora: []
+            aurora: [],
+            lcd: nil
         )
     }()
 
-    /// Los Angeles, November 2019. Magenta signage through blue-black rain, cyan tubes
-    /// round everything, and the smog lit amber from underneath.
+    /// Los Angeles and the dead Las Vegas, 2049. Not the first film's neon: smog lit
+    /// amber from inside, concrete, cold teal in the shadows, and dust hanging in the air.
+    /// Thin, light capitals; a bevelled panel rather than a glowing tube.
     static let bladeRunner = Theme(
         id: .bladeRunner,
-        name: "Blade Runner",
-        tagline: "Neon through rain, Los Angeles 2019",
+        name: "Blade Runner 2049",
+        tagline: "Amber haze over a dead city",
         appearance: .dark,
-        ink: hex(0xDCEBFF),
-        accent: hex(0xFF3E9A),
-        accentHot: hex(0xFF6CB4),
-        accent2: hex(0x2EE6FF),
-        edgeTint: hex(0x2EE6FF),
-        brand: hex(0xFF3E9A),
-        ground: hex(0x05070D),
-        surface: hex(0x0A0F1C),
-        card: hex(0x0D1424).opacity(0.9),
-        field: hex(0x0E1729),
-        fieldInk: hex(0xDCEBFF),
-        fieldRaised: hex(0x1A2640),
-        onFill: .white,
-        good: hex(0x3CF2C0),
-        warn: hex(0xFFB547),
-        glow: hex(0xFF3E9A),
-        glowDeep: hex(0x2748B8),
-        pickedMid: hex(0x110E22),
-        pickedFar: hex(0x22102C),
-        pickedEdge: hex(0x1F4A5C),
-        pickedEdgeHot: hex(0x2E7A90),
+        ink: hex(0xE6DED2),
+        accent: hex(0xD9792E),
+        accentHot: hex(0xEC8E45),
+        accent2: hex(0x7FA6A8),
+        edgeTint: hex(0xB8692C),
+        brand: hex(0xD9792E),
+        ground: hex(0x0C0B0A),
+        surface: hex(0x141210),
+        card: hex(0x1A1714).opacity(0.92),
+        field: hex(0x1C1916),
+        fieldInk: hex(0xE6DED2),
+        fieldRaised: hex(0x2A2520),
+        onFill: hex(0x160C05),
+        good: hex(0x9DB88A),
+        warn: hex(0xE8A64A),
+        glow: hex(0xC8692A),
+        glowDeep: hex(0x4A2A16),
+        pickedMid: hex(0x1A130E),
+        pickedFar: hex(0x2A1A10),
+        pickedEdge: hex(0x4A3020),
+        pickedEdgeHot: hex(0x6A4228),
         corners: .rounded(scale: 0.3),
-        edge: .neon,
-        type: Typeface(width: .condensed, display: ["Futura-CondensedMedium"],
-                       displayCaps: true, displayTracking: 3),
-        backdrop: .rain,
-        aurora: [hex(0xFF3E9A), hex(0xFF8A3D), hex(0x2748B8), hex(0x2EE6FF)]
+        edge: .bevel,
+        type: Typeface(displayWeight: .light, displayCaps: true, displayTracking: 1.6),
+        backdrop: .haze,
+        aurora: [hex(0xD9792E), hex(0xA9542A), hex(0x4A2A16), hex(0x7FA6A8)],
+        lcd: LCD(background: hex(0x0A0806), ink: hex(0xF0A05A), glow: hex(0xD9792E))
     )
 
     /// Arrakis at dusk. Umber and sand, spice orange for anything that matters, and the
-    /// blue of Fremen eyes as the rare second colour. Wide, thin, spaced-out capitals.
+    /// blue of Fremen eyes as the rare second colour. Thin, spaced capitals.
     static let dune = Theme(
         id: .dune,
         name: "Dune",
@@ -291,15 +310,15 @@ extension Theme {
         pickedEdge: hex(0x4A2E15),
         pickedEdgeHot: hex(0x6A3F1A),
         corners: .square,
-        edge: .notch,
-        type: Typeface(width: .expanded, displayWeight: .light, displayWidth: .expanded,
-                       displayCaps: true, displayTracking: 6),
+        edge: .bevel,
+        type: Typeface(displayWeight: .light, displayCaps: true, displayTracking: 2),
         backdrop: .dunes,
-        aurora: [hex(0xE0822F), hex(0xF2B45A), hex(0x8A3C12), hex(0xF7D08A)]
+        aurora: [hex(0xE0822F), hex(0xF2B45A), hex(0x8A3C12), hex(0xF7D08A)],
+        lcd: LCD(background: hex(0x0E0804), ink: hex(0xF2B45A), glow: hex(0xE0822F))
     )
 
-    /// A page from the Red Book, bound in Rivendell. Sepia ink on parchment, gilt rules
-    /// with elven knotwork in the corners, oxblood for the things you press, and
+    /// A page from the Red Book, bound in Rivendell. Sepia ink on parchment, gilt rules,
+    /// oxblood for the things you press, and
     /// Luminari's uncial-flavoured capitals on the Mac — the phone has no such face and
     /// sets its headings in Baskerville.
     static let middleEarth = Theme(
@@ -329,11 +348,16 @@ extension Theme {
         pickedEdge: hex(0xD6BC86),
         pickedEdgeHot: hex(0xC4A260),
         corners: .rounded(scale: 0.4),
-        edge: .knotwork,
+        // The skin's bevel with its gilt rule, not a knot in every corner: on every row,
+        // card and button at once that was a page of swirls.
+        edge: .bevel,
         type: Typeface(design: .serif, display: ["Luminari-Regular", "Baskerville-SemiBold"],
-                       displayCaps: true, displayTracking: 2),
+                       displayCaps: true, displayTracking: 0.8),
         backdrop: .parchment,
-        aurora: [hex(0xD8B86A), hex(0xE2C98E), hex(0xC49A58), hex(0xEAD7A8)]
+        aurora: [hex(0xD8B86A), hex(0xE2C98E), hex(0xC49A58), hex(0xEAD7A8)],
+        // A page, so the display is a darker panel of the same paper with sepia on it
+        // rather than a lit screen — there is nothing electric in Rivendell.
+        lcd: LCD(background: hex(0xE2D1A8), ink: hex(0x3A2814), glow: .clear)
     )
 
     /// The Prancing Pony, Bree. Dark oak and firelight, brass on everything that is held,
@@ -367,13 +391,14 @@ extension Theme {
         corners: .rounded(scale: 0.25),
         edge: .carved,
         type: Typeface(design: .serif, display: ["Copperplate-Bold"],
-                       displayCaps: true, displayTracking: 1.5),
+                       displayCaps: true, displayTracking: 0.5),
         backdrop: .tavern,
-        aurora: [hex(0xFF8A2A), hex(0xD9A441), hex(0x7A2E12), hex(0xFFC46B)]
+        aurora: [hex(0xFF8A2A), hex(0xD9A441), hex(0x7A2E12), hex(0xFFC46B)],
+        lcd: LCD(background: hex(0x0F0804), ink: hex(0xF0BE5A), glow: hex(0xD9A441))
     )
 
-    /// 1986, on a VHS cover. A sunset cut into stripes over a magenta grid, hot pink
-    /// running into cyan along every edge, and heavy italic capitals.
+    /// 1986, on a VHS cover. A violet sky with stars over a magenta floor, chrome panels,
+    /// and heavy italic capitals. No sun: it sat behind whatever was centred on the page.
     static let synthwave = Theme(
         id: .synthwave,
         name: "Synthwave",
@@ -401,15 +426,17 @@ extension Theme {
         pickedEdge: hex(0x4A1260),
         pickedEdgeHot: hex(0x6A1A80),
         corners: .rounded(scale: 0.6),
-        edge: .gradient,
+        edge: .bevel,
         type: Typeface(display: ["AvenirNext-HeavyItalic"],
-                       displayCaps: true, displayTracking: 1.5),
+                       displayCaps: true, displayTracking: 0.4),
         backdrop: .sunset,
-        aurora: [hex(0xFF2A6D), hex(0xFF8C42), hex(0x7B2CBF), hex(0xFFD319)]
+        aurora: [hex(0xFF2A6D), hex(0xFF8C42), hex(0x7B2CBF), hex(0xFFD319)],
+        lcd: LCD(background: hex(0x08011A), ink: hex(0x05D9E8), glow: hex(0x05D9E8))
     )
 
-    /// Inside the machine, 1982. Black, lines of cyan light, and corners cut on the
-    /// diagonal rather than rounded.
+    /// Inside the machine, 1982. Black, light cycles drawing their trails low across it,
+    /// and corners cut on the diagonal rather than rounded. No grid on the backdrop: it
+    /// sat over everything as a mesh.
     static let grid = Theme(
         id: .grid,
         name: "The Grid",
@@ -437,11 +464,11 @@ extension Theme {
         pickedEdge: hex(0x0E3F52),
         pickedEdgeHot: hex(0x146680),
         corners: .chamfered(scale: 0.9),
-        edge: .neon,
-        type: Typeface(displayWeight: .semibold, displayWidth: .expanded,
-                       displayCaps: true, displayTracking: 4),
+        edge: .bevel,
+        type: Typeface(displayWeight: .semibold, displayCaps: true, displayTracking: 1.6),
         backdrop: .grid,
-        aurora: [hex(0x18E4FF), hex(0x0A6FA8), hex(0x0B3D66), hex(0x7FF3FF)]
+        aurora: [hex(0x18E4FF), hex(0x0A6FA8), hex(0x0B3D66), hex(0x7FF3FF)],
+        lcd: LCD(background: hex(0x00070A), ink: hex(0x7FF3FF), glow: hex(0x18E4FF))
     )
 
     /// MU-TH-UR 6000, the ship's computer. Green phosphor on black glass, monospaced
@@ -475,9 +502,10 @@ extension Theme {
         corners: .square,
         edge: .brackets,
         type: Typeface(design: .monospaced, displayWeight: .bold,
-                       displayCaps: true, displayTracking: 3),
+                       displayCaps: true, displayTracking: 1.2),
         backdrop: .scanlines,
-        aurora: [hex(0x3DFF7A), hex(0x1A8A3C), hex(0x0B5A26), hex(0x9CFFB4)]
+        aurora: [hex(0x3DFF7A), hex(0x1A8A3C), hex(0x0B5A26), hex(0x9CFFB4)],
+        lcd: LCD(background: hex(0x000A03), ink: hex(0x3DFF7A), glow: hex(0x3DFF7A))
     )
 
     /// The same terminal, a different tube: teal and cyan phosphor, amber still for
@@ -511,9 +539,10 @@ extension Theme {
         corners: .square,
         edge: .brackets,
         type: Typeface(design: .monospaced, displayWeight: .bold,
-                       displayCaps: true, displayTracking: 3),
+                       displayCaps: true, displayTracking: 1.2),
         backdrop: .scanlines,
-        aurora: [hex(0x2EE8E0), hex(0x1A7F8A), hex(0x0B4F5A), hex(0x9CF6FF)]
+        aurora: [hex(0x2EE8E0), hex(0x1A7F8A), hex(0x0B4F5A), hex(0x9CF6FF)],
+        lcd: LCD(background: hex(0x00090A), ink: hex(0x2EE8E0), glow: hex(0x2EE8E0))
     )
 
     private static func hex(_ value: UInt32) -> Color {
@@ -872,8 +901,78 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
                 .fill(theme.edgeTint.opacity(lit ? 1 : 0.8))
                 .frame(width: 22, height: 2)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        case .bevel:
+            Bevel(shape: shape, lit: lit)
         }
     }
+}
+
+// MARK: - Skin chrome
+
+/// A raised panel, lit from above: the bevel every Winamp skin built its chrome from.
+///
+/// Three passes inside the shape. A rim that is light along the top and dark along the
+/// bottom, which is all a bevel is; a sheen over the upper half, which is what makes it
+/// read as moulded plastic or brushed metal rather than as a line drawing; and a hairline
+/// of the theme's tint just inside, so each skin's panels carry its colour. `pressed`
+/// turns the light round, as a button pushed into the panel would.
+struct Bevel<S: InsettableShape>: View {
+    let shape: S
+    var lit = false
+    var pressed = false
+
+    var body: some View {
+        let theme = Theme.active
+        let light = theme.isLight ? Color.white.opacity(0.75) : theme.ink.opacity(lit ? 0.30 : 0.20)
+        let dark = theme.isLight ? theme.ink.opacity(0.28) : Color.black.opacity(0.65)
+        let (top, bottom) = pressed ? (dark, light) : (light, dark)
+        ZStack {
+            shape.inset(by: 1)
+                .fill(LinearGradient(
+                    stops: [.init(color: (theme.isLight ? Color.white : theme.ink)
+                                    .opacity(pressed ? 0 : lit ? 0.09 : 0.055), location: 0),
+                            .init(color: .clear, location: 0.5)],
+                    startPoint: .top, endPoint: .bottom))
+            shape.strokeBorder(
+                LinearGradient(stops: [.init(color: top, location: 0),
+                                       .init(color: top.opacity(0.25), location: 0.45),
+                                       .init(color: bottom.opacity(0.4), location: 0.6),
+                                       .init(color: bottom, location: 1)],
+                               startPoint: .top, endPoint: .bottom),
+                lineWidth: 1)
+            shape.inset(by: 1.5)
+                .stroke(theme.edgeTint.opacity(lit ? 0.55 : 0.28), lineWidth: 0.6)
+        }
+    }
+}
+
+extension View {
+    /// Set into the theme's LCD, the way a skin's player showed its title and time: a
+    /// dark well sunk into the panel (lit along the bottom, shadowed along the top — the
+    /// bevel turned inward), the display's own colour, and a trace of its light. Nothing
+    /// in Classic.
+    @ViewBuilder
+    func lcdWell(padding: EdgeInsets = EdgeInsets(top: 5, leading: 9, bottom: 5, trailing: 9),
+                 radius: CGFloat = 6) -> some View {
+        if let lcd = Theme.active.lcd {
+            let shape = ThemedRect(cornerRadius: radius, style: .continuous)
+            self
+                .foregroundStyle(lcd.ink)
+                .shadow(color: lcd.glow.opacity(0.45), radius: 2.5)
+                .padding(padding)
+                .background(lcd.background, in: shape)
+                .overlay { Bevel(shape: shape, pressed: true).allowsHitTesting(false) }
+                .environment(\.lcdInk, lcd.ink)
+        } else {
+            self
+        }
+    }
+}
+
+extension EnvironmentValues {
+    /// The LCD's lettering colour, for anything inside a well that draws its own colours
+    /// (the Now Playing waveform) rather than taking the foreground style.
+    @Entry var lcdInk: Color? = nil
 }
 
 // MARK: - Knotwork
@@ -1034,7 +1133,7 @@ struct ThemeBackdrop: View {
         return Canvas { context, size in
             switch theme.backdrop {
             case .aurora: break
-            case .rain: Self.rain(&context, size, theme, k, t)
+            case .haze: Self.haze(&context, size, theme, k, t)
             case .dunes: Self.dunes(&context, size, theme, k, t)
             case .parchment: Self.parchment(&context, size, theme, k, t)
             case .tavern: Self.tavern(&context, size, theme, k, t)
@@ -1066,37 +1165,36 @@ struct ThemeBackdrop: View {
 
     private static let amber = Color(red: 1, green: 0.54, blue: 0.24)
 
-    // MARK: Blade Runner
+    // MARK: Blade Runner 2049
 
-    /// Rain in two depths: far drops short, dim and slow; near ones long, bright and fast.
-    /// All of it on the same slant, which is what makes it read as falling through wind
-    /// rather than as scratches.
-    private static func rain(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+    /// The dead city's air: an amber wash bleeding down from the top, two banks of haze
+    /// drifting so slowly they read as still, and dust hanging in it. No rain, no neon —
+    /// that was the first film.
+    private static func haze(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
-        horizonGlow(&c, s, amber, k)
-        horizonGlow(&c, s, th.accent, k * 0.8, height: 0.3)
-        let slant = 0.2
-        let area = s.width * s.height
-        for (layer, count, speed, length, weight, width) in [
-            (0, area / 3400, 520.0, 12.0, 0.08, 0.6),
-            (1, area / 9000, 980.0, 26.0, 0.16, 0.9),
-        ] {
-            var rng = Seeded(state: 2019 + UInt64(layer))
-            var streaks = Path()
-            for _ in 0..<Int(count) {
-                let x0 = rng.next() * (s.width + s.height * slant)
-                let phase = rng.next()
-                let len = length * (0.7 + rng.next() * 0.6)
-                let v = speed * (0.85 + rng.next() * 0.3)
-                let span = s.height + len
-                let y = (phase * span + t * v).truncatingRemainder(dividingBy: span) - len
-                let x = x0 - y * slant
-                streaks.move(to: CGPoint(x: x, y: y))
-                streaks.addLine(to: CGPoint(x: x - len * slant, y: y + len))
-            }
-            c.stroke(streaks, with: .color(th.accent2.opacity(weight * k)), lineWidth: width)
+        let all = Path(CGRect(origin: .zero, size: s))
+        c.fill(all, with: .linearGradient(
+            Gradient(stops: [.init(color: th.glow.opacity(0.20 * k), location: 0),
+                             .init(color: th.glowDeep.opacity(0.10 * k), location: 0.45),
+                             .init(color: .clear, location: 0.8)]),
+            startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+        for (i, (x, y, r, a)) in [(0.25, 0.30, 0.65, 0.16), (0.78, 0.55, 0.55, 0.12)].enumerated() {
+            let drift = CGFloat(sin(t * 0.03 + Double(i) * 2.1)) * s.width * 0.06
+            let center = CGPoint(x: s.width * x + drift, y: s.height * y)
+            c.fill(all, with: .radialGradient(
+                Gradient(colors: [th.glow.opacity(a * k), .clear]),
+                center: center, startRadius: 0, endRadius: max(s.width, s.height) * r))
         }
-        scanlines(&c, s, th, k * 0.5, t, glow: false, roll: false)
+        var rng = Seeded(state: 2049)
+        for _ in 0..<Int(s.width * s.height / 5200) {
+            let speed = 3 + rng.next() * 6
+            let span = s.width + 20
+            let x = (rng.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 10
+            let y = rng.next() * s.height + 6 * sin(t * (0.1 + rng.next() * 0.2) + rng.next() * 6)
+            let r = 0.5 + rng.next() * 1.1
+            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
+                   with: .color(th.accentHot.opacity((0.05 + rng.next() * 0.10) * k)))
+        }
     }
 
     // MARK: Dune
@@ -1122,9 +1220,8 @@ struct ThemeBackdrop: View {
 
     // MARK: Middle-earth
 
-    /// Paper, its burnt edges, and dust turning slowly in lamplight. The knotwork is kept
-    /// to the corners of the cards; a large knot behind the page was one ornament too
-    /// many.
+    /// Paper, its burnt edges, and dust turning slowly in lamplight. No knotwork, here
+    /// or on the panels: it was one ornament too many wherever it went.
     private static func parchment(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                   _ k: Double, _ t: Double) {
         var rng = Seeded(state: 1954)
@@ -1193,55 +1290,49 @@ struct ThemeBackdrop: View {
 
     // MARK: Synthwave and the Grid
 
+    /// A violet sky with fixed stars over a magenta floor running away to the horizon.
+    /// The stars do not twinkle — nothing on this screen flickers.
     private static func sunset(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                                _ k: Double, _ t: Double) {
-        // Low, so the sun sits under whatever is centred on the page rather than behind it.
-        let horizon = s.height * 0.76
-        horizonGlow(&c, s, th.glowDeep, k * 1.4, height: 0.7)
-        let d = min(s.width * 0.5, 280)
-        let sun = CGRect(x: s.width * 0.5 - d / 2, y: horizon - d * 0.72, width: d, height: d)
-        var disc = Path(ellipseIn: sun).intersection(Path(CGRect(x: 0, y: 0, width: s.width, height: horizon)))
-        // The stripes sink slowly into the horizon, a new one opening at the top of the
-        // band as each goes under.
-        var gaps = Path()
-        let pitch: CGFloat = 16
-        let drift = CGFloat((t * 4).truncatingRemainder(dividingBy: Double(pitch)))
-        var y = sun.midY - pitch + drift
-        while y < horizon {
-            let depth = max(0, (y - sun.midY) / (horizon - sun.midY))
-            gaps.addRect(CGRect(x: sun.minX, y: y, width: d, height: 1 + depth * 7))
-            y += pitch
+        // Low, below where the page's content usually ends, so the horizon line does not
+        // run through a card.
+        let horizon = s.height * 0.84
+        horizonGlow(&c, s, th.glowDeep, k * 1.4, height: 0.75)
+        var rng = Seeded(state: 1986)
+        for _ in 0..<Int(s.width * horizon / 6000) {
+            let r = 0.4 + rng.next() * 1.0
+            let star = CGRect(x: rng.next() * s.width, y: rng.next() * horizon * 0.9, width: r, height: r)
+            c.fill(Path(ellipseIn: star), with: .color(th.ink.opacity((0.12 + rng.next() * 0.28) * k)))
         }
-        disc = disc.subtracting(gaps)
-        c.fill(disc, with: .linearGradient(
-            Gradient(colors: [th.warn.opacity(0.4 * k), th.accent.opacity(0.4 * k)]),
-            startPoint: CGPoint(x: 0, y: sun.minY), endPoint: CGPoint(x: 0, y: horizon)))
-        perspectiveGrid(&c, s, horizon: horizon, color: th.accent, k: k, t: t, speed: 0.45)
+        c.fill(Path(CGRect(x: 0, y: horizon - 1, width: s.width, height: 2)),
+               with: .color(th.accent.opacity(0.22 * k)))
+        perspectiveGrid(&c, s, horizon: horizon, color: th.accent, k: k * 0.8, t: t, speed: 0.35)
     }
 
+    /// Light cycles: a few trails of light drawn low across the dark, each on its own
+    /// lane and at its own pace, one in the second colour. The horizon is only a glow.
     private static func grid(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
-        var flat = Path()
-        stride(from: 0, through: s.width, by: 36).forEach {
-            flat.move(to: CGPoint(x: $0, y: 0)); flat.addLine(to: CGPoint(x: $0, y: s.height))
+        horizonGlow(&c, s, th.accent, k * 0.6, height: 0.4)
+        // Low lanes, under where the page's content sits, so a trail does not cross a card.
+        for (lane, lap, leftward, second) in [(0.86, 9.0, false, false), (0.92, 13.0, true, true),
+                                              (0.97, 7.0, false, false)] {
+            let y = s.height * lane
+            let tail = min(260, s.width * 0.3)
+            let progress = CGFloat((t / lap).truncatingRemainder(dividingBy: 1))
+            let head = leftward ? s.width + tail - progress * (s.width + tail * 2)
+                                : -tail + progress * (s.width + tail * 2)
+            let start = leftward ? head + tail : head - tail
+            let color = second ? th.accent2 : th.accent
+            let shading = GraphicsContext.Shading.linearGradient(
+                Gradient(colors: [.clear, color.opacity(0.55 * k)]),
+                startPoint: CGPoint(x: start, y: y), endPoint: CGPoint(x: head, y: y))
+            let rect = CGRect(x: min(start, head), y: y - 0.75, width: tail, height: 1.5)
+            c.fill(Path(rect), with: shading)
+            c.fill(Path(rect.insetBy(dx: 0, dy: -3)), with: .linearGradient(
+                Gradient(colors: [.clear, color.opacity(0.12 * k)]),
+                startPoint: CGPoint(x: start, y: y), endPoint: CGPoint(x: head, y: y)))
         }
-        stride(from: 0, through: s.height, by: 36).forEach {
-            flat.move(to: CGPoint(x: 0, y: $0)); flat.addLine(to: CGPoint(x: s.width, y: $0))
-        }
-        c.stroke(flat, with: .color(th.accent.opacity(0.035 * k)), lineWidth: 0.5)
-        // A pulse of light running along one line of the flat grid at a time.
-        let lanes = max(1, Int(s.height * 0.6 / 36))
-        let lap = 6.0
-        let lane = Int(t / lap) % lanes
-        let run = CGFloat((t.truncatingRemainder(dividingBy: lap)) / lap) * (s.width + 240) - 120
-        let laneY = CGFloat(lane + 1) * 36
-        c.fill(Path(CGRect(x: run - 120, y: laneY - 0.75, width: 120, height: 1.5)),
-               with: .linearGradient(Gradient(colors: [.clear, th.accent.opacity(0.5 * k)]),
-                                     startPoint: CGPoint(x: run - 120, y: 0),
-                                     endPoint: CGPoint(x: run, y: 0)))
-        let horizon = s.height * 0.6
-        horizonGlow(&c, s, th.accent, k * 0.7, height: 0.42)
-        perspectiveGrid(&c, s, horizon: horizon, color: th.accent, k: k, t: t, speed: 0.3)
     }
 
     /// A floor of lines running away to a vanishing point, travelling towards you: the
