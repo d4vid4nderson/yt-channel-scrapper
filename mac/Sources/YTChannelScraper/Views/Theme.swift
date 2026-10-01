@@ -2124,36 +2124,74 @@ struct ThemeBackdrop: View {
                                      width: frame.width * region.width, height: frame.height * region.height)
                     var flash = c
                     flash.blendMode = .plusLighter
-                    flash.clip(to: Path(roundedRect: sky, cornerRadius: sky.width * 0.2))
-                    let glowAt = CGPoint(x: sky.midX + sky.width * CGFloat(strike.next() * 0.4 - 0.2),
-                                         y: sky.midY + sky.height * CGFloat(strike.next() * 0.3 - 0.15))
-                    flash.fill(Path(sky), with: .radialGradient(
-                        Gradient(colors: [white.opacity(0.35 * level * k), th.accent.opacity(0.12 * level * k), .clear]),
-                        center: glowAt, startRadius: 0, endRadius: sky.width * 0.6))
-                    // The bolt: a jagged walk from the top of the bank down and across it,
-                    // with a short fork, drawn as a bright core in a soft glow.
-                    var walk = Seeded(state: 0xB017 &+ strikeIndex &* 104729)
-                    var bolt = Path()
-                    var point = CGPoint(x: sky.minX + sky.width * CGFloat(0.2 + walk.next() * 0.6), y: sky.minY + 2)
-                    bolt.move(to: point)
-                    var fork: CGPoint?
-                    for step in 0..<10 {
-                        point = CGPoint(x: point.x + sky.width * CGFloat(walk.next() * 0.16 - 0.08),
-                                        y: point.y + sky.height * CGFloat(0.06 + walk.next() * 0.05))
-                        bolt.addLine(to: point)
-                        if step == 4 { fork = point }
+                    // The cloud lit from inside: a few soft glows of different sizes,
+                    // overlapping, each fading to nothing well inside the bank — no edge.
+                    var puffs = Seeded(state: 0xC10D &+ strikeIndex &* 6151)
+                    for _ in 0..<5 {
+                        let at = CGPoint(x: sky.minX + sky.width * CGFloat(0.2 + puffs.next() * 0.6),
+                                         y: sky.minY + sky.height * CGFloat(0.2 + puffs.next() * 0.6))
+                        let r = sky.width * CGFloat(0.18 + puffs.next() * 0.22)
+                        flash.fill(Path(ellipseIn: CGRect(x: at.x - r, y: at.y - r, width: r * 2, height: r * 2)),
+                                   with: .radialGradient(
+                                    Gradient(stops: [.init(color: white.opacity(0.22 * level * k), location: 0),
+                                                     .init(color: th.accent.opacity(0.08 * level * k), location: 0.45),
+                                                     .init(color: .clear, location: 1)]),
+                                    center: at, startRadius: 0, endRadius: r))
                     }
-                    if let f = fork {
-                        var q = f
-                        bolt.move(to: f)
-                        for _ in 0..<4 {
-                            q = CGPoint(x: q.x + sky.width * CGFloat(walk.next() * 0.12 + 0.02) * (left ? -1 : 1),
-                                        y: q.y + sky.height * CGFloat(0.04 + walk.next() * 0.04))
-                            bolt.addLine(to: q)
+                    // The bolt, grown the way lightning is drawn: split each segment and
+                    // nudge its middle sideways, again and again, so it is jagged at every
+                    // scale. A main channel thinning as it goes, and a few forks.
+                    var walk = Seeded(state: 0xB017 &+ strikeIndex &* 104729)
+                    func channel(from a: CGPoint, to b: CGPoint, roughness: CGFloat) -> [CGPoint] {
+                        var points = [a, b]
+                        var spread = roughness
+                        for _ in 0..<6 {
+                            var next: [CGPoint] = [points[0]]
+                            for (p, q) in zip(points, points.dropFirst()) {
+                                let dx = q.x - p.x, dy = q.y - p.y
+                                let length = max(hypot(dx, dy), 0.001)
+                                let nudge = CGFloat(walk.next() * 2 - 1) * spread
+                                next.append(CGPoint(x: (p.x + q.x) / 2 - dy / length * nudge,
+                                                    y: (p.y + q.y) / 2 + dx / length * nudge))
+                                next.append(q)
+                            }
+                            points = next
+                            spread *= 0.55
+                        }
+                        return points
+                    }
+                    func draw(_ points: [CGPoint], width: CGFloat, glow: Double) {
+                        var path = Path()
+                        path.addLines(points)
+                        flash.drawLayer { layer in
+                            layer.addFilter(.blur(radius: width * 3))
+                            layer.stroke(path, with: .color(th.accent.opacity(glow * 0.55 * level * k)),
+                                         lineWidth: width * 3)
+                        }
+                        // Tapering: the channel drawn in a few runs, each thinner than the last.
+                        let runs = 4
+                        let per = max(1, points.count / runs)
+                        for r in 0..<runs {
+                            let slice = Array(points[min(r * per, points.count - 1)..<min((r + 1) * per + 1, points.count)])
+                            guard slice.count > 1 else { continue }
+                            var piece = Path()
+                            piece.addLines(slice)
+                            flash.stroke(piece, with: .color(white.opacity(glow * 0.95 * level * k)),
+                                         style: StrokeStyle(lineWidth: width * CGFloat(1 - Double(r) * 0.18),
+                                                            lineCap: .round, lineJoin: .round))
                         }
                     }
-                    flash.stroke(bolt, with: .color(th.accent.opacity(0.35 * level * k)), lineWidth: 5)
-                    flash.stroke(bolt, with: .color(white.opacity(0.95 * level * k)), lineWidth: 1.2)
+                    let top = CGPoint(x: sky.minX + sky.width * CGFloat(0.25 + walk.next() * 0.5), y: sky.minY + 4)
+                    let bottom = CGPoint(x: top.x + sky.width * CGFloat(walk.next() * 0.5 - 0.25),
+                                         y: sky.maxY - sky.height * CGFloat(0.05 + walk.next() * 0.2))
+                    let main = channel(from: top, to: bottom, roughness: sky.height * 0.18)
+                    draw(main, width: 1.6, glow: 1)
+                    for _ in 0..<(2 + Int(walk.next() * 2)) {
+                        let from = main[Int(walk.next() * Double(main.count / 2)) + main.count / 6]
+                        let to = CGPoint(x: from.x + sky.width * CGFloat(walk.next() * 0.5 - 0.25),
+                                         y: from.y + sky.height * CGFloat(0.15 + walk.next() * 0.25))
+                        draw(channel(from: from, to: to, roughness: sky.height * 0.1), width: 0.8, glow: 0.6)
+                    }
                 }
             }
         }
