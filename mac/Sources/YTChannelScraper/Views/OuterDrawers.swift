@@ -119,16 +119,19 @@ final class OuterDrawers {
     }
 
     private func extended(_ kind: Kind, in window: NSWindow) -> NSRect {
+        // The panel is its full width beside the window plus the strip tucked behind it,
+        // and `DrawerChrome` keeps the content out of that strip — so nothing sits hard
+        // against the window's edge.
         let b = body(of: window)
-        let w = Layout.drawerWidth, h = Layout.downloadsHeight
+        let w = Layout.drawerWidth + Self.tuck + 8, h = Layout.downloadsHeight + Self.tuck + 8
         switch kind {
         case .saved:
-            return NSRect(x: b.minX - w + Self.tuck, y: b.minY, width: w, height: b.height)
+            return NSRect(x: b.minX - Layout.drawerWidth - 8, y: b.minY, width: w, height: b.height)
         case .family:
             return NSRect(x: b.maxX - Self.tuck, y: b.minY, width: w, height: b.height)
         case .downloads:
             let width = min(b.width - 48, 900)
-            return NSRect(x: b.midX - width / 2, y: window.frame.minY - h + Self.tuck,
+            return NSRect(x: b.midX - width / 2, y: window.frame.minY - Layout.downloadsHeight - 8,
                           width: width, height: h)
         }
     }
@@ -176,10 +179,24 @@ final class OuterDrawers {
         panel.isOpaque = false
         panel.hasShadow = true
         panel.animationBehavior = .none
-        let host = NSHostingView(rootView: DrawerChrome(content: content).themed())
+        // The tucked strip plus a margin of its own, so the content has room to breathe
+        // beside the window's edge rather than starting right at it.
+        let host = NSHostingView(rootView: DrawerChrome(kind: kind, inset: Self.tuck + 8,
+                                                        content: content).themed())
         host.sizingOptions = []
         panel.contentView = host
         return panel
+    }
+}
+
+private extension DrawerChrome {
+    /// The side that faces the window.
+    var edge: Edge.Set {
+        switch kind {
+        case .saved: .trailing
+        case .family: .leading
+        case .downloads: .top
+        }
     }
 }
 
@@ -193,11 +210,16 @@ final class DrawerPanel: NSPanel {
 /// The drawer's own outline: the panel's surface clipped to the theme's corner, with a
 /// hairline, so the part that shows outside the window reads as a finished edge.
 private struct DrawerChrome: View {
+    let kind: OuterDrawers.Kind
+    /// The strip of the panel that sits behind the window, kept clear of content.
+    let inset: CGFloat
     let content: AnyView
 
     var body: some View {
         content
             .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(edge, inset)
+            .background(Palette.sheetSurface)
             .clipShape(ThemedRect(cornerRadius: 10, style: .continuous))
             .overlay {
                 ThemedRect(cornerRadius: 10, style: .continuous)

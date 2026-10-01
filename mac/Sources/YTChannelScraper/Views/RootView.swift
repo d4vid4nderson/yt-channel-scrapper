@@ -24,6 +24,10 @@ struct RootView: View {
     /// kept. Nothing is dimmed, because nothing is blocked.
     private var isClassic: Bool { Theme.active.id == .classic }
     @State private var isFullScreen = false
+    /// The header row — home, the channel, the search — folded away, for more of the
+    /// player and the list. Only ever folds the collapsed header, never the hero, and is
+    /// remembered between launches. The View menu and the title-bar button both flip it.
+    @AppStorage("header.hidden") private var headerHidden = false
     /// The panels as drawers outside the window; see `OuterDrawers`.
     @State private var drawers = OuterDrawers()
 
@@ -126,6 +130,25 @@ struct RootView: View {
                         .fixedSize()
                 }
             }
+            // Always in the title bar, so the row can be brought back from wherever it
+            // was hidden. Only once there is a header to hide.
+            if collapsed {
+                ToolbarItem(placement: .primaryAction) {
+                    Button {
+                        withAnimation(Self.morph) { headerHidden.toggle() }
+                    } label: {
+                        Image(systemName: headerHidden ? "chevron.down" : "chevron.up")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Palette.ink(0.75))
+                            .frame(width: 22, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(headerHidden ? "Show the search bar  (⌥⌘F)" : "Hide the search bar  (⌥⌘F)")
+                    .accessibilityLabel(headerHidden ? "Show search bar" : "Hide search bar")
+                    .pointingHand()
+                }
+            }
         }
         // Dismissal goes through the model rather than straight at the flag, so closing
         // the sheet also clears whatever one-off answer it was showing.
@@ -169,8 +192,9 @@ struct RootView: View {
             // One number drives the whole transition: the header's height. The results
             // are offset by exactly that, so they are revealed from underneath as it
             // shrinks rather than being covered by it — one motion, not two.
-            let headerHeight = collapsed ? Chrome.header : geo.size.height
-            let resultsHeight = max(geo.size.height - Chrome.header, 0)
+            let bar = headerHidden ? 0 : Chrome.header
+            let headerHeight = collapsed ? bar : geo.size.height
+            let resultsHeight = max(geo.size.height - bar, 0)
 
             ZStack(alignment: .top) {
                 resultsArea(height: resultsHeight)

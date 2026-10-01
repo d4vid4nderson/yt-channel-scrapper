@@ -6,6 +6,8 @@ import AVFoundation
 struct YTChannelScraperApp: App {
     @State private var model = AppModel()
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
+    /// Shared with `RootView`, which folds the header row away when it is set.
+    @AppStorage("header.hidden") private var headerHidden = false
 
     var body: some Scene {
         WindowGroup {
@@ -29,6 +31,13 @@ struct YTChannelScraperApp: App {
                 .labelsHidden()
             }
             CommandGroup(after: .toolbar) {
+                Button(headerHidden ? "Show Search Bar" : "Hide Search Bar") {
+                    withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.65)) {
+                        headerHidden.toggle()
+                    }
+                }
+                .keyboardShortcut("f", modifiers: [.command, .option])
+                Divider()
                 Button("Saved Channels") { model.toggleChannelsDrawer() }
                     .keyboardShortcut("1", modifiers: .command)
                 Button("Downloads") { model.toggleDownloads() }
