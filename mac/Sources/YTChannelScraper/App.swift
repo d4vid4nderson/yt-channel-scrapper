@@ -11,6 +11,8 @@ struct YTChannelScraperApp: App {
     @AppStorage("header.hidden") private var headerHidden = false
     /// Shared with `PreviewPanel` and `RootView`: the player takes the whole page.
     @AppStorage("player.theatre") private var playerTheatre = false
+    /// Shared with `RootView`: the landing page's Dispatch board folded away.
+    @AppStorage("board.hidden") private var boardHidden = false
 
     /// The bundled typefaces (see `Resources/Fonts`), registered for this process before
     /// any view asks for one. `ATSApplicationFontsPath` alone did not make them available
@@ -56,6 +58,12 @@ struct YTChannelScraperApp: App {
                     withAnimation(PreviewPanel.fold) { playerTheatre.toggle() }
                 }
                 .keyboardShortcut("p", modifiers: [.command, .option])
+                if Edition.isFamily {
+                    Button(boardHidden ? "Show Dispatch" : "Hide Dispatch") {
+                        withAnimation(.timingCurve(0.4, 0, 0.2, 1, duration: 0.65)) { boardHidden.toggle() }
+                    }
+                    .keyboardShortcut("d", modifiers: [.command, .option])
+                }
                 Toggle("Repeat", isOn: Bindable(PlaybackRepeat.shared).isOn)
                     .keyboardShortcut("r", modifiers: [.command, .option])
                 Divider()

@@ -31,6 +31,8 @@ struct RootView: View {
     /// The player taking the whole results area, the list folded away under it. Set from
     /// `PreviewPanel` and the View menu; only matters while something is playing there.
     @AppStorage("player.theatre") private var playerTheatre = false
+    /// The landing page's Dispatch board folded away, the title and search centred.
+    @AppStorage("board.hidden") private var boardHidden = false
     /// The panels as drawers outside the window; see `OuterDrawers`.
     private var drawers: OuterDrawers { .shared }
 
@@ -429,7 +431,31 @@ struct RootView: View {
                     .padding(.bottom, 4)
                     // What is going on, before anything has been typed. A search box with
                     // a row of chips under it was not a command centre; this is.
-                    if Edition.isFamily { CommandBoard(model: model) }
+                    // The board can be folded away (here, or View › Hide Dispatch), and the
+                    // title and search then settle into the middle of the page.
+                    if Edition.isFamily {
+                        if !boardHidden {
+                            CommandBoard(model: model)
+                                .transition(.opacity.combined(with: .move(edge: .bottom)))
+                        }
+                        Button {
+                            withAnimation(Self.morph) { boardHidden.toggle() }
+                        } label: {
+                            HStack(spacing: 5) {
+                                Text(boardHidden ? "Show Dispatch" : "Hide Dispatch")
+                                    .font(.system(size: 11, weight: .medium))
+                                Image(systemName: boardHidden ? "chevron.down" : "chevron.up")
+                                    .font(.system(size: 8, weight: .bold))
+                            }
+                            .foregroundStyle(Palette.ink(0.5))
+                            .padding(.vertical, 6)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .help(boardHidden ? "Show the Dispatch board  (⌥⌘D)" : "Hide the Dispatch board  (⌥⌘D)")
+                        .pointingHand()
+                        .padding(.top, 6)
+                    }
                     Spacer(minLength: 0)
                     Spacer(minLength: 0)   // sits the block a little above centre
                 }

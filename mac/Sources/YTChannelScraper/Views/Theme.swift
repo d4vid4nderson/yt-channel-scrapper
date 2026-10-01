@@ -57,6 +57,10 @@ struct Theme: Identifiable, @unchecked Sendable {
         case glitch
         /// Only the corners, as a targeting reticle draws them.
         case brackets
+        /// An instrument panel's marking: a hairline, a ruler of ticks along the top edge
+        /// and a short tab of the accent at its head — the labelled panels of 2001, Alien
+        /// and Moon.
+        case instrument
         /// `accent` running into `accent2` along the edge, and glowing.
         case gradient
         /// A short bar of `edgeTint` on the leading end of the top edge — a glyph mark.
@@ -68,7 +72,7 @@ struct Theme: Identifiable, @unchecked Sendable {
     }
 
     /// What stands behind the page where it is not covered.
-    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, ringWorld, scanlines }
+    enum Backdrop: Sendable { case aurora, city, dunes, parchment, glitch, grid, ringWorld, space, scanlines }
 
     /// The display a skin reads its title and time from — Winamp's LCD. A dark well set
     /// into the panel, its own lettering colour, and a little of that colour's light.
@@ -532,42 +536,48 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// MU-TH-UR 6000, the ship's computer: teal phosphor on black glass, monospaced type,
-    /// scanlines, and bracketed corners instead of boxes; amber for warnings. (It was the
-    /// second of two tubes; the green one is gone, and a saved choice of it lands here.)
+    /// Retrofuture: the spaceship screens of 1968–2009 — 2001, Alien, Blade Runner, Moon
+    /// — as the film designers of the day drew them. Near-black glass and warm grey
+    /// panels, off-white lettering like a flight manual's, caution orange for what
+    /// matters, HAL's red where something is lit or chosen, and the Nostromo's teal
+    /// phosphor in the readouts. Wide bold capitals (Syncopate Bold, bundled), a terminal
+    /// face in the LCD (Share Tech Mono), and panels marked like instruments.
+    /// (The id is the old teal Nostromo's, so a saved choice carries over.)
     static let nostromoTeal = Theme(
         id: .nostromoTeal,
-        name: "Nostromo",
-        tagline: "The ship's terminal, in teal phosphor",
+        name: "Retrofuture",
+        tagline: "Spaceship screens, 1968 to 2009",
         appearance: .dark,
-        ink: hex(0x9CF6FF),
-        accent: hex(0x2EE8E0),
-        accentHot: hex(0x8AFFF8),
-        accent2: hex(0xFFB000),
-        edgeTint: hex(0x2EE8E0),
-        brand: hex(0x2EE8E0),
-        ground: hex(0x010607),
-        surface: hex(0x021012),
-        card: hex(0x031619).opacity(0.9),
-        field: hex(0x03191C),
-        fieldInk: hex(0x9CF6FF),
-        fieldRaised: hex(0x0A2E33),
-        onFill: hex(0x011214),
-        good: hex(0x3DFFC8),
-        warn: hex(0xFFB000),
-        glow: hex(0x2EE8E0),
-        glowDeep: hex(0x0B4F5A),
-        pickedMid: hex(0x031A1C),
-        pickedFar: hex(0x062A2E),
-        pickedEdge: hex(0x0E3F44),
-        pickedEdgeHot: hex(0x146A70),
-        corners: .square,
-        edge: .brackets,
-        type: Typeface(design: .monospaced, displayWeight: .bold,
-                       displayCaps: true, displayTracking: 1.2),
-        backdrop: .scanlines,
-        aurora: [hex(0x2EE8E0), hex(0x1A7F8A), hex(0x0B4F5A), hex(0x9CF6FF)],
-        lcd: LCD(background: hex(0x00090A), ink: hex(0x2EE8E0), glow: hex(0x2EE8E0))
+        ink: hex(0xE9E4D8),
+        accent: hex(0xF2902C),
+        accentHot: hex(0xFFAD55),
+        accent2: hex(0x6FE3D6),
+        edgeTint: hex(0xF2902C),
+        brand: hex(0xF2902C),
+        ground: hex(0x08090B),
+        surface: hex(0x141518),
+        card: hex(0x18191C).opacity(0.92),
+        field: hex(0x17181B),
+        fieldInk: hex(0xE9E4D8),
+        fieldRaised: hex(0x26272B),
+        onFill: hex(0x140A02),
+        good: hex(0x6FE3D6),
+        warn: hex(0xF2C230),
+        glow: hex(0xF2902C),
+        glowDeep: hex(0x3A220E),
+        pickedMid: hex(0x1A1612),
+        pickedFar: hex(0x2A1C10),
+        pickedEdge: hex(0x4A3018),
+        pickedEdgeHot: hex(0x6A4420),
+        corners: .rounded(scale: 0.25),
+        edge: .instrument,
+        type: Typeface(display: ["Syncopate-Bold"], displayCaps: true, displayTracking: 0.6),
+        backdrop: .space,
+        aurora: [hex(0xF2902C), hex(0xE8392E), hex(0x3A220E), hex(0x6FE3D6)],
+        lcd: LCD(background: hex(0x030707), ink: hex(0x6FE3D6), glow: hex(0x6FE3D6),
+                 font: "ShareTechMono-Regular"),
+        // HAL's eye.
+        highlight: hex(0xE8392E)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -994,6 +1004,8 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
                 // At rest, one quiet rule. The signal only breaks up when you reach for it.
                 shape.strokeBorder(theme.ink.opacity(0.2), lineWidth: 1)
             }
+        case .instrument:
+            InstrumentEdge(shape: shape, lit: lit)
         case .brackets:
             Brackets(length: 9)
                 .stroke(theme.edgeTint.opacity(lit ? 1 : 0.7),
@@ -1011,6 +1023,35 @@ private struct ThemeEdgeView<S: InsettableShape>: View {
 }
 
 // MARK: - Skin chrome
+
+/// Retrofuture's panel marking. A hairline — the accent when lit — a ruler of short
+/// ticks along the leading part of the top edge, every fifth one taller, and a tab of the
+/// accent at the head of it, as the film designers labelled a screen's panels.
+private struct InstrumentEdge<S: InsettableShape>: View {
+    let shape: S
+    let lit: Bool
+
+    var body: some View {
+        let theme = Theme.active
+        ZStack {
+            shape.strokeBorder((lit ? theme.litTint : theme.ink).opacity(lit ? 0.75 : 0.16), lineWidth: 1)
+            Canvas { c, size in
+                guard size.width > 60, size.height > 24 else { return }
+                var ticks = Path()
+                let start: CGFloat = 26, end = min(size.width * 0.38, start + 160)
+                var x = start, n = 0
+                while x < end {
+                    let tall: CGFloat = n % 5 == 0 ? 5 : 3
+                    ticks.addRect(CGRect(x: x, y: 2, width: 0.8, height: tall))
+                    x += 5; n += 1
+                }
+                c.fill(ticks, with: .color(theme.ink.opacity(lit ? 0.45 : 0.28)))
+                c.fill(Path(CGRect(x: 8, y: 2, width: 12, height: 3)),
+                       with: .color((lit ? theme.litTint : theme.accent).opacity(0.9)))
+            }
+        }
+    }
+}
 
 /// The chosen plate in a marked theme (Ring World) — a switch, a segment: the dark armour
 /// plate with real depth, a brighter green glowing at the top and falling away, a sheen
@@ -1420,6 +1461,7 @@ struct ThemeBackdrop: View {
             case .parchment: Self.parchment(&context, size, theme, k, t)
             case .glitch: Self.glitch(&context, size, theme, k, t)
             case .ringWorld: Self.ringWorld(&context, size, theme, k, t)
+            case .space: Self.space(&context, size, theme, k, t)
             case .grid: Self.grid(&context, size, theme, k, t)
             case .scanlines where glass:
                 Self.scanlines(&context, size, theme, k * 0.45, t, glow: false)
@@ -2184,6 +2226,64 @@ struct ThemeBackdrop: View {
                    with: .radialGradient(Gradient(colors: [cloud.opacity(alpha), .clear]),
                                          center: point, startRadius: 0, endRadius: r))
         }
+    }
+
+    // MARK: Retrofuture
+
+    /// Deep space, slowly: stars at three depths drifting past, a planet's edge lit along
+    /// the bottom like 2001's sunrise and breathing, faint columns of teal telemetry
+    /// scrolling down the leading edge, and the lightest scanlines over it all.
+    private static func space(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
+                              _ k: Double, _ t: Double) {
+        let all = Path(CGRect(origin: .zero, size: s))
+        // Stars.
+        for (layer, count, speed, size, weight) in [(0, 220, 2.0, 0.8, 0.35), (1, 90, 6.0, 1.2, 0.5),
+                                                     (2, 30, 14.0, 1.8, 0.7)] {
+            var rng = Seeded(state: 0x2001 &+ UInt64(layer) &* 977)
+            for _ in 0..<count {
+                let span = Double(s.width + 10)
+                let x = (rng.next() * span - t * speed).truncatingRemainder(dividingBy: span)
+                let xx = x < 0 ? x + span : x
+                let y = rng.next() * Double(s.height)
+                let r = size * (0.6 + rng.next() * 0.6)
+                c.fill(Path(ellipseIn: CGRect(x: xx - 5, y: y, width: r, height: r)),
+                       with: .color(th.ink.opacity(weight * (0.5 + rng.next() * 0.5) * k)))
+            }
+        }
+        // The planet's limb, low across the bottom, lit from behind.
+        let centre = CGPoint(x: s.width * 0.62, y: s.height * 1.0 + max(s.width, s.height) * 0.9)
+        let radius = max(s.width, s.height) * 1.02
+        let breathe = 0.85 + 0.15 * sin(t * 0.15)
+        c.fill(Path(ellipseIn: CGRect(x: centre.x - radius, y: centre.y - radius,
+                                      width: radius * 2, height: radius * 2)),
+               with: .color(th.ground))
+        var light = c
+        light.blendMode = .plusLighter
+        light.fill(all, with: .radialGradient(
+            Gradient(stops: [.init(color: .clear, location: 0.86),
+                             .init(color: th.accent.opacity(0.30 * breathe * k), location: 0.9),
+                             .init(color: Color.white.opacity(0.18 * breathe * k), location: 0.905),
+                             .init(color: th.accent.opacity(0.10 * k), location: 0.94),
+                             .init(color: .clear, location: 1)]),
+            center: centre, startRadius: 0, endRadius: radius * 1.12))
+        // Telemetry: columns of figures scrolling down the leading edge, very dim.
+        var rng = Seeded(state: 0x6000)
+        let rowHeight: CGFloat = 13
+        let scroll = CGFloat((t * 9).truncatingRemainder(dividingBy: Double(rowHeight)))
+        let rows = Int(s.height / rowHeight) + 2
+        for column in 0..<3 {
+            let x = 14 + CGFloat(column) * 46
+            for row in 0..<rows {
+                let index = UInt64(row) &+ UInt64(floor(t * 9 / Double(rowHeight)))
+                var cell = Seeded(state: 0x7E1E &+ index &* 7919 &+ UInt64(column) &* 104729)
+                let value = String(format: "%04d", Int(cell.next() * 9999))
+                let y = CGFloat(row) * rowHeight + scroll - rowHeight
+                let text = Text(value).font(.system(size: 9, design: .monospaced))
+                    .foregroundColor(th.accent2.opacity((0.10 + rng.next() * 0.08) * k))
+                c.draw(text, at: CGPoint(x: x, y: y), anchor: .topLeading)
+            }
+        }
+        scanlines(&c, s, th, k * 0.25, t, glow: false, roll: false)
     }
 
     // MARK: Nostromo

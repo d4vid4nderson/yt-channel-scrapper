@@ -92,7 +92,7 @@ enum WidgetTheme: String, AppEnum {
         .synthwave: "Glitch",
         .grid: "The Grid",
         .ringWorld: "Ring World",
-        .nostromoTeal: "Nostromo",
+        .nostromoTeal: "Retrofuture",
     ]
 }
 
