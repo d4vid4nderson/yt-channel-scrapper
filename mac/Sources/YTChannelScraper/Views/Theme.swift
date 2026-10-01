@@ -2098,6 +2098,65 @@ struct ThemeBackdrop: View {
             Gradient(colors: [white.opacity(0.22 * breathe * k), th.accent.opacity(0.08 * k), .clear]),
             center: gate, startRadius: 0, endRadius: frame.width * 0.12))
         // Pulses along a line, from its near end to its far end.
+        // Lightning in the clouds either side of the tower, now and then: a strike forks
+        // through one bank and lights it from inside, flashing two or three times over
+        // half a second. Clipped to the sky, clear of the tower and the beams.
+        let strikeSlot = 6.5
+        let strikeIndex = UInt64(max(0, floor(t / strikeSlot)))
+        var strike = Seeded(state: 0x7E5A &+ strikeIndex &* 7919)
+        if strike.next() < 0.8 {
+            let left = strike.next() < 0.5
+            let region = left ? CGRect(x: 0.02, y: 0.02, width: 0.30, height: 0.24)
+                              : CGRect(x: 0.66, y: 0.03, width: 0.32, height: 0.26)
+            let startAt = strike.next() * (strikeSlot - 0.8)
+            let age = t.truncatingRemainder(dividingBy: strikeSlot) - startAt
+            if age > 0, age < 0.6 {
+                // Two or three pulses inside the half second, each sharp and quickly gone.
+                let pulses = [0.0, 0.12 + strike.next() * 0.05, 0.3 + strike.next() * 0.1]
+                let count = strike.next() < 0.5 ? 2 : 3
+                var level = 0.0
+                for p in pulses.prefix(count) where age >= p {
+                    level = max(level, exp(-(age - p) * 18) * (p == 0 ? 1 : 0.7))
+                }
+                if level > 0.02 {
+                    let sky = CGRect(x: frame.minX + frame.width * region.minX,
+                                     y: frame.minY + frame.height * region.minY,
+                                     width: frame.width * region.width, height: frame.height * region.height)
+                    var flash = c
+                    flash.blendMode = .plusLighter
+                    flash.clip(to: Path(roundedRect: sky, cornerRadius: sky.width * 0.2))
+                    let glowAt = CGPoint(x: sky.midX + sky.width * CGFloat(strike.next() * 0.4 - 0.2),
+                                         y: sky.midY + sky.height * CGFloat(strike.next() * 0.3 - 0.15))
+                    flash.fill(Path(sky), with: .radialGradient(
+                        Gradient(colors: [white.opacity(0.35 * level * k), th.accent.opacity(0.12 * level * k), .clear]),
+                        center: glowAt, startRadius: 0, endRadius: sky.width * 0.6))
+                    // The bolt: a jagged walk from the top of the bank down and across it,
+                    // with a short fork, drawn as a bright core in a soft glow.
+                    var walk = Seeded(state: 0xB017 &+ strikeIndex &* 104729)
+                    var bolt = Path()
+                    var point = CGPoint(x: sky.minX + sky.width * CGFloat(0.2 + walk.next() * 0.6), y: sky.minY + 2)
+                    bolt.move(to: point)
+                    var fork: CGPoint?
+                    for step in 0..<10 {
+                        point = CGPoint(x: point.x + sky.width * CGFloat(walk.next() * 0.16 - 0.08),
+                                        y: point.y + sky.height * CGFloat(0.06 + walk.next() * 0.05))
+                        bolt.addLine(to: point)
+                        if step == 4 { fork = point }
+                    }
+                    if let f = fork {
+                        var q = f
+                        bolt.move(to: f)
+                        for _ in 0..<4 {
+                            q = CGPoint(x: q.x + sky.width * CGFloat(walk.next() * 0.12 + 0.02) * (left ? -1 : 1),
+                                        y: q.y + sky.height * CGFloat(0.04 + walk.next() * 0.04))
+                            bolt.addLine(to: q)
+                        }
+                    }
+                    flash.stroke(bolt, with: .color(th.accent.opacity(0.35 * level * k)), lineWidth: 5)
+                    flash.stroke(bolt, with: .color(white.opacity(0.95 * level * k)), lineWidth: 1.2)
+                }
+            }
+        }
         // Haze across the horizon, drifting.
         for i in 0..<5 {
             let n = Double(i)
