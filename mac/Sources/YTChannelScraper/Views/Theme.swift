@@ -2146,11 +2146,18 @@ struct ThemeBackdrop: View {
                     let tip = CGPoint(x: max(frame.minX + frame.width * 0.167, 4),
                                       y: frame.minY + frame.height * 0.690)
                     let flame = Color(red: 1, green: 0.85, blue: 0.5)
-                    let r = frame.width * 0.009
-                    light.fill(Path(ellipseIn: CGRect(x: tip.x - r * 3, y: tip.y - r * 3, width: r * 6, height: r * 6)),
-                               with: .radialGradient(Gradient(colors: [flame.opacity(0.6 * level * k),
-                                                                       flame.opacity(0.18 * level * k), .clear]),
-                                                     center: tip, startRadius: 0, endRadius: r * 3))
+                    let r = frame.width * 0.012
+                    // The light the shot throws over the gunner and the Warthog.
+                    light.fill(all, with: .radialGradient(
+                        Gradient(colors: [flame.opacity(0.16 * level * k), .clear]),
+                        center: CGPoint(x: tip.x + r * 4, y: tip.y + r * 2), startRadius: 0,
+                        endRadius: frame.width * 0.12))
+                    // The muzzle bloom.
+                    light.fill(Path(ellipseIn: CGRect(x: tip.x - r * 4, y: tip.y - r * 4, width: r * 8, height: r * 8)),
+                               with: .radialGradient(Gradient(colors: [Color.white.opacity(0.8 * level * k),
+                                                                       flame.opacity(0.55 * level * k),
+                                                                       flame.opacity(0.12 * level * k), .clear]),
+                                                     center: tip, startRadius: 0, endRadius: r * 4))
                     // The flame, out along the barrel (up and to the left).
                     var spike = c
                     spike.blendMode = .plusLighter
