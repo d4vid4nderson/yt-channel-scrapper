@@ -1903,12 +1903,12 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let gridPicture = picture("grid")
 
     /// Lines in the Grid picture that light runs along, as (near end, far end) in
-    /// fractions of the picture — measured off it: the road's lane lines running to the
-    /// gate, and the beams rising from the gate into the sky.
+    /// fractions of the picture — measured off it: the road's solid lane lines running to
+    /// the gate (not the dashed ones: a cycle over painted dashes lit them up as beads),
+    /// and the beams rising from the gate into the sky.
     private static let gridRoads: [((Double, Double), (Double, Double))] = [
-        ((0.260, 1.0), (0.500, 0.521)), ((0.386, 1.0), (0.498, 0.528)),
-        ((0.512, 1.0), (0.514, 0.521)), ((0.624, 1.0), (0.528, 0.521)),
-        ((0.116, 1.0), (0.430, 0.600)),
+        ((0.260, 1.0), (0.500, 0.521)), ((0.512, 1.0), (0.514, 0.521)),
+        ((0.624, 1.0), (0.528, 0.521)),
     ]
     private static let gridBeams: [((Double, Double), (Double, Double))] = [
         ((0.475, 0.36), (0.31, 0.0)), ((0.49, 0.36), (0.40, 0.0)),
@@ -1979,34 +1979,44 @@ struct ThemeBackdrop: View {
                 let head = point(e)
                 let r = size * CGFloat(1 - e * 0.85)
                 let fade = min(1, u * 8) * min(1, (1 - u) * 5)
-                // The light cycle's wall: a long ribbon behind it, drawn in segments that
-                // grow fainter and thinner towards the far end of the trail.
+                // The light cycle's wall: one solid ribbon behind it, wide at the cycle and
+                // tapering away down the trail, filled with a single gradient — so it is a
+                // line of light, not beads (segments added up at every join).
                 let start = max(0, e - trail)
-                let segments = 28
-                for sIndex in 0..<segments {
-                    let a = start + (e - start) * Double(sIndex) / Double(segments)
-                    let b = start + (e - start) * Double(sIndex + 1) / Double(segments)
-                    let along = Double(sIndex + 1) / Double(segments)
-                    var piece = Path()
-                    piece.move(to: point(a))
-                    piece.addLine(to: point(b))
-                    let width = max(0.8, size * CGFloat(1 - b * 0.85) * 0.45)
-                    light.stroke(piece, with: .color(tint.opacity(0.75 * along * fade * k)),
-                                 style: StrokeStyle(lineWidth: width, lineCap: .round))
-                    light.stroke(piece, with: .color(tint.opacity(0.18 * along * fade * k)),
-                                 style: StrokeStyle(lineWidth: width * 4, lineCap: .round))
+                let back = point(start)
+                let dx = head.x - back.x, dy = head.y - back.y
+                let length = max(hypot(dx, dy), 0.001)
+                let nx = -dy / length, ny = dx / length
+                let wHead = max(1, size * CGFloat(1 - e * 0.85) * 0.45)
+                let wBack = max(0.4, size * CGFloat(1 - start * 0.85) * 0.12)
+                func ribbon(_ scale: CGFloat) -> Path {
+                    var p = Path()
+                    p.move(to: CGPoint(x: back.x + nx * wBack * scale / 2, y: back.y + ny * wBack * scale / 2))
+                    p.addLine(to: CGPoint(x: head.x + nx * wHead * scale / 2, y: head.y + ny * wHead * scale / 2))
+                    p.addLine(to: CGPoint(x: head.x - nx * wHead * scale / 2, y: head.y - ny * wHead * scale / 2))
+                    p.addLine(to: CGPoint(x: back.x - nx * wBack * scale / 2, y: back.y - ny * wBack * scale / 2))
+                    p.closeSubpath()
+                    return p
                 }
+                let along = { (a: Double) in GraphicsContext.Shading.linearGradient(
+                    Gradient(colors: [tint.opacity(0), tint.opacity(a * fade * k)]),
+                    startPoint: back, endPoint: head) }
+                light.drawLayer { glow in
+                    glow.addFilter(.blur(radius: max(2, wHead * 1.5)))
+                    glow.fill(ribbon(3), with: along(0.45))
+                }
+                light.fill(ribbon(1), with: along(0.9))
                 light.fill(Path(ellipseIn: CGRect(x: head.x - r, y: head.y - r, width: r * 2, height: r * 2)),
                            with: .radialGradient(Gradient(colors: [white.opacity(0.9 * fade * k),
                                                                    tint.opacity(0.5 * fade * k), .clear]),
                                                  center: head, startRadius: 0, endRadius: r))
             }
         }
-        // Blue for the users, orange for the other side: two of the lanes and the right
-        // pair of beams run orange.
+        // Blue for the users, orange for the other side: the road's right edge and the
+        // right pair of beams run orange.
         for (i, road) in gridRoads.enumerated() {
             run(road, count: 1, lap: 4.2 + Double(i) * 0.7, size: 9, offset: Double(i) * 1.1,
-                tint: [1, 3].contains(i) ? orange : th.accentHot, trail: 0.55)
+                tint: i == 2 ? orange : th.accentHot, trail: 0.55)
         }
         for (i, beam) in gridBeams.enumerated() {
             run(beam, count: 1, lap: 3.4 + Double(i) * 0.6, size: 5, offset: Double(i) * 1.3,
