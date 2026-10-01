@@ -8,6 +8,8 @@ struct YTChannelScraperApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var delegate
     /// Shared with `RootView`, which folds the header row away when it is set.
     @AppStorage("header.hidden") private var headerHidden = false
+    /// Shared with `PreviewPanel` and `RootView`: the player takes the whole page.
+    @AppStorage("player.theatre") private var playerTheatre = false
 
     var body: some Scene {
         WindowGroup {
@@ -37,12 +39,24 @@ struct YTChannelScraperApp: App {
                     }
                 }
                 .keyboardShortcut("f", modifiers: [.command, .option])
+                Button(playerTheatre ? "Show List Under Player" : "Hide List Under Player") {
+                    withAnimation(PreviewPanel.fold) { playerTheatre.toggle() }
+                }
+                .keyboardShortcut("p", modifiers: [.command, .option])
                 Divider()
-                Button("Saved Channels") { model.toggleChannelsDrawer() }
+                // Here rather than on the Home button, which is only there while the
+                // header row is showing.
+                Button("Home") { model.goHome() }
+                    .keyboardShortcut("h", modifiers: [.command, .shift])
+                // The search bar is only on the landing page, which focuses it on
+                // appearing; so a new search from anywhere is a trip home.
+                Button("New Search") { model.goHome() }
+                    .keyboardShortcut("l", modifiers: .command)
+                Button("Saved") { model.toggleChannelsDrawer() }
                     .keyboardShortcut("1", modifiers: .command)
                 Button("Downloads") { model.toggleDownloads() }
                     .keyboardShortcut("2", modifiers: .command)
-                Button("Family") { model.toggleFamilyDrawer() }
+                Button("Users") { model.toggleFamilyDrawer() }
                     .keyboardShortcut("3", modifiers: .command)
                 Divider()
                 Button("Export Library…") { model.exportLibrary() }

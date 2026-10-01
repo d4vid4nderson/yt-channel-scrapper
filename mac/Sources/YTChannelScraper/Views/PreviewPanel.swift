@@ -40,6 +40,15 @@ struct PreviewPanel: View {
     /// Fill: the picture covers the stage at whatever height the grip gives it, cropping
     /// the edges, instead of fitting whole. Off by default, and remembered.
     @AppStorage("player.fill") private var fills = false
+    /// Everything under the picture folded away — this bar, the tabs, the list's toolbar
+    /// and the list — so the picture has the whole page below the header. Flipped from
+    /// the window's footer (`VersionFooter`) and the View menu, and remembered; `RootView`
+    /// drops the list. The switch lives in the footer because it is the one strip that
+    /// stays put either way, so the way back is where the way out was.
+    @AppStorage("player.theatre") private var theatre = false
+
+    /// The bar's height when it is showing; the grip's ceiling leaves room for it.
+    private static let barHeight: CGFloat = 52
 
     var body: some View {
         // Every observable read happens here, in this view's own body.
@@ -56,29 +65,39 @@ struct PreviewPanel: View {
                 // is shorter — then that, so a widescreen picture is never pillarboxed for
                 // height it cannot use.
                 // Filling, the stage is simply the grip's height and the picture covers it.
-                Group {
-                    if fills {
-                        PreviewStage(state: state, fills: true)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: stageHeight)
-                            .clipped()
-                    } else {
-                        PreviewStage(state: state)
-                            .aspectRatio(ratio, contentMode: .fit)
-                            .frame(maxWidth: .infinity)
-                            .frame(height: min(stageHeight, width / max(ratio, 0.1)))
-                    }
-                }
+                //
+                // One `PreviewStage` whatever the mode, sized by numbers rather than picked
+                // by branch. A branch per mode tore the `AVPlayerView` down and built a
+                // new one on every toggle, and detaching its player mid-layout made AppKit
+                // recompute the key-view loop inside SwiftUI's layout pass — an abort.
+                let size = stageSize(ratio: ratio)
+                PreviewStage(state: state, fills: fills)
+                    .frame(width: size.width, height: size.height)
+                    .frame(maxWidth: .infinity)
+                    .clipped()
                     .background(.black)
 
-                bar(video)
+                if !theatre {
+                    bar(video)
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
             }
             .background(Palette.sheetSurface)
             .overlay(alignment: .bottom) { Rectangle().fill(Palette.ink(0.12)).frame(height: 1) }
-            .overlay(alignment: .bottom) { grip }
+            .overlay(alignment: .bottom) { if !theatre { grip } }
             .onExitCommand(perform: dismiss)
             .transition(.move(edge: .top).combined(with: .opacity))
         }
+    }
+
+    /// The picture's frame. Filling, it covers the stage edge to edge; fitting, it takes the
+    /// stream's shape within it. With the list hidden the stage is the whole results area.
+    private func stageSize(ratio: CGFloat) -> CGSize {
+        let ratio = max(ratio, 0.1)
+        let height = theatre ? max(available, 160)
+                   : fills ? stageHeight
+                   : min(stageHeight, width / ratio)
+        return CGSize(width: fills ? width : min(width, height * ratio), height: height)
     }
 
     /// As much of the results area as the grip has been dragged to, between a floor that
@@ -90,7 +109,7 @@ struct PreviewPanel: View {
         // the way down and the picture has the page, with the tabs still there to come
         // back from. Leaving a row of the list as well capped a 16:9 video well short of
         // the window's width.
-        let ceiling = max((available - 52 - Chrome.bar * 2) / max(available, 1), 0.3)
+        let ceiling = max((available - Self.barHeight - Chrome.bar * 2) / max(available, 1), 0.3)
         return min(max(value, 0.25), ceiling)
     }
 
@@ -207,8 +226,10 @@ struct PreviewPanel: View {
         }
         .padding(.leading, 16)
         .padding(.trailing, 10)
-        .frame(height: 52)
+        .frame(height: Self.barHeight)
     }
+
+    static let fold = Animation.timingCurve(0.4, 0, 0.2, 1, duration: 0.35)
 }
 
 /// "YouTube ↗": the arrow says it leaves the app, so it goes after the word, where the

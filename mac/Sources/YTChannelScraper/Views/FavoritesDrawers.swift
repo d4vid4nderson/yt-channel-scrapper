@@ -2,8 +2,8 @@ import SwiftUI
 
 /// What you keep, on the left; who you keep it for, on the right.
 ///
-/// Channels and saved videos share the left panel as two collapsible sections — they are
-/// both "things I have kept" and they were never big enough to need an edge each. That
+/// Channels and saved videos share the left panel as two tabs — they are both "things I
+/// have kept" and they were never big enough to need an edge each. That
 /// freed the right edge for the family panel, which is the half of a command center that
 /// says who is on the other end.
 ///
@@ -15,10 +15,11 @@ import SwiftUI
 // MARK: - Channels, on the left
 
 struct SavedChannelsDrawer: View {
+    enum Tab: String, CaseIterable { case channels, videos }
+
     /// Remembered across launches: whichever half somebody actually uses should be the
-    /// one open when the panel comes back.
-    @AppStorage("drawer.channels.open") private var channelsOpen = true
-    @AppStorage("drawer.videos.open") private var videosOpen = true
+    /// one showing when the panel comes back.
+    @AppStorage("drawer.saved.tab") private var tab: Tab = .channels
 
     @Bindable var model: AppModel
 
@@ -69,10 +70,12 @@ struct SavedChannelsDrawer: View {
                     count: model.library.channels.count + model.library.videos.count,
                     close: close
                 )
+                tabs
                 // Below a handful there is nothing to search for, and the field would
                 // only be a row of chrome over a list you can already see all of.
-                if model.library.channels.count > 6 {
-                    DrawerFilterField(text: $filter, prompt: "Filter channels…")
+                if (tab == .channels ? model.library.channels.count : model.library.videos.count) > 6 {
+                    DrawerFilterField(text: $filter,
+                                      prompt: tab == .channels ? "Filter channels…" : "Filter videos…")
                 }
                 Divider().overlay(Palette.ink(0.09))
                 list
@@ -121,40 +124,48 @@ struct SavedChannelsDrawer: View {
         }
     }
 
-    /// Both halves of the library in one panel, each able to fold away.
-    ///
-    /// They were two drawers on two edges, which gave each a whole screen edge for a list
-    /// that is usually a dozen rows. Folding one shows more of the other, and the state
-    /// sticks, so whichever half you actually use stays open.
+    /// Channels or videos, one at a time, each with its count. A tab rather than two
+    /// folding sections: with a long list of channels the videos were a scroll away, and
+    /// it was never clear which half you were in.
+    private var tabs: some View {
+        ChromeSegmented(
+            options: Tab.allCases,
+            selection: tab,
+            label: { option in
+                switch option {
+                case .channels: "Channels  \(model.library.channels.count)"
+                case .videos:   "Videos  \(model.library.videos.count)"
+                }
+            },
+            help: { $0 == .channels ? "Your saved channels" : "Your saved videos" },
+            pick: { tab = $0; filter = "" }
+        )
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 16)
+        .padding(.bottom, 13)
+    }
+
     @ViewBuilder
     private var list: some View {
-        if model.library.channels.isEmpty && model.library.videos.isEmpty {
+        let empty = tab == .channels ? model.library.channels.isEmpty : model.library.videos.isEmpty
+        if empty {
             DrawerEmpty(
                 icon: "bookmark",
-                title: "Nothing saved yet",
-                detail: "Bookmark a channel — in a search result, or above its video list — and it lands here."
+                title: tab == .channels ? "No saved channels yet" : "No saved videos yet",
+                detail: tab == .channels
+                    ? "Bookmark a channel — in a search result, or above its video list — and it lands here."
+                    : "Bookmark a video in the player and it lands here."
             )
         } else {
             ScrollView {
-                LazyVStack(spacing: 8, pinnedViews: [.sectionHeaders]) {
-                    Section {
-                        if channelsOpen { channelRows }
-                    } header: {
-                        SectionBar(title: "Channels",
-                                   count: model.library.channels.count,
-                                   isOpen: $channelsOpen)
-                    }
-
-                    Section {
-                        if videosOpen { videoRows }
-                    } header: {
-                        SectionBar(title: "Videos",
-                                   count: model.library.videos.count,
-                                   isOpen: $videosOpen)
+                LazyVStack(spacing: 8) {
+                    switch tab {
+                    case .channels: channelRows
+                    case .videos:   videoRows
                     }
                 }
                 .padding(.horizontal, 14)
-                .padding(.bottom, 14)
+                .padding(.vertical, 14)
             }
             .scrollIndicators(.visible)
         }
@@ -219,41 +230,6 @@ struct SavedChannelsDrawer: View {
                 }
             }
         }
-    }
-}
-
-/// A section's title line, and the thing that folds it.
-///
-/// Pinned, so the heading you are under stays on screen while its list scrolls past —
-/// which is the only way to know which half you are looking at once both are long.
-private struct SectionBar: View {
-    let title: String
-    let count: Int
-    @Binding var isOpen: Bool
-
-    var body: some View {
-        Button {
-            withAnimation(.easeOut(duration: 0.16)) { isOpen.toggle() }
-        } label: {
-            HStack(spacing: 6) {
-                Image(systemName: "chevron.right")
-                    .font(.system(size: 9, weight: .bold))
-                    .rotationEffect(.degrees(isOpen ? 90 : 0))
-                Text(title)
-                    .font(.system(size: 11, weight: .semibold))
-                Text("\(count)")
-                    .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(Palette.ink(0.35))
-                Spacer()
-            }
-            .foregroundStyle(Palette.ink(0.55))
-            .padding(.vertical, 8)
-            .padding(.top, 6)
-            .contentShape(Rectangle())
-            .background(Palette.ground)
-        }
-        .buttonStyle(.plain)
-        .pointingHand()
     }
 }
 

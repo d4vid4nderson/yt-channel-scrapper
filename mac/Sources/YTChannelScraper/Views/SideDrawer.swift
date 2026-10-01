@@ -60,14 +60,6 @@ extension View {
             .frame(width: open ? Layout.drawerWidth : 0, alignment: side.innerEdge)
             .clipped()
     }
-
-    /// The same move, downwards: the page is shortened from the bottom and the panel
-    /// rises into what it gave up.
-    func bottomDrawerSlot(open: Bool) -> some View {
-        frame(height: Layout.downloadsHeight)
-            .frame(height: open ? Layout.downloadsHeight : 0, alignment: .top)
-            .clipped()
-    }
 }
 
 /// The drawers' own button: light on the dark surface, never the system pill, which would

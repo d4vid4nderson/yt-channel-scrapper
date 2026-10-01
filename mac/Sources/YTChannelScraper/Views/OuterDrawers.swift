@@ -1,8 +1,10 @@
 import AppKit
 import SwiftUI
 
-/// The Saved, Family and Downloads panels, as drawers that slide out from behind the
-/// window rather than opening inside it.
+/// The Saved and Family panels, as drawers that slide out from behind the window rather
+/// than opening inside it. Downloads used to be one too, hanging below the window; it
+/// opens inside now, up from the footer (see `RootView`), since a panel dangling off the
+/// bottom of the window looked detached from it.
 ///
 /// Inside, a panel took its width from the page, and everything on the page — the hero,
 /// the board, the list — was squeezed to make room, then let out again. Here each panel
@@ -15,7 +17,7 @@ import SwiftUI
 /// always had (see `RootView`), and these stay shut.
 @MainActor
 final class OuterDrawers {
-    enum Kind: CaseIterable { case saved, family, downloads }
+    enum Kind: CaseIterable { case saved, family }
 
     /// One for the app, not one per `RootView`: a theme switch rebuilds the view tree, and
     /// a controller held in the view's state was rebuilt with it — leaving the old one's
@@ -129,16 +131,12 @@ final class OuterDrawers {
         // and `DrawerChrome` keeps the content out of that strip — so nothing sits hard
         // against the window's edge.
         let b = body(of: window)
-        let w = Layout.drawerWidth + Self.tuck + 8, h = Layout.downloadsHeight + Self.tuck + 8
+        let w = Layout.drawerWidth + Self.tuck + 8
         switch kind {
         case .saved:
             return NSRect(x: b.minX - Layout.drawerWidth - 8, y: b.minY, width: w, height: b.height)
         case .family:
             return NSRect(x: b.maxX - Self.tuck, y: b.minY, width: w, height: b.height)
-        case .downloads:
-            let width = min(b.width - 48, 900)
-            return NSRect(x: b.midX - width / 2, y: window.frame.minY - Layout.downloadsHeight - 8,
-                          width: width, height: h)
         }
     }
 
@@ -148,7 +146,6 @@ final class OuterDrawers {
         switch kind {
         case .saved:     frame.origin.x += frame.width - Self.tuck - 2
         case .family:    frame.origin.x -= frame.width - Self.tuck - 2
-        case .downloads: frame.origin.y += frame.height - Self.tuck - 2
         }
         return frame
     }
@@ -164,8 +161,6 @@ final class OuterDrawers {
             frame.origin.x += screen.minX - target.minX
         case .family where target.maxX > screen.maxX:
             frame.origin.x -= target.maxX - screen.maxX
-        case .downloads where target.minY < screen.minY:
-            frame.origin.y += screen.minY - target.minY
         default:
             return
         }
@@ -201,7 +196,6 @@ private extension DrawerChrome {
         switch kind {
         case .saved: .trailing
         case .family: .leading
-        case .downloads: .top
         }
     }
 }

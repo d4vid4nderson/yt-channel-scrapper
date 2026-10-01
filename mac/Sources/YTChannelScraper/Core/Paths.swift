@@ -3,7 +3,7 @@ import Foundation
 /// Where the app's binaries and files live.
 enum Paths {
     /// What the user sees. Deliberately *not* the same string as `appName`.
-    static let displayName = "YT Parent Command Center"
+    static let displayName = "YT Command Center"
 
     /// The name on disk, and only that — Application Support and Downloads both hang off
     /// it. Changing it to match the display name orphans every saved channel and every

@@ -13,7 +13,7 @@ cd "$(dirname "$0")"
 WANT_DMG=
 [ "${1:-}" = "--dmg" ] && WANT_DMG=1
 
-APP_NAME="YT Parent Command Center"
+APP_NAME="YT Command Center"
 BUNDLE_ID="com.d4vid4nderson.ytchannelscraper"
 # Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
 VERSION="${VERSION:-2.4.1}"

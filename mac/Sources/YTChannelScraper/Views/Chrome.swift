@@ -23,8 +23,12 @@ enum Chrome {
     static let pill: CGFloat = 52
     /// A toolbar row: a 28pt control and 8pt above and below it.
     static let bar: CGFloat = 44
-    /// The header row under the title bar: the full-size pill and 10pt above and below.
-    static let header: CGFloat = pill + 20
+    /// On the landing page, between the panel switches and the pill under them.
+    static let headerGap: CGFloat = 8
+    /// The header under the title bar: one row of large controls — the open channel, Home
+    /// and the panels' switches — and 10pt above and below. The search pill is the
+    /// landing page's alone.
+    static let header: CGFloat = large + 20
 
     /// A control's corner at a given height. Seven at 28 and eight at 32 — a quarter of
     /// the height, rounded, so the two sizes look like the same part scaled.

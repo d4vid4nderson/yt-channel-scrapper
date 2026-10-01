@@ -28,12 +28,16 @@ struct RootView: View {
     /// player and the list. Only ever folds the collapsed header, never the hero, and is
     /// remembered between launches. The View menu and the title-bar button both flip it.
     @AppStorage("header.hidden") private var headerHidden = false
+    /// The player taking the whole results area, the list folded away under it. Set from
+    /// `PreviewPanel` and the View menu; only matters while something is playing there.
+    @AppStorage("player.theatre") private var playerTheatre = false
     /// The panels as drawers outside the window; see `OuterDrawers`.
     private var drawers: OuterDrawers { .shared }
 
     var body: some View {
         VStack(spacing: 0) {
             if themedFullScreen { fullScreenBar }
+            VStack(spacing: 0) {
             HStack(spacing: 0) {
                 // Inline only in full screen, where there is no outside for the drawers to
                 // slide into. Everywhere else they come out from behind the window and the
@@ -41,15 +45,7 @@ struct RootView: View {
                 SavedChannelsDrawer(model: model)
                     .drawerSlot(open: isFullScreen && model.showChannelsDrawer, side: .leading)
 
-                VStack(spacing: 0) {
-                    page
-                    DownloadsDrawer(
-                        downloader: model.downloader,
-                        updater: model.updater,
-                        isPresented: $model.showDownloads
-                    )
-                    .bottomDrawerSlot(open: isFullScreen && model.showDownloads)
-                }
+                page
 
                 FamilyDrawer(model: model)
                     .drawerSlot(open: isFullScreen && model.showFamilyDrawer, side: .trailing)
@@ -82,8 +78,30 @@ struct RootView: View {
                     .overlay(alignment: .top) { Rectangle().fill(Palette.ink(0.10)).frame(height: 1) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
+            }
+            // Downloads slides up from the footer, over the page rather than squeezing
+            // it, so the player and the list keep their size. Clipped here so it rises
+            // out from behind the footer instead of crossing it. Always inside, full
+            // screen or not.
+            .overlay(alignment: .bottom) {
+                if model.showDownloads {
+                    DownloadsDrawer(
+                        downloader: model.downloader,
+                        updater: model.updater,
+                        isPresented: $model.showDownloads
+                    )
+                    .frame(height: Layout.downloadsHeight)
+                    .shadow(color: .black.opacity(0.25), radius: 12, y: -2)
+                    .transition(.move(edge: .bottom))
+                }
+            }
+            .clipped()
 
-            VersionFooter(updater: model.appUpdater)
+            VersionFooter(updater: model.appUpdater,
+                          downloader: model.downloader,
+                          downloadsOpen: model.showDownloads,
+                          toggleDownloads: model.toggleDownloads,
+                          playerOpen: model.preview.video != nil)
         }
         .animation(.easeOut(duration: 0.25), value: model.nowPlaying?.video.id ?? model.nowLoading?.id)
         .frame(minWidth: 820, minHeight: 520)
@@ -103,7 +121,6 @@ struct RootView: View {
         })
         .onChange(of: model.showChannelsDrawer) { syncDrawers() }
         .onChange(of: model.showFamilyDrawer) { syncDrawers() }
-        .onChange(of: model.showDownloads) { syncDrawers() }
         .onChange(of: isFullScreen) { syncDrawers() }
         // Read back on appearing as well: a theme change rebuilds this view mid-full-screen.
         .onAppear {
@@ -247,39 +264,15 @@ struct RootView: View {
         drawers.sync([
             .saved: outside && model.showChannelsDrawer,
             .family: outside && model.showFamilyDrawer,
-            .downloads: outside && model.showDownloads,
         ]) { kind in
             switch kind {
             case .saved: AnyView(SavedChannelsDrawer(model: model))
             case .family: AnyView(FamilyDrawer(model: model))
-            case .downloads:
-                AnyView(DownloadsDrawer(
-                    downloader: model.downloader,
-                    updater: model.updater,
-                    isPresented: Binding(get: { model.showDownloads },
-                                         set: { model.showDownloads = $0 })))
             }
         }
     }
 
     // MARK: - Toolbar
-
-    /// Home, once there is somewhere to come back from; on the landing view it would be a
-    /// button that does nothing. It sits at the head of the header row. The panels'
-    /// buttons are not here at all any more: they are handles on the window's edges.
-    ///
-    /// The header's height, exactly the search pill's, so the row is one line of equal
-    /// parts rather than a small button beside a tall field.
-    private var homeButton: some View {
-        Button(action: model.goHome) {
-            Image(systemName: "house")
-                .font(.system(size: 13, weight: .medium))
-        }
-        .buttonStyle(.chrome(height: 44, square: true))
-        .help("Back to the start — the URL is kept  (⇧⌘H)")
-        .accessibilityLabel("Home")
-        .keyboardShortcut("h", modifiers: [.command, .shift])
-    }
 
     /// Full screen puts the toolbar in a strip of the system's own drawing, which no
     /// toolbar background reaches — it came up AppKit grey over a themed window. So a
@@ -325,21 +318,34 @@ struct RootView: View {
             )
             // Over the list, so the resize grip on its lower edge can be caught.
             .zIndex(1)
-            if let error = model.statusError, model.showsResults {
+            if playerTheatre && model.preview.video != nil {
+                // The player has the page; the list waits underneath for it to come back.
+            } else if let error = model.statusError, model.showsResults {
                 ErrorBanner(message: error) { model.goHome() }
                 Divider()
             }
             if model.showsList {
-                switch model.mode {
-                // The saved list is a video list; everything about it is the same view.
-                case .videos, .saved: ResultsList(model: model)
-                case .channels:       ChannelResults(model: model)
+                // Folded to nothing rather than removed while the player has the page,
+                // so the list keeps its place and nothing in it is torn down mid-toggle.
+                let folded = playerTheatre && model.preview.video != nil
+                Group {
+                    switch model.mode {
+                    // The saved list is a video list; everything about it is the same view.
+                    case .videos, .saved: ResultsList(model: model)
+                    case .channels:       ChannelResults(model: model)
+                    }
                 }
+                .frame(maxHeight: folded ? 0 : .infinity)
+                .clipped()
+                .opacity(folded ? 0 : 1)
+                .allowsHitTesting(!folded)
+                .accessibilityHidden(folded)
             } else {
                 Palette.page
             }
         }
         .animation(.easeOut(duration: 0.25), value: model.preview.video == nil)
+        .clipped()
     }
 
     // MARK: - Header
@@ -352,16 +358,32 @@ struct RootView: View {
             }
 
             if collapsed {
-                // One row under the title bar: home, whose channel this is, and the
-                // search — the title bar above it holds only the title.
+                // One row under the title bar: whose channel this is, and Home and the
+                // panels' switches. No search bar: with a channel open it only repeated
+                // the channel's URL, and the badge already says whose it is. A new search
+                // is Home (the text is kept), or ⌘L.
                 HStack(spacing: 10) {
-                    homeButton
                     OpenChannelBadge(model: model)
-                    SearchPill(model: model, compact: false, inHeader: true)
-                        .matchedGeometryEffect(id: "pill", in: hero)
+                    // Search turned into Stop while a channel was being read; with the
+                    // pill gone from here, Stop sits beside what it would stop.
+                    if model.isBusy {
+                        Button(action: model.stop) {
+                            Label("Stop", systemImage: "stop.fill")
+                        }
+                        .buttonStyle(.chrome())
+                        .help(model.mode == .videos
+                              ? "Stop reading this channel and keep what has been found"
+                              : "Stop searching")
+                        .transition(.opacity)
+                    }
+                    Spacer(minLength: 8)
+                    PanelSwitches(model: model, showsHome: true)
+                        .matchedGeometryEffect(id: "panels", in: hero)
                 }
+                .frame(height: Chrome.large)
                 .padding(.horizontal, Layout.gutter)
                 .frame(maxHeight: .infinity, alignment: .center)
+                .animation(.easeOut(duration: 0.15), value: model.isBusy)
             } else {
                 VStack(spacing: 0) {
                     Spacer(minLength: 0)
@@ -381,7 +403,22 @@ struct RootView: View {
                         .matchedGeometryEffect(id: "pill", in: hero)
                         .frame(maxWidth: 680)
                         .padding(.top, 26)
-                    statusLine
+                    // Under the pill, squared to its two ends: what to type on the left,
+                    // where else to go on the right. The switches are the header's, so
+                    // they travel up with the page when it collapses. No Home here: this
+                    // is home.
+                    HStack(alignment: .center, spacing: 12) {
+                        statusLine
+                        Spacer(minLength: 0)
+                        PanelSwitches(model: model, showsHome: false)
+                            .matchedGeometryEffect(id: "panels", in: hero)
+                    }
+                    .frame(maxWidth: 680, minHeight: Chrome.large)
+                    // Inset to the pill's rounded ends, so both sides line up with what
+                    // is inside it rather than with the curve.
+                    .padding(.horizontal, 18)
+                    .padding(.top, 10)
+                    .padding(.bottom, 4)
                     // What is going on, before anything has been typed. A search box with
                     // a row of chips under it was not a command centre; this is.
                     CommandBoard(model: model)
@@ -407,8 +444,8 @@ struct RootView: View {
             } else if let error = model.statusError {
                 Text(error)
                     .foregroundStyle(Palette.onFill)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 560)
+                    .multilineTextAlignment(.leading)
+                    .frame(maxWidth: 480, alignment: .leading)
                     .padding(.horizontal, 14)
                     .padding(.vertical, 9)
                     .background(Palette.accent.opacity(0.9), in: ThemedRect(cornerRadius: 9))
@@ -418,83 +455,83 @@ struct RootView: View {
             }
         }
         .font(.system(size: 13))
-        .padding(.top, 14)
-        .frame(height: 38, alignment: .top)
         .transition(.opacity)
     }
 }
 
 // MARK: - Chrome
 
-/// Saved, Downloads and Family, at the end of the search pill, right of Search.
+/// Home, Saved and Users, in one container — beside the open channel in the header, and
+/// under the right end of the search pill on the landing page. Downloads is not here:
+/// it rises out of the footer, so its switch is in the footer.
 ///
-/// They have been toolbar buttons, a header cluster, and handles on the window's edges;
-/// the handles lay over the page and covered the list. The pill is the one control that
-/// is on screen in every view — the hero's and the header's are the same view — so here
-/// the buttons are always beside Search and never over anything. Drawn in the field's own
-/// ink, since the pill is a light surface in Classic and a theme's ink would vanish on it.
-private struct PanelButtons: View {
+/// They have been toolbar buttons, a header cluster, handles on the window's edges (which
+/// lay over the list), icons at the end of the search pill, and title-bar buttons. Inside
+/// the pill they read as search options; in the title bar they were small and crowded
+/// the window's name. Here they are their own labelled group, apart from the search but
+/// next to it. The header row can be hidden; ⌘1 / ⌘3 / ⇧⌘H still reach all three.
+private struct PanelSwitches: View {
     @Bindable var model: AppModel
-    let height: CGFloat
+    let showsHome: Bool
 
     var body: some View {
+        let track = ThemedRect(cornerRadius: Chrome.radius(Chrome.large), style: .continuous)
         HStack(spacing: 2) {
-            button("bookmark.fill", "Saved", "⌘1",
-                   isOn: model.showChannelsDrawer, action: model.toggleChannelsDrawer)
-            // A dot, not a tally: that something is running is the part worth a mark,
-            // and the panel one click away has the numbers.
-            button("arrow.down.circle.fill", "Downloads", "⌘2",
-                   busy: model.downloader.activeCount > 0,
-                   isOn: model.showDownloads, action: model.toggleDownloads)
-            button("person.2.fill", "Family", "⌘3",
-                   isOn: model.showFamilyDrawer, action: model.toggleFamilyDrawer)
+            if showsHome {
+                Switch(icon: "house", title: "Home", isOn: false,
+                       help: "Back to the start — the URL is kept  (⇧⌘H)",
+                       action: model.goHome)
+            }
+            Switch(icon: "bookmark", title: "Saved", isOn: model.showChannelsDrawer,
+                   help: "\(model.showChannelsDrawer ? "Close" : "Open") Saved  (⌘1)",
+                   action: model.toggleChannelsDrawer)
+            Switch(icon: "person.2", title: "Users", isOn: model.showFamilyDrawer,
+                   help: "\(model.showFamilyDrawer ? "Close" : "Open") Users  (⌘3)",
+                   action: model.toggleFamilyDrawer)
         }
+        .padding(Chrome.trackInset)
+        .frame(height: Chrome.large)
+        .background(Palette.ink(0.05), in: track)
+        .overlay { track.strokeBorder(Palette.ink(0.09), lineWidth: 1) }
+        .fixedSize()
     }
 
-    private func button(_ icon: String, _ title: String, _ shortcut: String,
-                        busy: Bool = false, isOn: Bool,
-                        action: @escaping () -> Void) -> some View {
-        PillIconButton(icon: icon, busy: busy, isOn: isOn, height: height, action: action)
-            .help("\(isOn ? "Close" : "Open") \(title)  (\(shortcut))")
-            .accessibilityLabel(title)
-            .accessibilityAddTraits(isOn ? .isSelected : [])
-    }
-}
+    private struct Switch: View {
+        let icon: String
+        let title: String
+        let isOn: Bool
+        let help: String
+        let action: () -> Void
+        @State private var hovering = false
 
-private struct PillIconButton: View {
-    let icon: String
-    let busy: Bool
-    let isOn: Bool
-    let height: CGFloat
-    let action: () -> Void
-    @State private var hovering = false
-
-    var body: some View {
-        Button(action: action) {
-            Image(systemName: icon)
-                .font(.system(size: height > 30 ? 13 : 12, weight: .medium))
-                .foregroundStyle(isOn ? Palette.accent
-                                 : Palette.fieldInk.opacity(hovering ? 0.85 : 0.55))
-                .overlay(alignment: .topTrailing) {
-                    if busy {
-                        Circle().fill(Palette.accent)
-                            .frame(width: 5, height: 5)
-                            .offset(x: 3, y: -2)
-                    }
+        var body: some View {
+            let shape = ThemedRect(cornerRadius: Chrome.radius(Chrome.large) - Chrome.trackInset,
+                                   style: .continuous)
+            Button(action: action) {
+                HStack(spacing: 6) {
+                    Image(systemName: isOn ? "\(icon).fill" : icon)
+                        .font(.system(size: 11.5, weight: .medium))
+                    Text(title)
+                        .font(.system(size: 12, weight: isOn ? .semibold : .medium))
                 }
-                .frame(width: height, height: height)
+                .foregroundStyle(isOn ? Palette.accent : Palette.ink(hovering ? 0.9 : 0.62))
+                .padding(.horizontal, 11)
+                .frame(maxHeight: .infinity)
                 .background {
                     if isOn || hovering {
-                        ThemedCapsule().fill(isOn ? Palette.fieldRaised
-                                                  : Palette.fieldInk.opacity(0.07))
+                        shape.fill(Palette.ink(isOn ? 0.12 : 0.06))
                     }
                 }
-                .contentShape(ThemedCapsule())
+                .contentShape(shape)
+            }
+            .buttonStyle(.plain)
+            .help(help)
+            .accessibilityLabel(title)
+            .accessibilityAddTraits(isOn ? .isSelected : [])
+            .onHover { hovering = $0 }
+            .animation(.easeOut(duration: 0.12), value: hovering)
+            .pointingHand()
         }
-        .buttonStyle(.plain)
-        .onHover { hovering = $0 }
-        .animation(.easeOut(duration: 0.12), value: hovering)
-        .pointingHand()
     }
 }
 
@@ -624,6 +661,12 @@ private struct SearchPill: View {
     /// parts of one control, rather than as buttons of their own size dropped into a field.
     private var inner: CGFloat { Chrome.large - 6 }
 
+    /// The tab menu only says something when there is a channel to list: it does nothing
+    /// for a name search, so it waits until a link or @handle is typed. And never in the
+    /// header, where the results toolbar directly below already has the same four tabs —
+    /// two controls for one choice could disagree.
+    private var showsScope: Bool { model.intent == .scrape && !inHeader }
+
     var body: some View {
         HStack(spacing: compact ? 4 : 8) {
             HStack(spacing: compact ? 7 : 10) {
@@ -633,7 +676,10 @@ private struct SearchPill: View {
                     .foregroundStyle(Palette.fieldInk.opacity(0.45))
                 ZStack(alignment: .leading) {
                     if model.urlText.isEmpty {
-                        Text("Paste a channel URL or @handle — or type a name to search")
+                        // Shorter in the header, which shares its row with Home and the
+                        // channel's name; cut off, the long one lost the half about names.
+                        Text(inHeader ? "Channel link, @handle, or a name"
+                                      : "Paste a channel URL or @handle — or type a name to search")
                             .foregroundStyle(Palette.fieldInk.opacity(0.42))
                             .lineLimit(1)
                     }
@@ -648,7 +694,7 @@ private struct SearchPill: View {
             .font(.system(size: compact ? 13 : 14))
             .padding(.leading, compact ? 11 : 18)
 
-            if Theme.active.id == .classic {
+            if showsScope, Theme.active.id == .classic {
                 Menu {
                     Picker("Type", selection: $model.tab) {
                         ForEach(ChannelTab.allCases) { Text($0.label).tag($0) }
@@ -676,11 +722,13 @@ private struct SearchPill: View {
                 .background(Palette.fieldRaised, in: ThemedCapsule())
                 .help("Which tab of the channel to list")
                 .pointingHand()
-            } else {
+                .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
+            } else if showsScope {
                 // A theme cannot reach inside a native menu, so it gets a picker of its
                 // own — same choices, in the theme's lettering and edge.
                 TabChooser(tab: $model.tab, compact: compact)
                     .frame(height: compact ? inner : 34)
+                    .transition(.opacity.combined(with: .scale(scale: 0.9, anchor: .trailing)))
             }
 
             Button {
@@ -688,19 +736,24 @@ private struct SearchPill: View {
             } label: {
                 // The label is the answer to "what will return do with what I have
                 // typed?", so it has to track the field rather than sit on one word.
-                // Not ready is a neutral plate, not a faded accent: pink read as a softer
-                // action rather than one waiting for a URL.
+                // Not ready is a neutral outline, not a faded accent: pink read as a softer
+                // action rather than one waiting for a URL. An outline rather than a
+                // filled plate, so an empty Search is not the heaviest thing in the pill.
                 let ready = model.canScrape || model.isBusy
                 Text(buttonLabel)
                     .font(.system(size: compact ? 12.5 : 14, weight: .semibold))
-                    .foregroundStyle(ready ? Palette.onFill : Palette.fieldInk.opacity(0.35))
+                    .foregroundStyle(ready ? Palette.onFill : Palette.fieldInk.opacity(0.42))
                     // Stop and Search both fit today. The frame is fixed, so anything
                     // longer would wrap inside the capsule rather than overflow it —
                     // truncating is the failure worth having.
                     .lineLimit(1)
                     .frame(width: compact ? 70 : 84, height: compact ? inner : 38)
-                    .background(ready ? Palette.accent : Palette.fieldInk.opacity(0.07),
-                                in: ThemedCapsule())
+                    .background(ready ? Palette.accent : .clear, in: ThemedCapsule())
+                    .overlay {
+                        if !ready {
+                            ThemedCapsule().strokeBorder(Palette.fieldInk.opacity(0.16), lineWidth: 1.5)
+                        }
+                    }
                     .animation(.easeOut(duration: 0.12), value: ready)
             }
             .buttonStyle(.plain)
@@ -708,9 +761,9 @@ private struct SearchPill: View {
             .keyboardShortcut(.return, modifiers: [])
             .help(helpText)
             .pointingHand()
-
-            PanelButtons(model: model, height: compact ? inner : 34)
         }
+        // The scope arriving moves Search along; animated, so it slides rather than jumps.
+        .animation(.easeOut(duration: 0.18), value: showsScope)
         .padding(compact ? 3 : 7)
         .frame(height: compact ? Chrome.large : nil)
         .background(Palette.field, in: ThemedCapsule())

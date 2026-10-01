@@ -272,7 +272,7 @@ struct PhoneSetupSheet: View {
     /// The first thing still missing, said once, under the form.
     private var problem: String? {
         if model.profiles.guardian == nil || shelf.folder == nil {
-            return "Set up your family first (Family panel), so there is a folder to connect the phone to."
+            return "Set up your family first (Users panel), so there is a folder to connect the phone to."
         }
         if let phone = phones.first(where: { $0.id == phoneID }), !phone.developerMode {
             return "Turn on Developer Mode on \(phone.name) first: Settings → Privacy & "

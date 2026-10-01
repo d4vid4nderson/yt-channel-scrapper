@@ -39,7 +39,7 @@ struct FamilyDrawer: View {
         SideDrawer(side: .trailing, isPresented: $model.showFamilyDrawer) {
             VStack(spacing: 0) {
                 DrawerHead(
-                    title: "Family",
+                    title: "Users",
                     count: shelf.roster.count + shelf.guardians.count,
                     close: { model.showFamilyDrawer = false }
                 )
