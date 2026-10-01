@@ -95,7 +95,7 @@ struct NowPlayingMonitor: View {
             // carried the track name over its visualiser.
             VStack(alignment: .leading, spacing: 5) {
                 Text(video.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.lcd(13, weight: .medium))
                     .foregroundStyle(Theme.active.lcd?.ink ?? Palette.ink(1))
                     .lineLimit(1)
                 Track(player: player, analysis: analysis)
@@ -228,7 +228,7 @@ struct NowPlayingMonitor: View {
                     }
                     Text(total.isFinite ? Self.clock(total) : "--:--")
                 }
-                .font(.system(size: 10.5).monospacedDigit())
+                .font(.lcd(10.5).monospacedDigit())
                 .foregroundStyle(Palette.ink(0.5))
             }
         }

@@ -67,6 +67,9 @@ struct Theme: Identifiable, @unchecked Sendable {
         let background: Color
         let ink: Color
         let glow: Color
+        /// A face of its own for what the display reads out, where the theme has one and
+        /// the device has it (see `Font.lcd`). Otherwise the system face.
+        var font: String? = nil
     }
 
     struct Typeface: @unchecked Sendable {
@@ -279,10 +282,14 @@ extension Theme {
         // machined rather than moulded.
         corners: .chamfered(scale: 1),
         edge: .bevel,
-        type: Typeface(displayWeight: .light, displayCaps: true, displayTracking: 1.6),
+        // Michroma for headings — wide and smooth, the lettering of a city's signage —
+        // bundled with the app (OFL). The system's light face if it is missing.
+        type: Typeface(display: ["Michroma"], displayWeight: .light,
+                       displayCaps: true, displayTracking: 0.6),
         backdrop: .city,
         aurora: [hex(0xF0438C), hex(0xFF8A3D), hex(0x1F5E70), hex(0x3CCFD6)],
-        lcd: LCD(background: hex(0x04080B), ink: hex(0x5FE3EA), glow: hex(0x3CCFD6))
+        lcd: LCD(background: hex(0x04080B), ink: hex(0x5FE3EA), glow: hex(0x3CCFD6),
+                 font: "Rajdhani-Medium")
     )
 
     /// Arrakis at dusk. Umber and sand, spice orange for anything that matters, and the
@@ -1080,6 +1087,17 @@ extension Font {
         if theme.id == .classic { return .system(size: size, weight: classic) }
         if let name = theme.type.displayName { return .custom(name, size: size) }
         return .system(size: size, weight: theme.type.displayWeight).width(theme.type.displayWidth)
+    }
+}
+
+extension Font {
+    /// What an LCD reads out — a title, a time — in the theme's display face where it has
+    /// one. Rajdhani, Blade Runner's, sets small for its size, hence the step up.
+    static func lcd(_ size: CGFloat, weight: Font.Weight = .regular) -> Font {
+        if let name = Theme.active.lcd?.font, Theme.hasFont(name) {
+            return .custom(name, size: size * 1.15)
+        }
+        return .system(size: size, weight: weight)
     }
 }
 

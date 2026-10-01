@@ -143,6 +143,11 @@ fi
 
 cp icon.icns "$APP/Contents/Resources/AppIcon.icns"
 
+# Bundled typefaces (SIL Open Font License, licences beside them), registered for this
+# app alone at launch (YTChannelScraperApp.init). Both editions carry them.
+mkdir -p "$APP/Contents/Resources/Fonts"
+cp mac/Resources/Fonts/* "$APP/Contents/Resources/Fonts/"
+
 # Theme backdrop pictures. Third-party art kept out of git (assets/backdrops is ignored)
 # and out of the shared edition, which goes to other people: the family build only.
 # Without them a theme falls back to its drawn scenery.

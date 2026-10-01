@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import AVFoundation
+import CoreText
 
 @main
 struct YTChannelScraperApp: App {
@@ -10,6 +11,18 @@ struct YTChannelScraperApp: App {
     @AppStorage("header.hidden") private var headerHidden = false
     /// Shared with `PreviewPanel` and `RootView`: the player takes the whole page.
     @AppStorage("player.theatre") private var playerTheatre = false
+
+    /// The bundled typefaces (see `Resources/Fonts`), registered for this process before
+    /// any view asks for one. `ATSApplicationFontsPath` alone did not make them available
+    /// to `NSFont(name:)`, so a theme quietly fell back to the system face.
+    init() {
+        let fonts = Bundle.main.resourceURL?.appendingPathComponent("Fonts")
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: fonts ?? URL(fileURLWithPath: "/nonexistent"), includingPropertiesForKeys: nil)) ?? []
+        for file in files where ["ttf", "otf"].contains(file.pathExtension.lowercased()) {
+            CTFontManagerRegisterFontsForURL(file as CFURL, .process, nil)
+        }
+    }
 
     var body: some Scene {
         WindowGroup {

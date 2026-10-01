@@ -155,14 +155,14 @@ struct PreviewPanel: View {
         HStack(spacing: 8) {
             VStack(alignment: .leading, spacing: 3) {
                 Text(video.title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.lcd(13, weight: .semibold))
                     .foregroundStyle(Palette.ink(1))
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .help(video.title)
                 Text([video.channelName ?? "", video.durationText, video.viewsText]
                         .filter { !$0.isEmpty }.joined(separator: "  ·  "))
-                    .font(.system(size: 11).monospacedDigit())
+                    .font(.lcd(11).monospacedDigit())
                     .foregroundStyle(Palette.ink(0.55))
                     .lineLimit(1)
             }
