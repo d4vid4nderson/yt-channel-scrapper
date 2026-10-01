@@ -2097,30 +2097,45 @@ struct ThemeBackdrop: View {
         } else {
             horizonGlow(&c, s, th.glowDeep, k, height: 0.5)
         }
-        // Cloud banks drifting across the middle, pale and matte.
+        // Cloud banks rolling through the towers, pale and matte, at several depths.
         let cloud = Color(red: 0.80, green: 0.86, blue: 0.90)
-        for i in 0..<6 {
+        for i in 0..<9 {
             let n = Double(i)
-            let reach = max(s.width, s.height) * CGFloat(0.28 + 0.06 * (n.truncatingRemainder(dividingBy: 3)))
+            let reach = max(s.width, s.height) * CGFloat(0.22 + 0.07 * (n.truncatingRemainder(dividingBy: 3)))
             let span = Double(s.width + reach * 2)
-            let x = (n * 0.29 * span + t * (6 + n * 2.5)).truncatingRemainder(dividingBy: span) - Double(reach)
-            let y = Double(s.height) * (0.18 + 0.1 * n) + 18 * sin(t * 0.07 + n)
+            let speed = 14 + n * 4.5
+            let x = (n * 0.29 * span + t * speed).truncatingRemainder(dividingBy: span) - Double(reach)
+            let y = Double(s.height) * (0.08 + 0.085 * n) + 22 * sin(t * 0.09 + n)
+            let swell = reach * CGFloat(1 + 0.15 * sin(t * 0.13 + n * 1.7))
             c.fill(all, with: .radialGradient(
-                Gradient(stops: [.init(color: cloud.opacity(0.10 * k), location: 0),
-                                 .init(color: cloud.opacity(0.04 * k), location: 0.5),
+                Gradient(stops: [.init(color: cloud.opacity(0.17 * k), location: 0),
+                                 .init(color: cloud.opacity(0.07 * k), location: 0.5),
                                  .init(color: .clear, location: 1)]),
-                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: reach))
+                center: CGPoint(x: x, y: y), startRadius: 0, endRadius: swell))
         }
-        // Dust in the air, drifting and turning.
-        var rng = Seeded(state: 0x1A10)
-        for _ in 0..<Int(s.width * s.height / 7000) {
-            let speed = 4 + rng.next() * 9
-            let span = Double(s.width + 20)
-            let x = (rng.next() * span + t * speed).truncatingRemainder(dividingBy: span) - 10
-            let y = rng.next() * Double(s.height) + 10 * sin(t * (0.2 + rng.next() * 0.2) + rng.next() * 6)
-            let r = 0.5 + rng.next() * 1.2
-            c.fill(Path(ellipseIn: CGRect(x: x, y: y, width: r, height: r)),
-                   with: .color(cloud.opacity((0.10 + rng.next() * 0.18) * k)))
+        // Dust blowing at the camera out of the valley: each mote born small near the
+        // horizon, speeding up, growing and softening as it comes, gone past the lens.
+        let origin = CGPoint(x: s.width * 0.52, y: s.height * 0.5)
+        let far = max(s.width, s.height)
+        for i in 0..<70 {
+            let n = Double(i)
+            var pace = Seeded(state: 0xD057 &+ UInt64(i) &* 2654435761)
+            let life = 3.5 + pace.next() * 4.5
+            let shifted = t + n * 0.37
+            let cycle = UInt64(max(0, floor(shifted / life)))
+            let p = shifted.truncatingRemainder(dividingBy: life) / life
+            var rng = Seeded(state: 0x5A1D &+ cycle &* 104729 &+ UInt64(i) &* 7919)
+            let angle = rng.next() * 2 * .pi
+            let start = CGFloat(0.02 + rng.next() * 0.12) * far
+            // Accelerating: it covers little early and most of the way at the end.
+            let reach = start + CGFloat(pow(p, 2.4)) * far * 0.9
+            let point = CGPoint(x: origin.x + CGFloat(cos(angle)) * reach,
+                                y: origin.y + CGFloat(sin(angle)) * reach * 0.7)
+            let r = CGFloat(0.6 + pow(p, 2) * (3 + rng.next() * 5))
+            let alpha = min(1, p * 5) * (1 - pow(p, 3)) * (0.18 + rng.next() * 0.25) * k
+            c.fill(Path(ellipseIn: CGRect(x: point.x - r, y: point.y - r, width: r * 2, height: r * 2)),
+                   with: .radialGradient(Gradient(colors: [cloud.opacity(alpha), .clear]),
+                                         center: point, startRadius: 0, endRadius: r))
         }
     }
 
