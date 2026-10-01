@@ -730,7 +730,7 @@ private struct ResultsList: View {
             inSavedList: model.mode == .saved,
             toggle: { model.toggle(video) },
             downloadOne: { model.download([video]) },
-            preview: { model.playNow(video) },
+            preview: { model.openCard(video) },
             openCard: { model.openCard(video) },
             toggleSaved: { model.toggleSaved(video) },
             shelfMenu: ShelfMenu(model: model, video: video)

@@ -15,7 +15,7 @@ struct VideoRow: View {
     var inSavedList = false
     let toggle: () -> Void
     let downloadOne: () -> Void
-    /// The thumbnail's play: straight into Now Playing.
+    /// The thumbnail's play: into the player at the top, like the title.
     let preview: () -> Void
     /// The title's link: the player at the top of the page.
     var openCard: (() -> Void)? = nil
@@ -48,7 +48,7 @@ struct VideoRow: View {
             // watching something does not disturb a selection already made.
             Button(action: preview) { thumbnail }
                 .buttonStyle(.plain)
-                .help("Play this video in Now Playing")
+                .help("Play this video")
                 .pointingHand()
 
             VStack(alignment: .leading, spacing: 4) {

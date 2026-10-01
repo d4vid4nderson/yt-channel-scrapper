@@ -577,54 +577,17 @@ final class AppModel {
     private let backgroundSession = PreviewSession()
     private var loadingTask: Task<Void, Never>?
 
-    /// The thumbnail's play: start it in the Now Playing module, no card. The card is for
-    /// clicking the title.
-    func playNow(_ video: Video) {
-        // With the player open at the top, that is where a video goes — two players
-        // going at once, one up there and one in the bar, is nobody's intent.
-        if preview.isOpen {
-            openCard(video)
-            return
-        }
-        if let now = nowPlaying, now.video.id == video.id {
+    /// A video clicked anywhere — its title or its thumbnail — plays in the player at the
+    /// top. The Now Playing bar is only where a video goes on when that player is closed
+    /// while it plays, so clicking the one already in the bar brings it back up, where it
+    /// was, rather than starting it over. Anything else in the bar pauses: two things
+    /// sounding at once is nobody's intent.
+    func openCard(_ video: Video) {
+        if let now = nowPlaying, now.video.id == video.id, !preview.isOpen {
+            reopenNowPlaying()
             now.player.play()
             return
         }
-        loadingTask?.cancel()
-        backgroundSession.close()
-        nowLoadingError = nil
-        nowLoading = video
-        backgroundSession.open(video)
-        loadingTask = Task { [weak self] in
-            // The session reports through its state; there is nothing to await but it.
-            for _ in 0..<600 {
-                try? await Task.sleep(for: .milliseconds(100))
-                guard let self, !Task.isCancelled, self.nowLoading?.id == video.id else { return }
-                switch self.backgroundSession.state {
-                case .working: continue
-                case .failed(let message):
-                    Log.preview.error("play now failed: \(message, privacy: .public)")
-                    // Said in the module itself, which stays up until it is closed.
-                    self.nowLoadingError = message
-                    return
-                case .ready:
-                    guard let handed = self.backgroundSession.handOff() else { return }
-                    self.nowPlaying?.player.pause()
-                    self.nowPlaying = NowPlaying(video: handed.video, player: handed.player,
-                                                 ratio: handed.ratio)
-                    handed.player.play()
-                    self.nowLoading = nil
-                    return
-                }
-            }
-            self?.nowLoading = nil
-            self?.backgroundSession.close()
-        }
-    }
-
-    /// The title's link: the full card. Whatever is in Now Playing pauses — two things
-    /// sounding at once is nobody's intent.
-    func openCard(_ video: Video) {
         cancelNowLoading()
         nowPlaying?.player.pause()
         listUnderPlayer(for: video)
