@@ -5,7 +5,7 @@ import UniformTypeIdentifiers
 struct HomeView: View {
     @Bindable var model: AppModel
 
-    private enum Shelf: String, CaseIterable, Identifiable {
+    fileprivate enum Shelf: String, CaseIterable, Identifiable {
         case videos = "Videos"
         case channels = "Channels"
         var id: String { rawValue }
@@ -31,12 +31,13 @@ struct HomeView: View {
                     if model.isMinor && model.shelf.folder == nil {
                         ConnectFolderCard(model: model)
                     }
-                    Picker("Shelf", selection: $shelf) {
-                        ForEach(Shelf.allCases) { Text($0.rawValue).tag($0) }
-                    }
-                    .pickerStyle(.segmented)
-                    .padding(.horizontal, Metrics.gutter)
-                    .padding(.vertical, 8)
+                    ShelfToggle(selection: $shelf)
+                        .padding(.horizontal, Metrics.gutter)
+                        .padding(.top, 6)
+                        .padding(.bottom, 10)
+                        // On the navigation bar's own ground, so it reads as part of the
+                        // bar rather than a strip of the backdrop showing between them.
+                        .background(Palette.ground.opacity(0.92))
 
                     switch shelf {
                     case .channels: channels
@@ -316,5 +317,45 @@ private struct ConnectFolderCard: View {
                 Task { await model.syncShelf() }
             }
         }
+    }
+}
+
+
+/// Videos / Channels: a tall rounded track with a thumb that slides between the two, as
+/// iOS's own controls do — rather than the stock segmented control, which sat thin and
+/// grey over a theme's picture.
+private struct ShelfToggle: View {
+    @Binding var selection: HomeView.Shelf
+    @Namespace private var thumb
+
+    var body: some View {
+        HStack(spacing: 0) {
+            ForEach(HomeView.Shelf.allCases) { option in
+                let on = option == selection
+                Button {
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.82)) { selection = option }
+                } label: {
+                    Text(option.rawValue)
+                        .font(.system(size: 15, weight: on ? .semibold : .medium))
+                        .foregroundStyle(on ? Palette.onFill : Palette.ink(0.7))
+                        .frame(maxWidth: .infinity)
+                        .frame(height: 38)
+                        .background {
+                            if on {
+                                Capsule()
+                                    .fill(Palette.accent)
+                                    .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
+                                    .matchedGeometryEffect(id: "thumb", in: thumb)
+                            }
+                        }
+                        .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(on ? .isSelected : [])
+            }
+        }
+        .padding(3)
+        .background(Palette.ink(0.10), in: Capsule())
+        .overlay { Capsule().strokeBorder(Palette.ink(0.08)) }
     }
 }
