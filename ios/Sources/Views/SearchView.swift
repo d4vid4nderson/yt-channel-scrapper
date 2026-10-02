@@ -47,7 +47,9 @@ struct SearchView: View {
             .searchable(
                 text: $model.urlText,
                 isPresented: $model.searchActive,
-                placement: .navigationBarDrawer(displayMode: .always),
+                // The system's own placement: with the Search tab's search role (iOS 18
+                // and later) that is the bottom of the screen, within thumb's reach.
+                placement: .automatic,
                 prompt: "Video name, channel name, @handle or URL"
             )
             .onSubmit(of: .search) { model.submit() }

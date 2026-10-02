@@ -164,6 +164,75 @@ struct RootView: View {
     private static let tabBarHeight: CGFloat = 49
 
     private var tabs: some View {
+        Group {
+            if #available(iOS 18, *) {
+                modernTabs
+            } else {
+                classicTabs
+            }
+        }
+        .tint(Palette.accent)
+        .sheet(item: $model.playing) { item in
+            PlayerSheet(model: model, item: item)
+        }
+        .sheet(isPresented: $pickingTheme) {
+            // Closed in the same breath as the switch, so the tree the new theme rebuilds
+            // does not find the sheet still asked for and bring it straight back.
+            ThemeGallery { id in
+                pickingTheme = false
+                ThemeStore.shared.selection = id
+            }
+        }
+        // The Home Screen's Change Theme quick action. `initial` catches the one that
+        // launched the app cold, which lands before this view exists.
+        .onChange(of: QuickActions.shared.pending, initial: true) { _, action in
+            guard action == .changeTheme else { return }
+            QuickActions.shared.pending = nil
+            // One sheet at a time: a video that is open steps down to the Now Playing
+            // bar and keeps playing.
+            if model.playing != nil {
+                model.playing = nil
+                Task {
+                    try? await Task.sleep(for: .milliseconds(450))
+                    pickingTheme = true
+                }
+            } else {
+                pickingTheme = true
+            }
+        }
+        .overlay(alignment: .top) { banner }
+        .animation(.easeInOut(duration: 0.2), value: model.banner)
+    }
+
+    /// iOS 18 and later: Search is the tab bar's search tab, so its field sits at the
+    /// bottom of the screen, where a thumb reaches it, rather than under the title.
+    @available(iOS 18, *)
+    private var modernTabs: some View {
+        TabView(selection: $model.tab) {
+            Tab("Home", systemImage: "house", value: AppModel.Tab.home) {
+                HomeView(model: model)
+            }
+            if !model.isMinor {
+                Tab("Inbox", systemImage: "tray", value: AppModel.Tab.inbox) {
+                    InboxView(model: model)
+                }
+                .badge(model.unreadCount)
+            }
+            Tab(model.isMinor ? "Downloaded" : "Downloads", systemImage: "arrow.down.circle",
+                value: AppModel.Tab.downloads) {
+                DownloadsView(model: model)
+            }
+            .badge(model.isMinor ? 0 : model.downloads.active)
+            // The one tab Minor Mode is really about. Hidden rather than disabled.
+            if !model.isMinor {
+                Tab(value: AppModel.Tab.search, role: .search) {
+                    SearchView(model: model)
+                }
+            }
+        }
+    }
+
+    private var classicTabs: some View {
         TabView(selection: $model.tab) {
             HomeView(model: model)
                 .tabItem { Label("Home", systemImage: "house") }
@@ -197,37 +266,6 @@ struct RootView: View {
                 .badge(model.isMinor ? 0 : model.downloads.active)
                 .tag(AppModel.Tab.downloads)
         }
-        .tint(Palette.accent)
-        .sheet(item: $model.playing) { item in
-            PlayerSheet(model: model, item: item)
-        }
-        .sheet(isPresented: $pickingTheme) {
-            // Closed in the same breath as the switch, so the tree the new theme rebuilds
-            // does not find the sheet still asked for and bring it straight back.
-            ThemeGallery { id in
-                pickingTheme = false
-                ThemeStore.shared.selection = id
-            }
-        }
-        // The Home Screen's Change Theme quick action. `initial` catches the one that
-        // launched the app cold, which lands before this view exists.
-        .onChange(of: QuickActions.shared.pending, initial: true) { _, action in
-            guard action == .changeTheme else { return }
-            QuickActions.shared.pending = nil
-            // One sheet at a time: a video that is open steps down to the Now Playing
-            // bar and keeps playing.
-            if model.playing != nil {
-                model.playing = nil
-                Task {
-                    try? await Task.sleep(for: .milliseconds(450))
-                    pickingTheme = true
-                }
-            } else {
-                pickingTheme = true
-            }
-        }
-        .overlay(alignment: .top) { banner }
-        .animation(.easeInOut(duration: 0.2), value: model.banner)
     }
 
     /// A short-lived message for the things with no row of their own to report into — an

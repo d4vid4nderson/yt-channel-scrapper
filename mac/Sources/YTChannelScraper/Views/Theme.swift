@@ -2436,6 +2436,13 @@ struct ThemeBackdrop: View {
             let dim = 0.28, sweepStrength = 0.6
             #endif
             c.fill(all, with: .color(th.ground.opacity(dim)))
+            #if os(iOS)
+            // And a soft dark pool over the middle, where a screen's message sits.
+            c.fill(all, with: .radialGradient(
+                Gradient(colors: [th.ground.opacity(0.65), th.ground.opacity(0.3), .clear]),
+                center: CGPoint(x: s.width / 2, y: s.height * 0.5), startRadius: 0,
+                endRadius: max(s.width, s.height) * 0.45))
+            #endif
             let image = c.resolve(picture)
             // Two bands sweeping at their own pace and angle; the lasers inside them flare.
             for (n, (speed, angle)) in [(0.09, 0.6), (0.06, -0.9)].enumerated() {
