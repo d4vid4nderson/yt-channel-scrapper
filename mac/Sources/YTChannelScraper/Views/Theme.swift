@@ -2458,41 +2458,48 @@ struct ThemeBackdrop: View {
         light.fill(all, with: .radialGradient(
             Gradient(colors: [th.accent.opacity(0.10 * b * k), th.accent.opacity(0.04 * k), .clear]),
             center: screen, startRadius: 0, endRadius: frame.width * 0.25))
-        // A laser fan from where the photo's beams start, above the stage screen, tilting
-        // down over the audience and back up into the rig. Each beam widens towards you;
-        // the fan opens and closes a little as it goes.
-        let source = at(0.51, 0.585)
-        let tilt = 0.55 + 0.45 * sin(t * 0.32)          // 0: up into the rig, 1: over the crowd
-        let open = 0.10 + 0.04 * sin(t * 0.21 + 1)
-        let length = max(s.width, s.height) * 1.6
+        // Laser fans from the heads the photo actually shows — three each side of the main
+        // screen and five along its top edge (measured off the picture). Each throws a
+        // few beams outward and sweeps them down over the audience and back up, on its
+        // own pace, so the rig moves without moving in step. Beams widen towards you.
+        let heads: [(x: Double, y: Double, aim: Double)] = [
+            (0.311, 0.642, -0.55), (0.311, 0.693, -0.35), (0.308, 0.780, -0.15),   // left: outward-left
+            (0.709, 0.642, 0.55), (0.709, 0.693, 0.35), (0.711, 0.780, 0.15),      // right: outward-right
+            (0.40, 0.618, -0.2), (0.45, 0.618, -0.08), (0.51, 0.618, 0.0),         // the screen's top edge
+            (0.57, 0.618, 0.08), (0.62, 0.618, 0.2),
+        ]
+        let length = max(s.width, s.height) * 1.4
+        var cores = Path(), glows = Path()
+        for (h, head) in heads.enumerated() {
+            let n = Double(h)
+            let source = at(head.x, head.y)
+            let side = head.aim < 0 ? -1.0 : head.aim > 0 ? 1.0 : (h % 2 == 0 ? -1 : 1)
+            // Pointing straight out to the side is angle 0 (or π); downwards is π/2. The
+            // sweep runs from up into the rig to down over the crowd.
+            let swing = 0.5 + 0.5 * sin(t * (0.22 + n * 0.031) + n * 1.37)
+            let elevation = -0.7 + 1.1 * swing          // -0.7 rad up … +0.4 rad down
+            let base = side < 0 ? Double.pi - elevation : elevation
+            for b in 0..<3 {
+                let a = base + Double(b - 1) * 0.07 * side + head.aim * 0.3
+                let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length)
+                let dx = end.x - source.x, dy = end.y - source.y
+                let len = max(hypot(dx, dy), 1)
+                let nx = -dy / len * 2.5, ny = dx / len * 2.5
+                cores.move(to: source)
+                cores.addLine(to: CGPoint(x: end.x + nx, y: end.y + ny))
+                cores.addLine(to: CGPoint(x: end.x - nx, y: end.y - ny))
+                cores.closeSubpath()
+                glows.move(to: source); glows.addLine(to: end)
+            }
+            light.fill(Path(ellipseIn: CGRect(x: source.x - 4, y: source.y - 4, width: 8, height: 8)),
+                       with: .radialGradient(Gradient(colors: [th.accentHot.opacity(0.9 * k), .clear]),
+                                             center: source, startRadius: 0, endRadius: 5))
+        }
         light.drawLayer { glow in
             glow.addFilter(.blur(radius: 4))
-            for i in 0..<11 {
-                let a = -Double.pi / 2 + (Double(i) - 5) * open + tilt * (Double.pi * 0.95) * (i < 5 ? -1 : i > 5 ? 1 : 0) * 0.5
-                let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length)
-                var beam = Path(); beam.move(to: source); beam.addLine(to: end)
-                glow.stroke(beam, with: .linearGradient(Gradient(colors: [th.accent.opacity(0.5 * k), th.accent.opacity(0.1 * k)]),
-                                                        startPoint: source, endPoint: end), lineWidth: 5)
-            }
+            glow.stroke(glows, with: .color(th.accent.opacity(0.3 * k)), lineWidth: 5)
         }
-        for i in 0..<11 {
-            let a = -Double.pi / 2 + (Double(i) - 5) * open + tilt * (Double.pi * 0.95) * (i < 5 ? -1 : i > 5 ? 1 : 0) * 0.5
-            let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length)
-            let dx = end.x - source.x, dy = end.y - source.y
-            let len = max(hypot(dx, dy), 1)
-            let nx = -dy / len * 3, ny = dx / len * 3
-            var beam = Path()
-            beam.move(to: source)
-            beam.addLine(to: CGPoint(x: end.x + nx, y: end.y + ny))
-            beam.addLine(to: CGPoint(x: end.x - nx, y: end.y - ny))
-            beam.closeSubpath()
-            light.fill(beam, with: .linearGradient(
-                Gradient(colors: [th.accentHot.opacity(0.75 * k), th.accent.opacity(0.35 * k), th.accent.opacity(0.06 * k)]),
-                startPoint: source, endPoint: end))
-        }
-        light.fill(Path(ellipseIn: CGRect(x: source.x - 6, y: source.y - 6, width: 12, height: 12)),
-                   with: .radialGradient(Gradient(colors: [th.accentHot.opacity(0.9 * k), .clear]),
-                                         center: source, startRadius: 0, endRadius: 6))
+        light.fill(cores, with: .color(th.accentHot.opacity(0.45 * k)))
         // Green haze drifting through the rig.
         for i in 0..<5 {
             let n = Double(i)
