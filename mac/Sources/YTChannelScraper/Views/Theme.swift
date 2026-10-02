@@ -1,4 +1,5 @@
 import SwiftUI
+import CoreText
 #if canImport(AppKit)
 import AppKit
 #else
@@ -99,6 +100,9 @@ struct Theme: Identifiable, @unchecked Sendable {
         var displayGlow = false
         /// Headings printed out of register in `accent` and `accent2` — Retro's glitch.
         var displaySplit = false
+        /// The hero's title drawn with its letters' holes filled solid (`SolidTitle`) —
+        /// the A, O, D and R closed up, as Armin van Buuren's wordmark has them.
+        var displaySolid = false
 
         /// The display face this device actually has, if any.
         var displayName: String? { display.first(where: Theme.hasFont) }
@@ -534,7 +538,7 @@ extension Theme {
 
     /// Armin van Buuren, live: the stage between columns of fire, the rig lit blue. Fire
     /// amber for what matters, the rig's blue where something is lit or chosen, neon
-    /// edges, glowing Audiowide capitals.
+    /// edges, glowing Unbounded Black capitals.
     /// (The id is "trance"; the theme took over A State of Trance's slot.)
     static let trance = Theme(
         id: .trance,
@@ -564,8 +568,10 @@ extension Theme {
         pickedEdgeHot: hex(0x82401A),
         corners: .chamfered(scale: 0.5),
         edge: .neon,
-        type: Typeface(display: ["Audiowide-Regular"], displayCaps: true, displayTracking: 0.8,
-                       displayGlow: true),
+        // Unbounded Black (bundled, OFL): heavy, wide, squarish capitals — the nearest
+        // open face to Armin's own logo.
+        type: Typeface(display: ["Unbounded-Regular_Black"], displayCaps: true, displayTracking: 0.2,
+                       displayGlow: true, displaySolid: true),
         backdrop: .mead,
         aurora: [hex(0x4A1E0A), hex(0x2E1208), hex(0x1E0C06), hex(0x4A1E0A)],
         lcd: LCD(background: hex(0x0A0402), ink: hex(0xFFB04A), glow: hex(0xFF7A1E),
@@ -1332,6 +1338,90 @@ struct Knot: Sendable {
 }
 
 // MARK: - Lettering
+
+/// A title in the theme's display face with every letter's counters filled: the outline
+/// of each glyph, contour by contour, unioned together, so an inner contour (the hole in
+/// an A, O, D or R) is covered rather than cut out. Scales down to fit, as the plain
+/// title's `minimumScaleFactor` did.
+struct SolidTitle: View {
+    let text: String
+    let size: CGFloat
+
+    var body: some View {
+        let theme = Theme.active
+        let path = Self.outline(text, size: size)
+        let bounds = path.boundingRect
+        GlyphShape(path: path)
+            .fill(Palette.ink(1))
+            .shadow(color: theme.type.displayGlow ? theme.glow.opacity(0.75) : .clear,
+                    radius: theme.type.displayGlow ? min(size * 0.35, 10) : 0)
+            .aspectRatio(max(bounds.width, 1) / max(bounds.height, 1), contentMode: .fit)
+            .frame(maxWidth: bounds.width, maxHeight: bounds.height)
+            .accessibilityLabel(text)
+    }
+
+    private struct GlyphShape: Shape {
+        let path: Path
+        func path(in rect: CGRect) -> Path {
+            let b = path.boundingRect
+            guard b.width > 0, b.height > 0 else { return Path() }
+            let scale = min(rect.width / b.width, rect.height / b.height)
+            return path.applying(CGAffineTransform(translationX: -b.minX, y: -b.minY)
+                .concatenating(CGAffineTransform(scaleX: scale, y: scale))
+                .concatenating(CGAffineTransform(translationX: rect.minX + (rect.width - b.width * scale) / 2,
+                                                 y: rect.minY + (rect.height - b.height * scale) / 2)))
+        }
+    }
+
+    /// The glyph outlines of the string in the theme's display face, y-down, with each
+    /// glyph's contours unioned so its counters are filled.
+    static func outline(_ text: String, size: CGFloat) -> Path {
+        let type = Theme.active.type
+        let name = type.displayName ?? "Helvetica-Bold"
+        let font = CTFontCreateWithName(name as CFString, size, nil)
+        let string = type.displayCaps ? text.uppercased() : text
+        let attributes: [NSAttributedString.Key: Any] = [
+            NSAttributedString.Key(kCTFontAttributeName as String): font,
+            NSAttributedString.Key(kCTKernAttributeName as String): type.displayTracking * min(size, 24) / 20,
+        ]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: string, attributes: attributes))
+        var result = Path()
+        let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
+        for run in runs {
+            let count = CTRunGetGlyphCount(run)
+            var glyphs = [CGGlyph](repeating: 0, count: count)
+            var positions = [CGPoint](repeating: .zero, count: count)
+            CTRunGetGlyphs(run, CFRange(location: 0, length: count), &glyphs)
+            CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
+            for (glyph, position) in zip(glyphs, positions) {
+                guard let cg = CTFontCreatePathForGlyph(font, glyph, nil) else { continue }
+                // Each contour of the glyph, filled solid, then unioned.
+                var solid = CGMutablePath()
+                var contour = CGMutablePath()
+                func flush() {
+                    if !contour.isEmpty { solid = solid.union(contour).mutableCopy() ?? solid }
+                    contour = CGMutablePath()
+                }
+                cg.applyWithBlock { element in
+                    let e = element.pointee
+                    switch e.type {
+                    case .moveToPoint: flush(); contour.move(to: e.points[0])
+                    case .addLineToPoint: contour.addLine(to: e.points[0])
+                    case .addQuadCurveToPoint: contour.addQuadCurve(to: e.points[1], control: e.points[0])
+                    case .addCurveToPoint: contour.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
+                    case .closeSubpath: contour.closeSubpath()
+                    @unknown default: break
+                    }
+                }
+                flush()
+                let placed = solid.copy(using: [CGAffineTransform(translationX: position.x, y: position.y)
+                    .concatenating(CGAffineTransform(scaleX: 1, y: -1))]) ?? solid
+                result.addPath(Path(placed))
+            }
+        }
+        return result
+    }
+}
 
 extension Font {
     /// A heading in the theme's lettering. Headings only: the named faces are chosen for

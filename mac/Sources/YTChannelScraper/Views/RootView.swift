@@ -396,13 +396,19 @@ struct RootView: View {
                             .overlay(alignment: .topTrailing) {
                                 Glint(seed: 1, size: 22).offset(x: 8, y: -8)
                             }
-                        Text(Paths.displayName)
-                            .displayType(30)
-                            .foregroundStyle(Palette.ink(1))
-                            // Wide lettering (Nostromo's, Dune's) runs past the window
-                            // at 40pt; it shrinks rather than being cut off.
-                            .lineLimit(1)
-                            .minimumScaleFactor(0.4)
+                        Group {
+                            if Theme.active.type.displaySolid {
+                                SolidTitle(text: Paths.displayName, size: 30)
+                            } else {
+                                Text(Paths.displayName)
+                                    .displayType(30)
+                                    .foregroundStyle(Palette.ink(1))
+                                    // Wide lettering (Nostromo's, Dune's) runs past the
+                                    // window at 40pt; it shrinks rather than being cut off.
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.4)
+                            }
+                        }
                             // And on the tip of the last letter.
                             .overlay(alignment: .topTrailing) {
                                 Glint(seed: 2, size: 30).offset(x: 12, y: -6)
