@@ -2463,10 +2463,10 @@ struct ThemeBackdrop: View {
         // few beams outward and sweeps them down over the audience and back up, on its
         // own pace, so the rig moves without moving in step. Beams widen towards you.
         let heads: [(x: Double, y: Double, aim: Double)] = [
-            (0.311, 0.642, -0.55), (0.311, 0.693, -0.35), (0.308, 0.780, -0.15),   // left: outward-left
-            (0.709, 0.642, 0.55), (0.709, 0.693, 0.35), (0.711, 0.780, 0.15),      // right: outward-right
-            (0.40, 0.618, -0.2), (0.45, 0.618, -0.08), (0.51, 0.618, 0.0),         // the screen's top edge
-            (0.57, 0.618, 0.08), (0.62, 0.618, 0.2),
+            (0.327, 0.643, -0.55), (0.327, 0.697, -0.35), (0.327, 0.786, -0.15),   // left: outward-left
+            (0.671, 0.640, 0.55), (0.671, 0.697, 0.35), (0.671, 0.786, 0.15),      // right: outward-right
+            (0.419, 0.606, -0.2), (0.476, 0.606, -0.08), (0.5195, 0.606, 0.0),     // fixtures on the
+            (0.5585, 0.606, 0.08), (0.5975, 0.606, 0.2),                            // screen's top edge
         ]
         let length = max(s.width, s.height) * 1.4
         var cores = Path(), glows = Path()
