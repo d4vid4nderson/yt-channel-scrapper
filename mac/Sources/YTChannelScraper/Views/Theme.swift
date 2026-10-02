@@ -1565,7 +1565,10 @@ struct ThemeBackdrop: View {
     nonisolated(unsafe) private static let shirePicture = picture("middleEarth")
 
     nonisolated private static func picture(_ name: String) -> Image? {
+        // The Mac build copies them in as Backdrop-<name>.jpg; the phone's project adds
+        // the folder as it is.
         guard let url = Bundle.main.url(forResource: "Backdrop-\(name)", withExtension: "jpg")
+                ?? Bundle.main.url(forResource: name, withExtension: "jpg")
         else { return nil }
         #if canImport(AppKit)
         return NSImage(contentsOf: url).map(Image.init(nsImage:))

@@ -47,6 +47,18 @@ targets:
       - path: Support/Assets.xcassets
       - path: Support/PrivacyInfo.xcprivacy
         buildPhase: resources
+      # The themes' typefaces (OFL / Apache, licences beside them), shared with the Mac.
+      # Registered at launch (YTScraperApp.init).
+      - path: ../mac/Resources/Fonts
+        name: Shared-Fonts
+        buildPhase: resources
+      # The themes' background pictures — third-party art, gitignored, the family's
+      # own builds only. Optional, so a checkout without them still builds and the
+      # themes draw their own scenery instead.
+      - path: ../assets/backdrops
+        name: Backdrops
+        buildPhase: resources
+        optional: true
       # Shared with the Mac app, compiled in place. Both directories are AppKit-free —
       # verified by grep, and the build breaks loudly here if that ever stops being true.
       - path: ../mac/Sources/YTChannelScraper/Model
