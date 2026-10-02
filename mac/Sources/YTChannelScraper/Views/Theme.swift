@@ -537,8 +537,8 @@ extension Theme {
     )
 
     /// Armin van Buuren, live: the arena under a canopy of green lasers, the stage's
-    /// white screen in the middle of it all. Laser green for what matters, the screen's
-    /// white where something is lit or chosen, neon edges, and Unbounded Black capitals
+    /// white screen in the middle of it all. Laser green for what matters, a brighter
+    /// laser green where something is lit or chosen, square neon edges, and Unbounded Black capitals
     /// with the title's holes filled, as Armin's wordmark has them.
     /// (The id is "trance"; the theme took over A State of Trance's slot.)
     static let trance = Theme(
@@ -546,17 +546,17 @@ extension Theme {
         name: "Armin Live",
         tagline: "Armin van Buuren, under the lasers",
         appearance: .dark,
-        ink: hex(0xEAF6EC),
+        ink: hex(0xD2EED8),
         accent: hex(0x3DFF6E),
         accentHot: hex(0x8CFFA8),
-        accent2: hex(0xE8F4EE),
+        accent2: hex(0x1FD8A0),
         edgeTint: hex(0x3DFF6E),
         brand: hex(0x3DFF6E),
         ground: hex(0x030805),
         surface: hex(0x07120A),
         card: hex(0x0A180E).opacity(0.9),
         field: hex(0x08150C),
-        fieldInk: hex(0xEAF6EC),
+        fieldInk: hex(0xD2EED8),
         fieldRaised: hex(0x12301A),
         onFill: hex(0x021006),
         good: hex(0x3DFF6E),
@@ -567,7 +567,7 @@ extension Theme {
         pickedFar: hex(0x0E3016),
         pickedEdge: hex(0x1C5A2C),
         pickedEdgeHot: hex(0x2A8240),
-        corners: .chamfered(scale: 0.5),
+        corners: .square,
         edge: .neon,
         // Unbounded Black (bundled, OFL): heavy, wide, squarish capitals — the nearest
         // open face to Armin's own logo.
@@ -577,8 +577,8 @@ extension Theme {
         aurora: [hex(0x0C3A18), hex(0x08220E), hex(0x061A0A), hex(0x0C3A18)],
         lcd: LCD(background: hex(0x020604), ink: hex(0x8CFFA8), glow: hex(0x3DFF6E),
                  font: "ShareTechMono-Regular"),
-        // The stage screen's white.
-        highlight: hex(0xE8F4EE)
+        // A brighter laser green for what is lit or chosen — not white.
+        highlight: hex(0x8CFFA8)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -2456,7 +2456,7 @@ struct ThemeBackdrop: View {
         let screen = at(0.50, 0.71)
         let b = 0.6 + 0.4 * sin(t * 0.8)
         light.fill(all, with: .radialGradient(
-            Gradient(colors: [th.accent2.opacity(0.14 * b * k), th.accent.opacity(0.05 * k), .clear]),
+            Gradient(colors: [th.accent.opacity(0.10 * b * k), th.accent.opacity(0.04 * k), .clear]),
             center: screen, startRadius: 0, endRadius: frame.width * 0.25))
         // Green haze drifting through the rig.
         for i in 0..<5 {
