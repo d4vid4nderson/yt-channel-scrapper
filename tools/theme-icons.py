@@ -31,12 +31,14 @@ THEMES = {
     "middleEarth":  ("#3a2814", "#120c07", "#d9b060", "#120c07"),
     "synthwave":    ("#1e2a2e", "#090a0c", "#ff7a6e", "#ffffff"),
     "trance":       ("#0c3a18", "#030805", "#3dff6e", "#021006"),
-    "ringWorld":    ("#26381c", "#0b0f0b", "#7fae3a", "#0a1205"),
+    # Ring World's mark as the app draws it: a dark armour plate rimmed in the visor's
+    # orange, with an orange glyph (the fifth value is the rim).
+    "ringWorld":    ("#26381c", "#0b0f0b", "#18240e", "#f2952e", "#f2952e"),
     "grid":         ("#04303e", "#000407", "#18e4ff", "#00141a"),
 }
 
 
-def icon(theme, top, bottom, badge, glyph, mac):
+def icon(theme, top, bottom, badge, glyph, mac, rim=None):
     if mac:
         x, y, w, rx = 100, 100, 824, 185
         mark = "translate(212 301) scale(3.409)"
@@ -52,7 +54,7 @@ def icon(theme, top, bottom, badge, glyph, mac):
   </defs>
   <rect x="{x}" y="{y}" width="{w}" height="{w}" rx="{rx}" fill="url(#plate)"/>
   <g transform="{mark}">
-    <path fill="{badge}" d="{BADGE}"/>
+    <path fill="{badge}" d="{BADGE}"{f' stroke="{rim}" stroke-width="7"' if rim else ''}/>
     <circle cx="88" cy="62" r="31" fill="none" stroke="{glyph}" stroke-width="9"/>
     <path d="M88 45v23M88 68l11-11M88 68l-11-11M75 80h26" fill="none" stroke="{glyph}"
           stroke-width="9" stroke-linecap="round" stroke-linejoin="round"/>
@@ -67,7 +69,7 @@ def main():
         for mac in (True, False):
             name = f"{theme}-{'mac' if mac else 'ios'}.svg"
             with open(os.path.join(OUT, name), "w") as f:
-                f.write(icon(theme, *spec, mac))
+                f.write(icon(theme, *spec[:4], mac, rim=spec[4] if len(spec) > 4 else None))
     print(f"wrote {len(THEMES) * 2} icons to {os.path.relpath(OUT, ROOT)}")
 
 
