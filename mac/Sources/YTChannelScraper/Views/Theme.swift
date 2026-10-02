@@ -536,36 +536,37 @@ extension Theme {
         markFill: hex(0x18240E)
     )
 
-    /// Armin van Buuren, live: the stage between columns of fire, the rig lit blue. Fire
-    /// amber for what matters, the rig's blue where something is lit or chosen, neon
-    /// edges, glowing Unbounded Black capitals.
+    /// Armin van Buuren, live: the arena under a canopy of green lasers, the stage's
+    /// white screen in the middle of it all. Laser green for what matters, the screen's
+    /// white where something is lit or chosen, neon edges, and Unbounded Black capitals
+    /// with the title's holes filled, as Armin's wordmark has them.
     /// (The id is "trance"; the theme took over A State of Trance's slot.)
     static let trance = Theme(
         id: .trance,
         name: "Armin Live",
-        tagline: "Armin van Buuren, live on stage",
+        tagline: "Armin van Buuren, under the lasers",
         appearance: .dark,
-        ink: hex(0xF6ECE0),
-        accent: hex(0xFF7A1E),
-        accentHot: hex(0xFFA04A),
-        accent2: hex(0x3A7CFF),
-        edgeTint: hex(0xFF7A1E),
-        brand: hex(0xFF7A1E),
-        ground: hex(0x0C0604),
-        surface: hex(0x160C08),
-        card: hex(0x1C100A).opacity(0.9),
-        field: hex(0x190E09),
-        fieldInk: hex(0xF6ECE0),
-        fieldRaised: hex(0x2E1A10),
-        onFill: hex(0x1A0A02),
-        good: hex(0x5A9CFF),
-        warn: hex(0xFF5A3A),
-        glow: hex(0xFF7A1E),
-        glowDeep: hex(0x4A1E0A),
-        pickedMid: hex(0x201008),
-        pickedFar: hex(0x30160A),
-        pickedEdge: hex(0x5A2A12),
-        pickedEdgeHot: hex(0x82401A),
+        ink: hex(0xEAF6EC),
+        accent: hex(0x3DFF6E),
+        accentHot: hex(0x8CFFA8),
+        accent2: hex(0xE8F4EE),
+        edgeTint: hex(0x3DFF6E),
+        brand: hex(0x3DFF6E),
+        ground: hex(0x030805),
+        surface: hex(0x07120A),
+        card: hex(0x0A180E).opacity(0.9),
+        field: hex(0x08150C),
+        fieldInk: hex(0xEAF6EC),
+        fieldRaised: hex(0x12301A),
+        onFill: hex(0x021006),
+        good: hex(0x3DFF6E),
+        warn: hex(0xFFC24A),
+        glow: hex(0x3DFF6E),
+        glowDeep: hex(0x0C3A18),
+        pickedMid: hex(0x08200E),
+        pickedFar: hex(0x0E3016),
+        pickedEdge: hex(0x1C5A2C),
+        pickedEdgeHot: hex(0x2A8240),
         corners: .chamfered(scale: 0.5),
         edge: .neon,
         // Unbounded Black (bundled, OFL): heavy, wide, squarish capitals — the nearest
@@ -573,11 +574,11 @@ extension Theme {
         type: Typeface(display: ["Unbounded-Regular_Black"], displayCaps: true, displayTracking: 0.2,
                        displayGlow: true, displaySolid: true),
         backdrop: .mead,
-        aurora: [hex(0x4A1E0A), hex(0x2E1208), hex(0x1E0C06), hex(0x4A1E0A)],
-        lcd: LCD(background: hex(0x0A0402), ink: hex(0xFFB04A), glow: hex(0xFF7A1E),
+        aurora: [hex(0x0C3A18), hex(0x08220E), hex(0x061A0A), hex(0x0C3A18)],
+        lcd: LCD(background: hex(0x020604), ink: hex(0x8CFFA8), glow: hex(0x3DFF6E),
                  font: "ShareTechMono-Regular"),
-        // The rig's blue.
-        highlight: hex(0x3A7CFF)
+        // The stage screen's white.
+        highlight: hex(0xE8F4EE)
     )
 
     fileprivate static func hex(_ value: UInt32) -> Color {
@@ -2414,56 +2415,67 @@ struct ThemeBackdrop: View {
     /// The stage picture: `Backdrop-trance.jpg`, family build only.
     nonisolated(unsafe) private static let trancePicture = picture("trance")
 
-    /// The show: the photo with its fire alive — each flame column's glow swelling and
-    /// sinking as flame does — the rig's blue lights
-    /// breathing, and stage haze drifting through. Only what the photo has in it.
+    /// The show: the photo's own lasers alive — the picture drawn again over itself in
+    /// green, seen only through bands of light sweeping slowly across it, so the real
+    /// beams brighten and fade in waves — the stage screen glowing, green haze drifting,
+    /// and phones lit across the crowd. Smooth waves; nothing strobes.
     private static func mead(_ c: inout GraphicsContext, _ s: CGSize, _ th: Theme,
                              _ k: Double, _ t: Double) {
         let all = Path(CGRect(origin: .zero, size: s))
         var frame = CGRect(origin: .zero, size: s)
         if let picture = trancePicture {
             frame = drawPicture(&c, s, picture, k, t)
-            c.fill(all, with: .linearGradient(
-                Gradient(stops: [.init(color: th.ground.opacity(0.45), location: 0),
-                                 .init(color: th.ground.opacity(0.2), location: 0.5),
-                                 .init(color: th.ground.opacity(0.4), location: 1)]),
-                startPoint: .zero, endPoint: CGPoint(x: 0, y: s.height)))
+            c.fill(all, with: .color(th.ground.opacity(0.28)))
+            let image = c.resolve(picture)
+            // Two bands sweeping at their own pace and angle; the lasers inside them flare.
+            for (n, (speed, angle)) in [(0.09, 0.6), (0.06, -0.9)].enumerated() {
+                c.drawLayer { layer in
+                    layer.blendMode = .plusLighter
+                    layer.opacity = 0.6 * k
+                    layer.addFilter(.colorMultiply(th.accent))
+                    layer.draw(image, in: frame)
+                    layer.blendMode = .destinationIn
+                    let u = (t * speed + Double(n) * 0.5).truncatingRemainder(dividingBy: 1)
+                    let centre = CGPoint(x: frame.minX + frame.width * CGFloat(-0.2 + 1.4 * u),
+                                         y: frame.midY)
+                    let dir = CGPoint(x: CGFloat(cos(angle)), y: CGFloat(sin(angle)))
+                    let half = frame.width * 0.22
+                    layer.fill(Path(CGRect(origin: .zero, size: s)), with: .linearGradient(
+                        Gradient(colors: [.clear, .white, .clear]),
+                        startPoint: CGPoint(x: centre.x - dir.x * half, y: centre.y - dir.y * half),
+                        endPoint: CGPoint(x: centre.x + dir.x * half, y: centre.y + dir.y * half)))
+                }
+            }
         }
         func at(_ x: Double, _ y: Double) -> CGPoint {
             CGPoint(x: frame.minX + frame.width * x, y: frame.minY + frame.height * y)
         }
         var light = c
         light.blendMode = .plusLighter
-        let blue = th.accent2
-        // The rig's blue lights, breathing.
-        for (i, (x, y)) in [(0.39, 0.02), (0.63, 0.22), (0.77, 0.04), (0.72, 0.15), (0.97, 0.19), (0.22, 0.31)].enumerated() {
-            let b = 0.5 + 0.5 * sin(t * 0.9 + Double(i) * 1.7)
-            let p = at(x, y)
-            light.fill(all, with: .radialGradient(Gradient(colors: [blue.opacity(0.30 * b * k), .clear]),
-                                                  center: p, startRadius: 0, endRadius: frame.width * 0.05))
-        }
-        // The fire: each column's glow swelling and sinking, irregularly, as flame does.
-        for (n, (x, y, r)) in [(0.085, 0.35, 0.10), (0.13, 0.60, 0.09), (0.255, 0.58, 0.07), (0.31, 0.47, 0.08)].enumerated() {
-            let m = Double(n)
-            let breath = 0.65 + 0.20 * sin(t * 1.7 + m) + 0.10 * sin(t * 3.1 + m * 2) + 0.05 * sin(t * 5.3 + m)
-            let p = at(x, y)
-            light.fill(all, with: .radialGradient(
-                Gradient(stops: [.init(color: th.accentHot.opacity(0.32 * breath * k), location: 0),
-                                 .init(color: th.accent.opacity(0.18 * breath * k), location: 0.4),
-                                 .init(color: .clear, location: 1)]),
-                center: p, startRadius: 0, endRadius: frame.width * CGFloat(r * 1.6)))
-        }
-        // Stage haze drifting through, warm near the fire and cool under the rig.
+        // The stage screen's glow, breathing.
+        let screen = at(0.50, 0.71)
+        let b = 0.6 + 0.4 * sin(t * 0.8)
+        light.fill(all, with: .radialGradient(
+            Gradient(colors: [th.accent2.opacity(0.14 * b * k), th.accent.opacity(0.05 * k), .clear]),
+            center: screen, startRadius: 0, endRadius: frame.width * 0.25))
+        // Green haze drifting through the rig.
         for i in 0..<5 {
             let n = Double(i)
-            let reach = max(s.width, s.height) * CGFloat(0.3 + 0.05 * n.truncatingRemainder(dividingBy: 2))
+            let reach = max(s.width, s.height) * CGFloat(0.28 + 0.06 * n.truncatingRemainder(dividingBy: 2))
             let span = Double(s.width + reach * 2)
             let x = (n * 0.37 * span + t * (8 + n * 3)).truncatingRemainder(dividingBy: span) - Double(reach)
-            let y = Double(s.height) * (0.3 + 0.12 * n) + 14 * sin(t * 0.1 + n)
-            let tint = i % 2 == 0 ? th.accent : blue
-            c.fill(all, with: .radialGradient(
-                Gradient(colors: [tint.opacity(0.06 * k), .clear]),
+            let y = Double(s.height) * (0.2 + 0.14 * n) + 14 * sin(t * 0.1 + n)
+            light.fill(all, with: .radialGradient(
+                Gradient(colors: [th.accent.opacity(0.05 * k), .clear]),
                 center: CGPoint(x: x, y: y), startRadius: 0, endRadius: reach))
+        }
+        // Phones held up across the crowd.
+        var rng = Seeded(state: 0xA507)
+        for i in 0..<70 {
+            let p = at(rng.next(), 0.84 + rng.next() * 0.15)
+            let on = max(0, sin(t * (0.4 + rng.next() * 0.5) + Double(i) * 2.3))
+            light.fill(Path(ellipseIn: CGRect(x: p.x - 1.2, y: p.y - 1.8, width: 2.4, height: 3.6)),
+                       with: .color(Color.white.opacity(0.75 * on * k)))
         }
     }
 
