@@ -1373,6 +1373,29 @@ struct SolidTitle: View {
         }
     }
 
+    /// Each closed contour of `path` filled solid, all unioned together.
+    private static func fillContours(_ path: CGPath) -> CGPath {
+        var solid: CGPath = CGMutablePath()
+        var contour = CGMutablePath()
+        func flush() {
+            if !contour.isEmpty { solid = solid.union(contour) }
+            contour = CGMutablePath()
+        }
+        path.applyWithBlock { element in
+            let e = element.pointee
+            switch e.type {
+            case .moveToPoint: flush(); contour.move(to: e.points[0])
+            case .addLineToPoint: contour.addLine(to: e.points[0])
+            case .addQuadCurveToPoint: contour.addQuadCurve(to: e.points[1], control: e.points[0])
+            case .addCurveToPoint: contour.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
+            case .closeSubpath: contour.closeSubpath()
+            @unknown default: break
+            }
+        }
+        flush()
+        return solid
+    }
+
     /// The glyph outlines of the string in the theme's display face, y-down, with each
     /// glyph's contours unioned so its counters are filled.
     static func outline(_ text: String, size: CGFloat) -> Path {
@@ -1395,25 +1418,11 @@ struct SolidTitle: View {
             CTRunGetPositions(run, CFRange(location: 0, length: count), &positions)
             for (glyph, position) in zip(glyphs, positions) {
                 guard let cg = CTFontCreatePathForGlyph(font, glyph, nil) else { continue }
-                // Each contour of the glyph, filled solid, then unioned.
-                var solid = CGMutablePath()
-                var contour = CGMutablePath()
-                func flush() {
-                    if !contour.isEmpty { solid = solid.union(contour).mutableCopy() ?? solid }
-                    contour = CGMutablePath()
-                }
-                cg.applyWithBlock { element in
-                    let e = element.pointee
-                    switch e.type {
-                    case .moveToPoint: flush(); contour.move(to: e.points[0])
-                    case .addLineToPoint: contour.addLine(to: e.points[0])
-                    case .addQuadCurveToPoint: contour.addQuadCurve(to: e.points[1], control: e.points[0])
-                    case .addCurveToPoint: contour.addCurve(to: e.points[2], control1: e.points[0], control2: e.points[1])
-                    case .closeSubpath: contour.closeSubpath()
-                    @unknown default: break
-                    }
-                }
-                flush()
+                // Twice over: fill each contour solid and union them. The first pass
+                // merges overlapping parts into one outline (in this face an A's hole is
+                // a notch the crossbar closes off, not a contour of its own); the second
+                // fills every hole that merged outline now encloses.
+                let solid = Self.fillContours(Self.fillContours(cg))
                 let placed = solid.copy(using: [CGAffineTransform(translationX: position.x, y: position.y)
                     .concatenating(CGAffineTransform(scaleX: 1, y: -1))]) ?? solid
                 result.addPath(Path(placed))
