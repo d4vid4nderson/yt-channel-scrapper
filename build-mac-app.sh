@@ -27,7 +27,7 @@ done
 APP_NAME="YT Command Center"
 BUNDLE_ID="com.d4vid4nderson.ytchannelscraper"
 # Overridable so cutting a release is one line: VERSION=2.2.0 ./build-mac-app.sh --dmg
-VERSION="${VERSION:-2.5.1}"
+VERSION="${VERSION:-2.6.0}"
 OUT="dist-mac"
 EDITION_KEY=""
 if [ -n "$SHARED" ]; then
