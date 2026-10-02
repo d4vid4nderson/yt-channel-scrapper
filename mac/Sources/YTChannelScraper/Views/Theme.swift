@@ -2428,13 +2428,20 @@ struct ThemeBackdrop: View {
         var frame = CGRect(origin: .zero, size: s)
         if let picture = trancePicture {
             frame = drawPicture(&c, s, picture, k, t)
-            c.fill(all, with: .color(th.ground.opacity(0.28)))
+            // The phone shows a narrow, tall slice of this — mostly the bright screen and
+            // the lasers right behind its text — so it is held much darker there.
+            #if os(iOS)
+            let dim = 0.72, sweepStrength = 0.25
+            #else
+            let dim = 0.28, sweepStrength = 0.6
+            #endif
+            c.fill(all, with: .color(th.ground.opacity(dim)))
             let image = c.resolve(picture)
             // Two bands sweeping at their own pace and angle; the lasers inside them flare.
             for (n, (speed, angle)) in [(0.09, 0.6), (0.06, -0.9)].enumerated() {
                 c.drawLayer { layer in
                     layer.blendMode = .plusLighter
-                    layer.opacity = 0.6 * k
+                    layer.opacity = sweepStrength * k
                     layer.addFilter(.colorMultiply(th.accent))
                     layer.draw(image, in: frame)
                     layer.blendMode = .destinationIn
