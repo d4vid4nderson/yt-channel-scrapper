@@ -2460,8 +2460,8 @@ struct ThemeBackdrop: View {
             center: screen, startRadius: 0, endRadius: frame.width * 0.25))
         // Laser fans from the heads the photo actually shows — three each side of the main
         // screen and five along its top edge (measured off the picture). Each throws a
-        // few beams outward and sweeps them down over the audience and back up, on its
-        // own pace, so the rig moves without moving in step. Beams widen towards you.
+        // few beams the way the photo's own run — up and into the centre from the sides,
+        // straight up from the top — sweeping a little on its own pace.
         let heads: [(x: Double, y: Double, aim: Double)] = [
             (0.327, 0.643, -0.55), (0.327, 0.697, -0.35), (0.327, 0.786, -0.15),   // left: outward-left
             (0.671, 0.640, 0.55), (0.671, 0.697, 0.35), (0.671, 0.786, 0.15),      // right: outward-right
@@ -2473,14 +2473,20 @@ struct ThemeBackdrop: View {
         for (h, head) in heads.enumerated() {
             let n = Double(h)
             let source = at(head.x, head.y)
-            let side = head.aim < 0 ? -1.0 : head.aim > 0 ? 1.0 : (h % 2 == 0 ? -1 : 1)
-            // Pointing straight out to the side is angle 0 (or π); downwards is π/2. The
-            // sweep runs from up into the rig to down over the crowd.
-            let swing = 0.5 + 0.5 * sin(t * (0.22 + n * 0.031) + n * 1.37)
-            let elevation = -0.7 + 1.1 * swing          // -0.7 rad up … +0.4 rad down
-            let base = side < 0 ? Double.pi - elevation : elevation
+            // Directions as the photo's own beams run: the side heads shoot up and in
+            // towards the centre, the top-edge fixtures straight up, fanning slightly
+            // outward by position. Each sweeps a little either side of that, on its own
+            // pace. (Screen angles: up is -π/2; up-and-right is between -π/2 and 0.)
+            let swing = sin(t * (0.22 + n * 0.031) + n * 1.37)
+            let base: Double
+            switch h {
+            case 0..<3: base = -0.85 + 0.25 * swing                 // left heads: up and right
+            case 3..<6: base = -Double.pi + 0.85 + 0.25 * swing     // right heads: up and left
+            default:    base = -Double.pi / 2 + head.aim * 1.2 + 0.18 * swing  // top: up
+            }
+            let side: Double = 1
             for b in 0..<3 {
-                let a = base + Double(b - 1) * 0.07 * side + head.aim * 0.3
+                let a = base + Double(b - 1) * 0.06 * side
                 let end = CGPoint(x: source.x + CGFloat(cos(a)) * length, y: source.y + CGFloat(sin(a)) * length)
                 let dx = end.x - source.x, dy = end.y - source.y
                 let len = max(hypot(dx, dy), 1)
